@@ -22,12 +22,13 @@ type Attachment struct {
 }
 
 type User struct {
-	ID            uint   `gorm:"primaryKey"`
-	Username      string `gorm:"uniqueIndex;size:64;not null"`
-	PasswordHash  string `gorm:"size:255;not null"`
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	Conversations []Conversation
+	ID                 uint   `gorm:"primaryKey"`
+	Username           string `gorm:"uniqueIndex;size:64;not null"`
+	PasswordHash       string `gorm:"size:255;not null"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	Conversations      []Conversation
+	LLMProviderPresets []LLMProviderPreset
 }
 
 type Conversation struct {
@@ -53,4 +54,17 @@ type Message struct {
 	Attachments    []Attachment `gorm:"serializer:json"`
 	Status         string       `gorm:"size:32;not null;default:completed"`
 	CreatedAt      time.Time
+}
+
+type LLMProviderPreset struct {
+	ID              uint   `gorm:"primaryKey"`
+	UserID          uint   `gorm:"index;not null"`
+	Name            string `gorm:"size:120;not null"`
+	BaseURL         string `gorm:"size:512;not null"`
+	EncryptedAPIKey string `gorm:"type:text;not null"`
+	APIKeyHint      string `gorm:"size:64;not null"`
+	DefaultModel    string `gorm:"size:128;not null"`
+	IsActive        bool   `gorm:"index;not null;default:false"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }

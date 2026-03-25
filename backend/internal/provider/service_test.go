@@ -1,0 +1,238 @@
+package provider
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+	"time"
+
+	"backend/internal/config"
+	"backend/internal/models"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "OpenAI",
+		BaseURL:      "https://api.openai.com/v1",
+		APIKey:       "sk-test-123456",
+		DefaultModel: "gpt-4.1-mini",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	if !preset.IsActive {
+		t.Fatal("expected preset to be active")
+	}
+	if preset.EncryptedAPIKey == "sk-test-123456" {
+		t.Fatal("expected API key to be encrypted at rest")
+	}
+	if preset.APIKeyHint == "" {
+		t.Fatal("expected API key hint to be stored")
+	}
+
+	resolved, err := service.ResolveForUser(1)
+	if err != nil {
+		t.Fatalf("ResolveForUser() error = %v", err)
+	}
+
+	if resolved.Source != SourcePreset {
+		t.Fatalf("expected provider source %q, got %q", SourcePreset, resolved.Source)
+	}
+	if resolved.Config.APIKey != "sk-test-123456" {
+		t.Fatalf("expected decrypted API key, got %q", resolved.Config.APIKey)
+	}
+}
+
+func TestUpdatePresetRetainsAPIKeyWhenNotProvided(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Preset A",
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "original-key",
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	newName := "Preset B"
+	newModel := "model-b"
+	updated, err := service.UpdatePreset(1, preset.ID, UpdatePresetInput{
+		Name:         &newName,
+		DefaultModel: &newModel,
+	})
+	if err != nil {
+		t.Fatalf("UpdatePreset() error = %v", err)
+	}
+
+	if updated.Name != newName {
+		t.Fatalf("expected updated name %q, got %q", newName, updated.Name)
+	}
+	if updated.DefaultModel != newModel {
+		t.Fatalf("expected updated model %q, got %q", newModel, updated.DefaultModel)
+	}
+
+	resolved, err := service.ResolveForUser(1)
+	if err != nil {
+		t.Fatalf("ResolveForUser() error = %v", err)
+	}
+	if resolved.Config.APIKey != "original-key" {
+		t.Fatalf("expected original API key to be preserved, got %q", resolved.Config.APIKey)
+	}
+}
+
+func TestOnlyOnePresetRemainsActive(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	first, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "First",
+		BaseURL:      "https://one.example.com/v1",
+		APIKey:       "key-one",
+		DefaultModel: "model-one",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(first) error = %v", err)
+	}
+
+	second, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Second",
+		BaseURL:      "https://two.example.com/v1",
+		APIKey:       "key-two",
+		DefaultModel: "model-two",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(second) error = %v", err)
+	}
+
+	state, err := service.ListState(1)
+	if err != nil {
+		t.Fatalf("ListState() error = %v", err)
+	}
+
+	if state.ActivePresetID == nil || *state.ActivePresetID != second.ID {
+		t.Fatalf("expected second preset to be active, got %v", state.ActivePresetID)
+	}
+	if !state.Presets[0].IsActive || state.Presets[0].ID != second.ID {
+		t.Fatalf("expected latest preset to be listed as active, got preset %d", state.Presets[0].ID)
+	}
+
+	if _, err := service.ActivatePreset(1, first.ID); err != nil {
+		t.Fatalf("ActivatePreset() error = %v", err)
+	}
+
+	updatedState, err := service.ListState(1)
+	if err != nil {
+		t.Fatalf("ListState() after activate error = %v", err)
+	}
+
+	if updatedState.ActivePresetID == nil || *updatedState.ActivePresetID != first.ID {
+		t.Fatalf("expected first preset to be active after activate, got %v", updatedState.ActivePresetID)
+	}
+}
+
+func TestResolveFallsBackToEnvConfig(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		OpenAIBaseURL: "https://fallback.example.com/v1",
+		OpenAIAPIKey:  "fallback-key",
+		Model:         "fallback-model",
+		SessionSecret: "session-secret",
+	})
+
+	resolved, err := service.ResolveForUser(1)
+	if err != nil {
+		t.Fatalf("ResolveForUser() error = %v", err)
+	}
+
+	if resolved.Source != SourceEnv {
+		t.Fatalf("expected provider source %q, got %q", SourceEnv, resolved.Source)
+	}
+	if resolved.Config.DefaultModel != "fallback-model" {
+		t.Fatalf("expected fallback model, got %q", resolved.Config.DefaultModel)
+	}
+}
+
+func TestResolveRequiresProviderOrCompleteFallback(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	_, err := service.ResolveForUser(1)
+	if err == nil {
+		t.Fatal("expected missing provider error, got nil")
+	}
+	if !errors.Is(err, ErrNoProviderConfigured) {
+		t.Fatalf("expected ErrNoProviderConfigured, got %v", err)
+	}
+}
+
+func TestSettingsEncryptionKeyOverridesSessionSecret(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret:         "session-secret",
+		SettingsEncryptionKey: "settings-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Encrypted",
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "override-key",
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	otherCrypter, err := newAPIKeyCrypter("settings-secret")
+	if err != nil {
+		t.Fatalf("newAPIKeyCrypter() error = %v", err)
+	}
+
+	decrypted, err := otherCrypter.Decrypt(preset.EncryptedAPIKey)
+	if err != nil {
+		t.Fatalf("Decrypt() error = %v", err)
+	}
+	if decrypted != "override-key" {
+		t.Fatalf("expected decrypted key %q, got %q", "override-key", decrypted)
+	}
+}
+
+func newTestService(t *testing.T, cfg *config.Config) *Service {
+	t.Helper()
+
+	dsn := fmt.Sprintf("file:provider-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	if err := db.AutoMigrate(&models.User{}, &models.LLMProviderPreset{}); err != nil {
+		t.Fatalf("migrate db: %v", err)
+	}
+
+	user := models.User{
+		Username:     fmt.Sprintf("tester-%d", time.Now().UnixNano()),
+		PasswordHash: "hash",
+	}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	service, err := NewService(db, cfg)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	return service
+}

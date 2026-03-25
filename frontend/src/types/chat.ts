@@ -17,6 +17,30 @@ export interface ConversationSettings {
   maxTokens: number | null
 }
 
+export interface ProviderPreset {
+  id: number
+  name: string
+  baseURL: string
+  apiKeyHint: string
+  defaultModel: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProviderFallbackState {
+  available: boolean
+  baseURL: string
+  defaultModel: string
+}
+
+export interface ProviderState {
+  presets: ProviderPreset[]
+  activePresetId: number | null
+  currentSource: 'preset' | 'env' | 'none'
+  fallback: ProviderFallbackState
+}
+
 export interface User {
   id: number
   username: string
@@ -58,6 +82,20 @@ export interface UpdateConversationPayload {
   isPinned?: boolean
   isArchived?: boolean
   settings?: ConversationSettings
+}
+
+export interface CreateProviderPayload {
+  name: string
+  baseURL: string
+  apiKey: string
+  defaultModel: string
+}
+
+export interface UpdateProviderPayload {
+  name?: string
+  baseURL?: string
+  apiKey?: string
+  defaultModel?: string
 }
 
 export interface StreamEvent {

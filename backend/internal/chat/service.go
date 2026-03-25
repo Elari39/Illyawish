@@ -11,6 +11,7 @@ import (
 
 	"backend/internal/llm"
 	"backend/internal/models"
+	"backend/internal/provider"
 
 	"gorm.io/gorm"
 )
@@ -44,12 +45,16 @@ func isRequestError(err error) bool {
 }
 
 type Service struct {
-	db           *gorm.DB
-	model        llm.ChatModel
-	defaultModel string
+	db        *gorm.DB
+	model     llm.ChatModel
+	providers providerResolver
 
 	activeMu      sync.Mutex
 	activeStreams map[uint]context.CancelFunc
+}
+
+type providerResolver interface {
+	ResolveForUser(userID uint) (*provider.ResolvedProvider, error)
 }
 
 type StreamEvent struct {
@@ -91,11 +96,11 @@ type SendMessageInput struct {
 	Options     *ConversationSettings `json:"options"`
 }
 
-func NewService(db *gorm.DB, model llm.ChatModel, defaultModel string) *Service {
+func NewService(db *gorm.DB, model llm.ChatModel, providers providerResolver) *Service {
 	return &Service{
 		db:            db,
 		model:         model,
-		defaultModel:  strings.TrimSpace(defaultModel),
+		providers:     providers,
 		activeStreams: map[uint]context.CancelFunc{},
 	}
 }
@@ -152,7 +157,6 @@ func (s *Service) CreateConversation(userID uint) (*models.Conversation, error) 
 		UserID:       userID,
 		Title:        defaultConversationTitle,
 		SystemPrompt: defaultSystemPrompt,
-		Model:        s.defaultModel,
 		Temperature:  &temperature,
 	}
 	if err := s.db.Create(conversation).Error; err != nil {
@@ -201,7 +205,7 @@ func (s *Service) UpdateConversation(
 		updates["is_archived"] = *input.IsArchived
 	}
 	if input.Settings != nil {
-		settings, err := s.resolveSettings(conversation, input.Settings)
+		settings, err := s.resolveSettings(conversation, input.Settings, "")
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +285,11 @@ func (s *Service) StreamAssistantReply(
 		return err
 	}
 
-	settings, err := s.resolveSettings(conversation, normalizedInput.Options)
+	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	if err != nil {
+		return err
+	}
+	settings, err := s.resolveSettings(conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
 	if err != nil {
 		return err
 	}
@@ -340,7 +348,7 @@ func (s *Service) StreamAssistantReply(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, &assistantMessage, history, settings, emit)
+	return s.streamIntoAssistantMessage(ctx, &assistantMessage, resolvedProvider.Config, history, settings, emit)
 }
 
 func (s *Service) RetryAssistantMessage(
@@ -356,7 +364,11 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	settings, err := s.resolveSettings(conversation, options)
+	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	if err != nil {
+		return err
+	}
+	settings, err := s.resolveSettings(conversation, options, resolvedProvider.Config.DefaultModel)
 	if err != nil {
 		return err
 	}
@@ -377,7 +389,7 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, assistantMessage, history, settings, emit)
+	return s.streamIntoAssistantMessage(ctx, assistantMessage, resolvedProvider.Config, history, settings, emit)
 }
 
 func (s *Service) RegenerateLastAssistantReply(
@@ -421,7 +433,11 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	settings, err := s.resolveSettings(conversation, normalizedInput.Options)
+	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	if err != nil {
+		return err
+	}
+	settings, err := s.resolveSettings(conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
 	if err != nil {
 		return err
 	}
@@ -497,7 +513,7 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, &assistantMessage, history, settings, emit)
+	return s.streamIntoAssistantMessage(ctx, &assistantMessage, resolvedProvider.Config, history, settings, emit)
 }
 
 func (s *Service) normalizeSendInput(input SendMessageInput) (*SendMessageInput, error) {
@@ -529,6 +545,7 @@ func (s *Service) normalizeSendInput(input SendMessageInput) (*SendMessageInput,
 func (s *Service) resolveSettings(
 	conversation *models.Conversation,
 	override *ConversationSettings,
+	defaultModel string,
 ) (ConversationSettings, error) {
 	settings := ConversationSettings{
 		SystemPrompt: strings.TrimSpace(conversation.SystemPrompt),
@@ -552,7 +569,7 @@ func (s *Service) resolveSettings(
 		settings.SystemPrompt = defaultSystemPrompt
 	}
 	if settings.Model == "" {
-		settings.Model = s.defaultModel
+		settings.Model = strings.TrimSpace(defaultModel)
 	}
 	if settings.Temperature == nil {
 		settings.Temperature = ptrFloat32(defaultTemperature)
@@ -641,6 +658,7 @@ func (s *Service) prepareAssistantRetry(conversationID uint, assistantMessageID 
 func (s *Service) streamIntoAssistantMessage(
 	ctx context.Context,
 	assistantMessage *models.Message,
+	providerConfig llm.ProviderConfig,
 	history []llm.ChatMessage,
 	settings ConversationSettings,
 	emit func(StreamEvent) error,
@@ -653,7 +671,7 @@ func (s *Service) streamIntoAssistantMessage(
 	}
 
 	var streamedContent strings.Builder
-	fullText, streamErr := s.model.Stream(ctx, history, llm.RequestOptions{
+	fullText, streamErr := s.model.Stream(ctx, providerConfig, history, llm.RequestOptions{
 		Model:       settings.Model,
 		Temperature: cloneFloat32(settings.Temperature),
 		MaxTokens:   cloneInt(settings.MaxTokens),
@@ -780,9 +798,6 @@ func (s *Service) applyConversationDefaults(conversation *models.Conversation) {
 	}
 	if strings.TrimSpace(conversation.SystemPrompt) == "" {
 		conversation.SystemPrompt = defaultSystemPrompt
-	}
-	if strings.TrimSpace(conversation.Model) == "" {
-		conversation.Model = s.defaultModel
 	}
 	if conversation.Temperature == nil {
 		conversation.Temperature = ptrFloat32(defaultTemperature)

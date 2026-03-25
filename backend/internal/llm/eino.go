@@ -2,10 +2,10 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-
-	"backend/internal/config"
+	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	componentmodel "github.com/cloudwego/eino/components/model"
@@ -24,6 +24,12 @@ type ChatMessage struct {
 	Attachments []Attachment
 }
 
+type ProviderConfig struct {
+	BaseURL      string
+	APIKey       string
+	DefaultModel string
+}
+
 type RequestOptions struct {
 	Model       string
 	Temperature *float32
@@ -31,34 +37,45 @@ type RequestOptions struct {
 }
 
 type ChatModel interface {
-	Stream(ctx context.Context, messages []ChatMessage, options RequestOptions, onDelta func(string)) (string, error)
+	Stream(
+		ctx context.Context,
+		provider ProviderConfig,
+		messages []ChatMessage,
+		options RequestOptions,
+		onDelta func(string),
+	) (string, error)
 }
 
 type EinoChatModel struct {
-	model componentmodel.BaseChatModel
+	newChatModel func(context.Context, *openai.ChatModelConfig) (componentmodel.BaseChatModel, error)
 }
 
-func New(cfg *config.Config) (*EinoChatModel, error) {
-	ctx := context.Background()
-	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		Model:   cfg.Model,
-		BaseURL: cfg.OpenAIBaseURL,
-		APIKey:  cfg.OpenAIAPIKey,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create eino chat model: %w", err)
+func New() *EinoChatModel {
+	return &EinoChatModel{
+		newChatModel: func(ctx context.Context, cfg *openai.ChatModelConfig) (componentmodel.BaseChatModel, error) {
+			return openai.NewChatModel(ctx, cfg)
+		},
 	}
-
-	return &EinoChatModel{model: chatModel}, nil
 }
 
 func (m *EinoChatModel) Stream(
 	ctx context.Context,
+	provider ProviderConfig,
 	messages []ChatMessage,
 	options RequestOptions,
 	onDelta func(string),
 ) (string, error) {
-	stream, err := m.model.Stream(ctx, toSchemaMessages(messages), toModelOptions(options)...)
+	modelCfg, err := buildChatModelConfig(provider, options)
+	if err != nil {
+		return "", err
+	}
+
+	chatModel, err := m.newChatModel(ctx, modelCfg)
+	if err != nil {
+		return "", fmt.Errorf("create eino chat model: %w", err)
+	}
+
+	stream, err := chatModel.Stream(ctx, toSchemaMessages(messages), toModelOptions(options)...)
 	if err != nil {
 		return "", fmt.Errorf("start model stream: %w", err)
 	}
@@ -86,6 +103,32 @@ func (m *EinoChatModel) Stream(
 	}
 
 	return fullText, nil
+}
+
+func buildChatModelConfig(provider ProviderConfig, options RequestOptions) (*openai.ChatModelConfig, error) {
+	baseURL := strings.TrimSpace(provider.BaseURL)
+	if baseURL == "" {
+		return nil, errors.New("provider base URL is required")
+	}
+
+	apiKey := strings.TrimSpace(provider.APIKey)
+	if apiKey == "" {
+		return nil, errors.New("provider API key is required")
+	}
+
+	modelName := strings.TrimSpace(options.Model)
+	if modelName == "" {
+		modelName = strings.TrimSpace(provider.DefaultModel)
+	}
+	if modelName == "" {
+		return nil, errors.New("provider model is required")
+	}
+
+	return &openai.ChatModelConfig{
+		Model:   modelName,
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+	}, nil
 }
 
 func toSchemaMessages(messages []ChatMessage) []*schema.Message {

@@ -1,11 +1,14 @@
 import { streamSSE } from './sse'
 import type {
+  CreateProviderPayload,
   ConversationSettings,
   Conversation,
   LoginPayload,
   Message,
+  ProviderState,
   SendMessagePayload,
   StreamEvent,
+  UpdateProviderPayload,
   UpdateConversationPayload,
   User,
 } from '../types/chat'
@@ -207,6 +210,34 @@ export const chatApi = {
       onEvent,
       'PATCH',
     )
+  },
+}
+
+export const providerApi = {
+  list() {
+    return apiRequest<ProviderState>('/api/ai/providers')
+  },
+  create(payload: CreateProviderPayload) {
+    return apiRequest<ProviderState>('/api/ai/providers', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  update(providerId: number, payload: UpdateProviderPayload) {
+    return apiRequest<ProviderState>(`/api/ai/providers/${providerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+  activate(providerId: number) {
+    return apiRequest<ProviderState>(`/api/ai/providers/${providerId}/activate`, {
+      method: 'POST',
+    })
+  },
+  delete(providerId: number) {
+    return apiRequest<ProviderState>(`/api/ai/providers/${providerId}`, {
+      method: 'DELETE',
+    })
   },
 }
 

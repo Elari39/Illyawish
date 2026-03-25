@@ -6,6 +6,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/cloudwego/eino-ext/components/model/openai"
 	einomodel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
@@ -46,21 +47,31 @@ func (f *failingStreamModel) Stream(context.Context, []*schema.Message, ...einom
 
 func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 	model := &EinoChatModel{
-		model: &fakeBaseChatModel{
-			stream: schema.StreamReaderFromArray([]*schema.Message{
-				schema.AssistantMessage("Hello ", nil),
-				schema.AssistantMessage("World", nil),
-				schema.AssistantMessage("", nil),
-			}),
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &fakeBaseChatModel{
+				stream: schema.StreamReaderFromArray([]*schema.Message{
+					schema.AssistantMessage("Hello ", nil),
+					schema.AssistantMessage("World", nil),
+					schema.AssistantMessage("", nil),
+				}),
+			}, nil
 		},
 	}
 
 	var chunks []string
-	fullText, err := model.Stream(context.Background(), []ChatMessage{
-		{Role: "user", Content: "hi"},
-	}, RequestOptions{}, func(delta string) {
-		chunks = append(chunks, delta)
-	})
+	fullText, err := model.Stream(
+		context.Background(),
+		ProviderConfig{
+			BaseURL:      "https://example.com/v1",
+			APIKey:       "test-key",
+			DefaultModel: "default-model",
+		},
+		[]ChatMessage{{Role: "user", Content: "hi"}},
+		RequestOptions{},
+		func(delta string) {
+			chunks = append(chunks, delta)
+		},
+	)
 	if err != nil {
 		t.Fatalf("Stream() error = %v", err)
 	}
@@ -75,12 +86,18 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 
 func TestEinoChatModelStreamReturnsStartErrors(t *testing.T) {
 	model := &EinoChatModel{
-		model: &fakeBaseChatModel{
-			err: errors.New("upstream unavailable"),
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &fakeBaseChatModel{
+				err: errors.New("upstream unavailable"),
+			}, nil
 		},
 	}
 
-	_, err := model.Stream(context.Background(), nil, RequestOptions{}, func(string) {})
+	_, err := model.Stream(context.Background(), ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		DefaultModel: "default-model",
+	}, nil, RequestOptions{}, func(string) {})
 	if err == nil {
 		t.Fatal("expected start error, got nil")
 	}
@@ -91,10 +108,16 @@ func TestEinoChatModelStreamReturnsStartErrors(t *testing.T) {
 
 func TestEinoChatModelStreamReturnsReadErrors(t *testing.T) {
 	model := &EinoChatModel{
-		model: &failingStreamModel{},
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &failingStreamModel{}, nil
+		},
 	}
 
-	fullText, err := model.Stream(context.Background(), nil, RequestOptions{}, func(string) {})
+	fullText, err := model.Stream(context.Background(), ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		DefaultModel: "default-model",
+	}, nil, RequestOptions{}, func(string) {})
 	if err == nil {
 		t.Fatal("expected read error, got nil")
 	}
@@ -108,24 +131,51 @@ func TestEinoChatModelStreamReturnsReadErrors(t *testing.T) {
 
 func TestEinoChatModelStreamStopsOnEOF(t *testing.T) {
 	model := &EinoChatModel{
-		model: &fakeBaseChatModel{
-			stream: schema.StreamReaderWithConvert[int, *schema.Message](
-				schema.StreamReaderFromArray([]int{1}),
-				func(value int) (*schema.Message, error) {
-					if value == 1 {
-						return schema.AssistantMessage("done", nil), nil
-					}
-					return nil, io.EOF
-				},
-			),
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &fakeBaseChatModel{
+				stream: schema.StreamReaderWithConvert[int, *schema.Message](
+					schema.StreamReaderFromArray([]int{1}),
+					func(value int) (*schema.Message, error) {
+						if value == 1 {
+							return schema.AssistantMessage("done", nil), nil
+						}
+						return nil, io.EOF
+					},
+				),
+			}, nil
 		},
 	}
 
-	fullText, err := model.Stream(context.Background(), nil, RequestOptions{}, func(string) {})
+	fullText, err := model.Stream(context.Background(), ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		DefaultModel: "default-model",
+	}, nil, RequestOptions{}, func(string) {})
 	if err != nil {
 		t.Fatalf("expected EOF to end cleanly, got error %v", err)
 	}
 	if fullText != "done" {
 		t.Fatalf("expected full text to be %q, got %q", "done", fullText)
+	}
+}
+
+func TestBuildChatModelConfigUsesProviderDefaults(t *testing.T) {
+	cfg, err := buildChatModelConfig(ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "secret-key",
+		DefaultModel: "provider-model",
+	}, RequestOptions{})
+	if err != nil {
+		t.Fatalf("buildChatModelConfig() error = %v", err)
+	}
+
+	if cfg.BaseURL != "https://example.com/v1" {
+		t.Fatalf("expected base URL to be preserved, got %q", cfg.BaseURL)
+	}
+	if cfg.APIKey != "secret-key" {
+		t.Fatalf("expected API key to be preserved, got %q", cfg.APIKey)
+	}
+	if cfg.Model != "provider-model" {
+		t.Fatalf("expected provider default model, got %q", cfg.Model)
 	}
 }

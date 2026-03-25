@@ -2,6 +2,8 @@ import type { ReactElement } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 import { AuthProvider } from './components/auth/auth-provider'
+import { I18nProvider } from './i18n/provider'
+import { useI18n } from './i18n/use-i18n'
 import { useAuth } from './components/auth/use-auth'
 import { ChatPage } from './pages/chat-page'
 import { LoginPage } from './pages/login-page'
@@ -9,12 +11,13 @@ import { ProtectedRoute } from './routes/protected-route'
 
 function PublicOnlyRoute({ children }: { children: ReactElement }) {
   const { isLoading, user } = useAuth()
+  const { t } = useI18n()
 
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)]">
         <div className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm text-[var(--muted-foreground)] shadow-sm backdrop-blur">
-          Loading...
+          {t('app.loading')}
         </div>
       </div>
     )
@@ -29,24 +32,26 @@ function PublicOnlyRoute({ children }: { children: ReactElement }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <PublicOnlyRoute>
-                <LoginPage />
-              </PublicOnlyRoute>
-            }
-          />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/chat" element={<ChatPage />} />
-            <Route path="/chat/:conversationId" element={<ChatPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/chat" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <I18nProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <LoginPage />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/chat" element={<ChatPage />} />
+              <Route path="/chat/:conversationId" element={<ChatPage />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/chat" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </I18nProvider>
   )
 }

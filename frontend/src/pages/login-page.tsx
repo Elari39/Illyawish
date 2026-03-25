@@ -5,12 +5,15 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/auth/use-auth'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { LanguageSwitcher } from '../i18n/language-switcher'
+import { useI18n } from '../i18n/use-i18n'
 import { chatApi } from '../lib/api'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login } = useAuth()
+  const { t } = useI18n()
   const [username, setUsername] = useState('Elaina')
   const [password, setPassword] = useState('Eulus209')
   const [error, setError] = useState<string | null>(null)
@@ -42,7 +45,7 @@ export function LoginPage() {
       const message =
         nextError instanceof Error
           ? nextError.message
-          : 'Unable to sign in right now'
+          : t('login.error')
       setError(message)
     } finally {
       setIsSubmitting(false)
@@ -51,7 +54,10 @@ export function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[var(--app-bg)] px-6 py-10 text-[var(--foreground)]">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center">
+      <div className="mx-auto mb-6 flex max-w-6xl justify-end">
+        <LanguageSwitcher />
+      </div>
+      <div className="mx-auto flex min-h-[calc(100vh-7.5rem)] max-w-6xl items-center">
         <div className="grid w-full gap-8 lg:grid-cols-[1.2fr_0.9fr]">
           <section className="relative overflow-hidden rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-12">
             <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,rgba(193,95,60,0.08),transparent_60%)] lg:block" />
@@ -60,31 +66,28 @@ export function LoginPage() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
                   <MessageSquareMore className="h-4 w-4" />
                 </span>
-                AI Chat Workspace
+                {t('login.workspaceBadge')}
               </div>
               <div className="space-y-5">
                 <h1 className="max-w-xl font-['Lora',serif] text-4xl font-bold leading-tight tracking-tight text-[var(--foreground)] md:text-6xl">
-                  A calm Claude-style chat surface, now wired to your own Go
-                  backend.
+                  {t('login.heroTitle')}
                 </h1>
                 <p className="max-w-xl text-base leading-8 text-[var(--muted-foreground)] md:text-lg">
-                  This MVP ships with persistent conversations, markdown-aware
-                  answers, streaming responses, and a lightweight fixed-account
-                  sign-in flow backed by SQLite.
+                  {t('login.heroDescription')}
                 </p>
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <FeatureCard
-                  title="Streaming"
-                  description="Assistant tokens arrive incrementally, so the UI feels alive instead of blocked."
+                  title={t('login.featureStreamingTitle')}
+                  description={t('login.featureStreamingDescription')}
                 />
                 <FeatureCard
-                  title="Persistent"
-                  description="Conversation history stays in SQLite and comes back after refresh."
+                  title={t('login.featurePersistentTitle')}
+                  description={t('login.featurePersistentDescription')}
                 />
                 <FeatureCard
-                  title="Focused"
-                  description="A quiet Claude-inspired interface built for reading and long-form prompts."
+                  title={t('login.featureFocusedTitle')}
+                  description={t('login.featureFocusedDescription')}
                 />
               </div>
             </div>
@@ -93,21 +96,20 @@ export function LoginPage() {
           <section className="rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-10">
             <div className="mb-8 space-y-2">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[var(--brand)]">
-                Sign in
+                {t('login.signIn')}
               </p>
               <h2 className="text-3xl font-bold tracking-tight">
-                Continue as Elaina
+                {t('login.continueAs', { name: username || 'Elaina' })}
               </h2>
               <p className="text-sm leading-7 text-[var(--muted-foreground)]">
-                The fixed MVP account is prefilled so you can get straight into
-                the app.
+                {t('login.prefilledDescription')}
               </p>
             </div>
 
             <form className="space-y-5" onSubmit={handleSubmit}>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-[var(--foreground)]">
-                  Username
+                  {t('login.username')}
                 </span>
                 <Input
                   autoComplete="username"
@@ -117,7 +119,7 @@ export function LoginPage() {
               </label>
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-[var(--foreground)]">
-                  Password
+                  {t('login.password')}
                 </span>
                 <Input
                   autoComplete="current-password"
@@ -134,7 +136,7 @@ export function LoginPage() {
               ) : null}
 
               <Button className="w-full py-3" disabled={isSubmitting} type="submit">
-                {isSubmitting ? 'Signing in...' : 'Enter workspace'}
+                {isSubmitting ? t('login.signingIn') : t('login.enterWorkspace')}
               </Button>
             </form>
           </section>

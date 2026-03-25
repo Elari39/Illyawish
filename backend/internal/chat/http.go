@@ -10,6 +10,7 @@ import (
 
 	"backend/internal/auth"
 	"backend/internal/models"
+	"backend/internal/provider"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -306,13 +307,18 @@ func (h *Handler) streamAction(
 		return
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Status(http.StatusOK)
+	started := false
 
 	writeEvent := func(event StreamEvent) error {
+		if !started {
+			c.Writer.Header().Set("Content-Type", "text/event-stream")
+			c.Writer.Header().Set("Cache-Control", "no-cache")
+			c.Writer.Header().Set("Connection", "keep-alive")
+			c.Writer.Header().Set("X-Accel-Buffering", "no")
+			c.Status(http.StatusOK)
+			started = true
+		}
+
 		payload, err := json.Marshal(event)
 		if err != nil {
 			return fmt.Errorf("marshal stream event: %w", err)
@@ -329,6 +335,11 @@ func (h *Handler) streamAction(
 	}
 
 	if err := action(writeEvent); err != nil {
+		if !started {
+			handleChatError(c, err)
+			return
+		}
+
 		_ = writeEvent(StreamEvent{
 			Type:  "error",
 			Error: errorMessage(err),
@@ -449,6 +460,8 @@ func handleChatError(c *gin.Context, err error) {
 		errors.Is(err, ErrInvalidAssistantAction),
 		errors.Is(err, ErrInvalidUserEdit):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+	case errors.Is(err, provider.ErrNoProviderConfigured):
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 	case isRequestError(err):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
@@ -464,6 +477,7 @@ func errorMessage(err error) string {
 		errors.Is(err, ErrNoActiveGeneration) ||
 		errors.Is(err, ErrInvalidAssistantAction) ||
 		errors.Is(err, ErrInvalidUserEdit) ||
+		errors.Is(err, provider.ErrNoProviderConfigured) ||
 		errors.Is(err, gorm.ErrRecordNotFound) {
 		return err.Error()
 	}

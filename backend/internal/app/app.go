@@ -9,6 +9,7 @@ import (
 	"backend/internal/config"
 	"backend/internal/database"
 	"backend/internal/llm"
+	"backend/internal/provider"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
@@ -32,14 +33,17 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	model, err := llm.New(cfg)
+	model := llm.New()
+
+	providerService, err := provider.NewService(db, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	authHandler := auth.NewHandler(db)
-	chatService := chat.NewService(db, model, cfg.Model)
+	chatService := chat.NewService(db, model, providerService)
 	chatHandler := chat.NewHandler(chatService)
+	providerHandler := provider.NewHandler(providerService)
 
 	router := gin.New()
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -76,6 +80,12 @@ func New() (*App, error) {
 	api := router.Group("/api")
 	api.Use(auth.RequireAuth(db))
 	{
+		api.GET("/ai/providers", providerHandler.ListProviders)
+		api.POST("/ai/providers", providerHandler.CreateProvider)
+		api.PATCH("/ai/providers/:id", providerHandler.UpdateProvider)
+		api.POST("/ai/providers/:id/activate", providerHandler.ActivateProvider)
+		api.DELETE("/ai/providers/:id", providerHandler.DeleteProvider)
+
 		api.GET("/conversations", chatHandler.ListConversations)
 		api.POST("/conversations", chatHandler.CreateConversation)
 		api.PATCH("/conversations/:id", chatHandler.UpdateConversation)

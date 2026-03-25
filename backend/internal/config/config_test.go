@@ -9,7 +9,7 @@ import (
 func TestLoadReadsEnvFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
-	content := "OPENAI_BASE_URL=https://example.com/v1\nOPENAI_API_KEY=test-key\nMODEL=test-model\n"
+	content := "OPENAI_BASE_URL=https://example.com/v1\nOPENAI_API_KEY=test-key\nMODEL=test-model\nSETTINGS_ENCRYPTION_KEY=secret-key\n"
 	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
@@ -37,12 +37,15 @@ func TestLoadReadsEnvFile(t *testing.T) {
 	if cfg.SQLitePath != "./data/aichat.db" {
 		t.Fatalf("expected default sqlite path, got %q", cfg.SQLitePath)
 	}
+	if cfg.SettingsEncryptionKey != "secret-key" {
+		t.Fatalf("expected settings encryption key to be loaded, got %q", cfg.SettingsEncryptionKey)
+	}
 }
 
-func TestLoadRequiresModelConfig(t *testing.T) {
+func TestLoadAllowsMissingAIConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
-	content := "OPENAI_BASE_URL=https://example.com/v1\nOPENAI_API_KEY=test-key\n"
+	content := "SERVER_PORT=9000\n"
 	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
@@ -59,7 +62,18 @@ func TestLoadRequiresModelConfig(t *testing.T) {
 		t.Fatalf("chdir: %v", err)
 	}
 
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error for missing MODEL")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.OpenAIBaseURL != "" {
+		t.Fatalf("expected empty OPENAI_BASE_URL fallback, got %q", cfg.OpenAIBaseURL)
+	}
+	if cfg.Model != "" {
+		t.Fatalf("expected empty MODEL fallback, got %q", cfg.Model)
+	}
+	if cfg.ServerPort != "9000" {
+		t.Fatalf("expected server port from env file, got %q", cfg.ServerPort)
 	}
 }

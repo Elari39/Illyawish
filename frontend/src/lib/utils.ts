@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatConversationDate(value: string) {
+export function formatConversationDate(value: string, locale = 'en-US') {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return ''
@@ -14,13 +14,13 @@ export function formatConversationDate(value: string) {
   const now = new Date()
   const sameDay = date.toDateString() === now.toDateString()
   if (sameDay) {
-    return new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat(locale, {
       hour: 'numeric',
       minute: '2-digit',
     }).format(date)
   }
 
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
   }).format(date)

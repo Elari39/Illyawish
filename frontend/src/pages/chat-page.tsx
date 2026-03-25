@@ -6,18 +6,23 @@ import {
   type ChangeEvent,
   type Dispatch,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type SetStateAction,
 } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
+  LoaderCircle,
   LogOut,
   Menu,
   MessageSquarePlus,
   Paperclip,
+  Plus,
   SendHorizonal,
+  Server,
   Trash2,
   X,
 } from 'lucide-react'
@@ -27,7 +32,10 @@ import { useAuth } from '../components/auth/use-auth'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
-import { chatApi } from '../lib/api'
+import type { I18nContextValue } from '../i18n/context'
+import { LanguageSwitcher } from '../i18n/language-switcher'
+import { useI18n } from '../i18n/use-i18n'
+import { chatApi, providerApi } from '../lib/api'
 import {
   cn,
   createLocalISOString,
@@ -38,6 +46,8 @@ import type {
   Conversation,
   ConversationSettings,
   Message,
+  ProviderPreset,
+  ProviderState,
   StreamEvent,
 } from '../types/chat'
 
@@ -60,6 +70,15 @@ interface ComposerImage {
   revokeOnCleanup: boolean
 }
 
+type SettingsTab = 'chat' | 'provider'
+
+interface ProviderFormState {
+  name: string
+  baseURL: string
+  apiKey: string
+  defaultModel: string
+}
+
 const defaultConversationSettings: ConversationSettings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   model: '',
@@ -67,12 +86,17 @@ const defaultConversationSettings: ConversationSettings = {
   maxTokens: null,
 }
 
+const OPENAI_COMPATIBLE_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+
 export function ChatPage() {
   const { user, logout } = useAuth()
+  const { locale, t } = useI18n()
   const navigate = useNavigate()
   const params = useParams()
+  const composerFormRef = useRef<HTMLFormElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const messageViewportRef = useRef<HTMLDivElement | null>(null)
+  const composerIsComposingRef = useRef(false)
   const selectedImagesRef = useRef<ComposerImage[]>([])
   const skipAutoResumeRef = useRef(false)
   const streamingConversationIdRef = useRef<number | null>(null)
@@ -102,6 +126,14 @@ export function ChatPage() {
   const [isSending, setIsSending] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('chat')
+  const [providerState, setProviderState] = useState<ProviderState | null>(null)
+  const [providerForm, setProviderForm] = useState<ProviderFormState>(
+    createProviderForm(),
+  )
+  const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
+  const [isLoadingProviders, setIsLoadingProviders] = useState(false)
+  const [isSavingProvider, setIsSavingProvider] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const deferredConversationSearch = useDeferredValue(conversationSearch.trim())
 
@@ -110,6 +142,9 @@ export function ChatPage() {
     null
   const latestUserMessage = findLatestMessageByRole(messages, 'user')
   const latestAssistantMessage = findLatestMessageByRole(messages, 'assistant')
+  const canSubmitComposer =
+    !isSending &&
+    (composerValue.trim().length > 0 || selectedImages.length > 0)
 
   useEffect(() => {
     let cancelled = false
@@ -139,7 +174,7 @@ export function ChatPage() {
         setChatError(
           error instanceof Error
             ? error.message
-            : 'Unable to load conversations right now',
+            : t('error.loadConversations'),
         )
       } finally {
         if (!cancelled) {
@@ -153,7 +188,7 @@ export function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [deferredConversationSearch, showArchived])
+  }, [deferredConversationSearch, showArchived, t])
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -201,7 +236,7 @@ export function ChatPage() {
         const message =
           error instanceof Error
             ? error.message
-            : 'Unable to load message history right now'
+            : t('error.loadMessages')
         setChatError(message)
         setMessages([])
         if (message.toLowerCase().includes('not found')) {
@@ -213,7 +248,7 @@ export function ChatPage() {
     }
 
     void syncMessages()
-  }, [activeConversationId, deferredConversationSearch, navigate, showArchived])
+  }, [activeConversationId, deferredConversationSearch, navigate, showArchived, t])
 
   useEffect(() => {
     const viewport = messageViewportRef.current
@@ -252,6 +287,44 @@ export function ChatPage() {
       JSON.stringify(isDesktopSidebarCollapsed),
     )
   }, [isDesktopSidebarCollapsed])
+
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return
+    }
+
+    let cancelled = false
+
+    async function fetchProviderState() {
+      try {
+        setIsLoadingProviders(true)
+        const nextState = await providerApi.list()
+        if (cancelled) {
+          return
+        }
+        applyProviderState(nextState)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+        setChatError(
+          error instanceof Error
+            ? error.message
+            : t('error.loadProviders'),
+        )
+      } finally {
+        if (!cancelled) {
+          setIsLoadingProviders(false)
+        }
+      }
+    }
+
+    void fetchProviderState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isSettingsOpen, t])
 
   useEffect(() => {
     if (
@@ -313,7 +386,7 @@ export function ChatPage() {
       setChatError(
         error instanceof Error
           ? error.message
-          : 'Unable to load conversations right now',
+          : t('error.loadConversations'),
       )
     } finally {
       setIsLoadingConversations(false)
@@ -341,6 +414,122 @@ export function ChatPage() {
     inputRef.current?.click()
   }
 
+  function applyProviderState(
+    nextState: ProviderState,
+    preferredPresetId: number | null = editingProviderId,
+  ) {
+    setProviderState(nextState)
+
+    const preferredPreset =
+      nextState.presets.find((preset) => preset.id === preferredPresetId) ?? null
+    const activePreset =
+      nextState.presets.find((preset) => preset.isActive) ?? null
+    const nextPreset = preferredPreset ?? activePreset
+
+    if (nextPreset) {
+      setEditingProviderId(nextPreset.id)
+      setProviderForm(createProviderForm(nextState.fallback, nextPreset))
+      return
+    }
+
+    setEditingProviderId(null)
+    setProviderForm(createProviderForm(nextState.fallback))
+  }
+
+  function handleOpenSettings() {
+    setActiveSettingsTab('chat')
+    setIsSettingsOpen(true)
+  }
+
+  function handleStartNewProvider() {
+    setEditingProviderId(null)
+    setProviderForm(createProviderForm(providerState?.fallback))
+  }
+
+  function handleEditProvider(preset: ProviderPreset) {
+    setEditingProviderId(preset.id)
+    setProviderForm(createProviderForm(providerState?.fallback, preset))
+  }
+
+  async function handleSaveProvider() {
+    setIsSavingProvider(true)
+    setChatError(null)
+
+    try {
+      const nextState = editingProviderId
+        ? await providerApi.update(editingProviderId, {
+            name: providerForm.name,
+            baseURL: providerForm.baseURL,
+            defaultModel: providerForm.defaultModel,
+            ...(providerForm.apiKey.trim()
+              ? { apiKey: providerForm.apiKey }
+              : {}),
+          })
+        : await providerApi.create({
+            name: providerForm.name,
+            baseURL: providerForm.baseURL,
+            apiKey: providerForm.apiKey,
+            defaultModel: providerForm.defaultModel,
+          })
+
+      applyProviderState(nextState, editingProviderId ?? nextState.activePresetId)
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : t('error.saveProviderSettings'),
+      )
+    } finally {
+      setIsSavingProvider(false)
+    }
+  }
+
+  async function handleActivateProvider(providerId: number) {
+    setIsSavingProvider(true)
+    setChatError(null)
+
+    try {
+      const nextState = await providerApi.activate(providerId)
+      applyProviderState(nextState, providerId)
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : t('error.activateProviderPreset'),
+      )
+    } finally {
+      setIsSavingProvider(false)
+    }
+  }
+
+  async function handleDeleteProvider(preset: ProviderPreset) {
+    const confirmed = window.confirm(
+      t('confirm.deleteProviderPreset', { name: preset.name }),
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setIsSavingProvider(true)
+    setChatError(null)
+
+    try {
+      const nextState = await providerApi.delete(preset.id)
+      applyProviderState(
+        nextState,
+        editingProviderId === preset.id ? null : editingProviderId,
+      )
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : t('error.deleteProviderPreset'),
+      )
+    } finally {
+      setIsSavingProvider(false)
+    }
+  }
+
   function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) {
@@ -350,11 +539,11 @@ export function ChatPage() {
     const nextImages: ComposerImage[] = []
     for (const file of files) {
       if (!file.type.startsWith('image/')) {
-        setChatError('Only image attachments are supported right now')
+        setChatError(t('error.onlyImages'))
         continue
       }
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        setChatError(`Image "${file.name}" is larger than 6 MB`)
+        setChatError(t('error.imageTooLarge', { name: file.name }))
         continue
       }
       nextImages.push({
@@ -384,7 +573,9 @@ export function ChatPage() {
       }
 
       if (mergedImages.length > MAX_IMAGE_ATTACHMENTS) {
-        setChatError(`You can attach up to ${MAX_IMAGE_ATTACHMENTS} images`)
+        setChatError(
+          t('error.maxImages', { count: MAX_IMAGE_ATTACHMENTS }),
+        )
       } else {
         setChatError(null)
       }
@@ -421,7 +612,7 @@ export function ChatPage() {
   }
 
   async function handleDeleteConversation(conversationId: number) {
-    const confirmed = window.confirm('Delete this conversation permanently?')
+    const confirmed = window.confirm(t('confirm.deleteConversation'))
     if (!confirmed) {
       return
     }
@@ -440,13 +631,16 @@ export function ChatPage() {
       setChatError(
         error instanceof Error
           ? error.message
-          : 'Unable to delete this conversation',
+          : t('error.deleteConversation'),
       )
     }
   }
 
   async function handleRenameConversation(conversation: Conversation) {
-    const nextTitle = window.prompt('Rename conversation', conversation.title)
+    const nextTitle = window.prompt(
+      t('prompt.renameConversation'),
+      conversation.title,
+    )
     if (nextTitle === null) {
       return
     }
@@ -460,7 +654,7 @@ export function ChatPage() {
       setChatError(
         error instanceof Error
           ? error.message
-          : 'Unable to rename this conversation',
+          : t('error.renameConversation'),
       )
     }
   }
@@ -475,7 +669,7 @@ export function ChatPage() {
       setChatError(
         error instanceof Error
           ? error.message
-          : 'Unable to update this conversation',
+          : t('error.updateConversation'),
       )
     }
   }
@@ -503,7 +697,7 @@ export function ChatPage() {
       setChatError(
         error instanceof Error
           ? error.message
-          : 'Unable to archive this conversation',
+          : t('error.archiveConversation'),
       )
     }
   }
@@ -521,7 +715,7 @@ export function ChatPage() {
     }
 
     try {
-      const attachments = await buildAttachmentPayload(selectedImages)
+      const attachments = await buildAttachmentPayload(selectedImages, t)
       const content = composerValue.trim()
 
       if (!content && attachments.length === 0) {
@@ -536,7 +730,7 @@ export function ChatPage() {
       await handleSendSubmit(content, attachments)
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to prepare your message',
+        error instanceof Error ? error.message : t('error.prepareMessage'),
       )
     }
   }
@@ -612,7 +806,7 @@ export function ChatPage() {
       await loadConversations()
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to send your message',
+        error instanceof Error ? error.message : t('error.sendMessage'),
       )
       setMessages((previous) =>
         previous.map((message) => {
@@ -622,8 +816,7 @@ export function ChatPage() {
           return {
             ...message,
             status: 'failed',
-            content:
-              message.content || 'Unable to complete the reply. Please try again.',
+            content: message.content || t('error.completeReply'),
           }
         }),
       )
@@ -692,7 +885,7 @@ export function ChatPage() {
       await loadConversations()
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to update the message',
+        error instanceof Error ? error.message : t('error.updateMessage'),
       )
       setMessages((previous) =>
         previous.map((message) =>
@@ -700,8 +893,7 @@ export function ChatPage() {
             ? {
                 ...message,
                 status: 'failed',
-                content:
-                  message.content || 'Unable to complete the reply. Please try again.',
+                content: message.content || t('error.completeReply'),
               }
             : message,
         ),
@@ -746,7 +938,7 @@ export function ChatPage() {
       await loadConversations()
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to retry the reply',
+        error instanceof Error ? error.message : t('error.retryReply'),
       )
       setMessages((previous) =>
         previous.map((item) =>
@@ -754,8 +946,7 @@ export function ChatPage() {
             ? {
                 ...item,
                 status: 'failed',
-                content:
-                  item.content || 'Unable to complete the reply. Please try again.',
+                content: item.content || t('error.completeReply'),
               }
             : item,
         ),
@@ -799,7 +990,7 @@ export function ChatPage() {
       await loadConversations()
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to regenerate the reply',
+        error instanceof Error ? error.message : t('error.regenerateReply'),
       )
       setMessages((previous) =>
         previous.map((item) =>
@@ -807,8 +998,7 @@ export function ChatPage() {
             ? {
                 ...item,
                 status: 'failed',
-                content:
-                  item.content || 'Unable to complete the reply. Please try again.',
+                content: item.content || t('error.completeReply'),
               }
             : item,
         ),
@@ -828,7 +1018,7 @@ export function ChatPage() {
       await chatApi.cancelGeneration(activeConversationId)
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to stop generation',
+        error instanceof Error ? error.message : t('error.stopGeneration'),
       )
     }
   }
@@ -851,7 +1041,7 @@ export function ChatPage() {
       setIsSettingsOpen(false)
     } catch (error) {
       setChatError(
-        error instanceof Error ? error.message : 'Unable to save settings',
+        error instanceof Error ? error.message : t('error.saveSettings'),
       )
     } finally {
       setIsSavingSettings(false)
@@ -863,9 +1053,14 @@ export function ChatPage() {
       return
     }
 
-    const markdown = buildConversationMarkdown(currentConversation, messages)
+    const markdown = buildConversationMarkdown(
+      currentConversation,
+      messages,
+      locale,
+      t,
+    )
     downloadTextFile(
-      `${slugify(currentConversation.title || 'conversation')}.md`,
+      `${slugify(currentConversation.title || t('chat.exportDefaultTitle'))}.md`,
       markdown,
     )
   }
@@ -886,6 +1081,29 @@ export function ChatPage() {
     clearSelectedImages()
   }
 
+  function handleComposerKeyDown(
+    event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) {
+    if (event.key !== 'Enter') {
+      return
+    }
+
+    if (event.ctrlKey) {
+      return
+    }
+
+    if (composerIsComposingRef.current || event.nativeEvent.isComposing) {
+      return
+    }
+
+    event.preventDefault()
+    if (!canSubmitComposer) {
+      return
+    }
+
+    composerFormRef.current?.requestSubmit()
+  }
+
   function handleStreamEvent(event: StreamEvent, placeholderId: number) {
     const eventMessage = event.message
 
@@ -904,7 +1122,7 @@ export function ChatPage() {
 
     if ((event.type === 'done' || event.type === 'cancelled') && eventMessage) {
       if (event.type === 'cancelled') {
-        setChatError('Generation stopped')
+        setChatError(t('error.generationStopped'))
       }
       setMessages((previous) =>
         previous.map((message) =>
@@ -917,16 +1135,13 @@ export function ChatPage() {
     }
 
     if (event.type === 'error') {
-      setChatError(event.error ?? 'Streaming failed')
+      setChatError(event.error ?? t('error.streamingFailed'))
       setMessages((previous) =>
         previous.map((message) => {
           if (isSameMessage(message, eventMessage, placeholderId)) {
             return {
               ...(eventMessage ?? message),
-              content:
-                eventMessage?.content ||
-                message.content ||
-                'The assistant response ended unexpectedly.',
+              content: eventMessage?.content || message.content || t('error.assistantEndedUnexpectedly'),
               status: 'failed',
             }
           }
@@ -1022,8 +1237,8 @@ export function ChatPage() {
             aria-expanded={!isDesktopSidebarCollapsed}
             aria-label={
               isDesktopSidebarCollapsed
-                ? 'Expand conversation sidebar'
-                : 'Collapse conversation sidebar'
+                ? t('chat.expandSidebar')
+                : t('chat.collapseSidebar')
             }
             className="hidden h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)] md:inline-flex"
             onClick={() =>
@@ -1031,8 +1246,8 @@ export function ChatPage() {
             }
             title={
               isDesktopSidebarCollapsed
-                ? 'Expand conversation sidebar'
-                : 'Collapse conversation sidebar'
+                ? t('chat.expandSidebar')
+                : t('chat.collapseSidebar')
             }
             type="button"
           >
@@ -1045,30 +1260,31 @@ export function ChatPage() {
 
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium text-[var(--foreground)]">
-              {currentConversation?.title ?? 'New conversation'}
+              {currentConversation?.title ?? t('chat.newConversation')}
             </h1>
             {currentConversation ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
-                {currentConversation.settings.model || 'Default model'}
+                {currentConversation.settings.model || t('chat.defaultModel')}
               </p>
             ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <LanguageSwitcher />
             <Button
               className="px-3 py-2"
               disabled={messages.length === 0}
               onClick={handleExportConversation}
               variant="secondary"
             >
-              Export
+              {t('chat.export')}
             </Button>
             <Button
               className="px-3 py-2"
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={handleOpenSettings}
               variant="secondary"
             >
-              Settings
+              {t('chat.settings')}
             </Button>
             {latestAssistantMessage && !isSending ? (
               <Button
@@ -1076,7 +1292,7 @@ export function ChatPage() {
                 onClick={() => void handleRegenerateAssistant()}
                 variant="secondary"
               >
-                Regenerate
+                {t('chat.regenerate')}
               </Button>
             ) : null}
             {isSending ? (
@@ -1085,7 +1301,7 @@ export function ChatPage() {
                 onClick={() => void handleStopGeneration()}
                 variant="danger"
               >
-                Stop
+                {t('chat.stop')}
               </Button>
             ) : null}
           </div>
@@ -1097,7 +1313,7 @@ export function ChatPage() {
         >
           {activeConversationId && isLoadingMessages ? (
             <div className="px-2 py-8 text-sm text-[var(--muted-foreground)]">
-              Loading conversation...
+              {t('chat.loadingConversation')}
             </div>
           ) : messages.length > 0 ? (
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
@@ -1148,9 +1364,9 @@ export function ChatPage() {
           <div className="mx-auto max-w-3xl space-y-3">
             {editingMessageId ? (
               <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-sm text-[var(--muted-foreground)]">
-                <span>Editing your latest message. Sending will regenerate the reply.</span>
+                <span>{t('chat.editingBanner')}</span>
                 <Button onClick={cancelEditingMessage} variant="ghost">
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </div>
             ) : null}
@@ -1181,13 +1397,23 @@ export function ChatPage() {
 
             <form
               className="rounded-2xl border border-[var(--line)] bg-white p-3 shadow-[var(--shadow-md)]"
+              ref={composerFormRef}
               onSubmit={handleSubmit}
             >
               <Textarea
                 className="min-h-[96px] p-2 text-[15px]"
                 onChange={(event) => setComposerValue(event.target.value)}
+                onCompositionEnd={() => {
+                  composerIsComposingRef.current = false
+                }}
+                onCompositionStart={() => {
+                  composerIsComposingRef.current = true
+                }}
+                onKeyDown={handleComposerKeyDown}
                 placeholder={
-                  editingMessageId ? 'Update your message...' : 'Message Claude...'
+                  editingMessageId
+                    ? t('chat.updateMessagePlaceholder')
+                    : t('chat.messagePlaceholder')
                 }
                 value={composerValue}
               />
@@ -1196,17 +1422,18 @@ export function ChatPage() {
                   className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
                   onClick={handleOpenImagePicker}
                   type="button"
-                  title="Attach image"
+                  title={t('chat.attachImage')}
                 >
                   <Paperclip className="h-4 w-4" />
                 </button>
 
+                <p className="px-3 text-xs text-[var(--muted-foreground)]">
+                  {t('chat.shortcutHint')}
+                </p>
+
                 <button
                   className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-white transition hover:bg-[var(--brand-strong)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={
-                    isSending ||
-                    (!composerValue.trim() && selectedImages.length === 0)
-                  }
+                  disabled={!canSubmitComposer}
                   type="submit"
                 >
                   <SendHorizonal className="h-4 w-4" />
@@ -1222,11 +1449,25 @@ export function ChatPage() {
       </main>
 
       <SettingsPanel
+        activeTab={activeSettingsTab}
+        editingProviderId={editingProviderId}
+        isLoadingProviders={isLoadingProviders}
         isOpen={isSettingsOpen}
+        isSavingProvider={isSavingProvider}
         isSaving={isSavingSettings}
         onClose={() => setIsSettingsOpen(false)}
+        onDeleteProvider={handleDeleteProvider}
+        onEditProvider={handleEditProvider}
+        onProviderTabChange={setActiveSettingsTab}
         onReset={() => setSettingsDraft(defaultConversationSettings)}
+        onResetProvider={handleStartNewProvider}
         onSave={() => void handleSaveSettings()}
+        onSaveProvider={() => void handleSaveProvider()}
+        onActivateProvider={(providerId) => void handleActivateProvider(providerId)}
+        onStartNewProvider={handleStartNewProvider}
+        providerForm={providerForm}
+        providerState={providerState}
+        setProviderForm={setProviderForm}
         settings={settingsDraft}
         setSettings={setSettingsDraft}
       />
@@ -1284,6 +1525,8 @@ function SidebarContent({
   username: string
   onLogout: () => void
 }) {
+  const { locale, t } = useI18n()
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div
@@ -1309,7 +1552,7 @@ function SidebarContent({
           <button
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
             onClick={onCreateChat}
-            title="New chat"
+            title={t('sidebar.newChat')}
             type="button"
           >
             <MessageSquarePlus className="h-4 w-4" />
@@ -1319,7 +1562,7 @@ function SidebarContent({
         {!collapsed ? (
           <>
             <Input
-              placeholder="Search conversations"
+              placeholder={t('sidebar.searchPlaceholder')}
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
             />
@@ -1330,14 +1573,14 @@ function SidebarContent({
                 onClick={() => onToggleArchived(false)}
                 variant={showArchived ? 'secondary' : 'primary'}
               >
-                Active
+                {t('sidebar.active')}
               </Button>
               <Button
                 className="px-3 py-2"
                 onClick={() => onToggleArchived(true)}
                 variant={showArchived ? 'primary' : 'secondary'}
               >
-                Archived
+                {t('sidebar.archived')}
               </Button>
             </div>
           </>
@@ -1352,7 +1595,7 @@ function SidebarContent({
       >
         {!collapsed ? (
           <p className="mb-1 px-3 text-xs font-medium text-[var(--muted-foreground)]">
-            {showArchived ? 'Archived' : 'Recents'}
+            {showArchived ? t('sidebar.archived') : t('sidebar.recents')}
           </p>
         ) : null}
         <div className="space-y-1">
@@ -1363,7 +1606,7 @@ function SidebarContent({
                 collapsed ? 'px-0 text-center text-xs' : 'px-3 text-sm',
               )}
             >
-              Loading...
+              {t('common.loading')}
             </div>
           ) : conversations.length === 0 ? (
             <div
@@ -1372,7 +1615,7 @@ function SidebarContent({
                 collapsed ? 'px-0 text-center text-xs' : 'px-3 text-sm',
               )}
             >
-              No conversations yet.
+              {t('sidebar.noConversations')}
             </div>
           ) : (
             conversations.map((conversation) => {
@@ -1415,11 +1658,11 @@ function SidebarContent({
                     ) : (
                       <>
                         <div className="truncate text-sm font-medium text-[var(--foreground)]">
-                          {conversation.isPinned ? 'Pinned · ' : ''}
+                          {conversation.isPinned ? t('sidebar.pinnedPrefix') : ''}
                           {conversation.title}
                         </div>
                         <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-                          {formatConversationDate(conversation.updatedAt)}
+                          {formatConversationDate(conversation.updatedAt, locale)}
                         </div>
                       </>
                     )}
@@ -1432,21 +1675,21 @@ function SidebarContent({
                         onClick={() => onTogglePinned(conversation)}
                         variant="ghost"
                       >
-                        {conversation.isPinned ? 'Unpin' : 'Pin'}
+                        {conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
                       </Button>
                       <Button
                         className="px-2 py-1 text-xs"
                         onClick={() => onRenameConversation(conversation)}
                         variant="ghost"
                       >
-                        Rename
+                        {t('sidebar.rename')}
                       </Button>
                       <Button
                         className="px-2 py-1 text-xs"
                         onClick={() => onToggleArchivedConversation(conversation)}
                         variant="ghost"
                       >
-                        {conversation.isArchived ? 'Restore' : 'Archive'}
+                        {conversation.isArchived ? t('sidebar.restore') : t('sidebar.archive')}
                       </Button>
                       <button
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--danger)]"
@@ -1471,7 +1714,7 @@ function SidebarContent({
               onClick={onLoadMore}
               variant="secondary"
             >
-              {isLoadingMore ? 'Loading...' : 'Load more'}
+              {isLoadingMore ? t('common.loading') : t('common.loadMore')}
             </Button>
           </div>
         ) : null}
@@ -1489,7 +1732,7 @@ function SidebarContent({
             <button
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
               onClick={onLogout}
-              title="Sign out"
+              title={t('sidebar.signOut')}
               type="button"
             >
               <LogOut className="h-4 w-4" />
@@ -1506,7 +1749,7 @@ function SidebarContent({
             <button
               className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
               onClick={onLogout}
-              title="Sign out"
+              title={t('sidebar.signOut')}
               type="button"
             >
               <LogOut className="h-4 w-4" />
@@ -1569,37 +1812,71 @@ function MobileSidebar({
 }
 
 function SettingsPanel({
+  activeTab,
+  editingProviderId,
+  isLoadingProviders,
   isOpen,
+  isSavingProvider,
   isSaving,
+  onActivateProvider,
   settings,
+  providerForm,
+  providerState,
   setSettings,
+  setProviderForm,
   onClose,
+  onDeleteProvider,
+  onEditProvider,
+  onProviderTabChange,
   onReset,
+  onResetProvider,
   onSave,
+  onSaveProvider,
+  onStartNewProvider,
 }: {
+  activeTab: SettingsTab
+  editingProviderId: number | null
+  isLoadingProviders: boolean
   isOpen: boolean
+  isSavingProvider: boolean
   isSaving: boolean
+  onActivateProvider: (providerId: number) => void
   settings: ConversationSettings
+  providerForm: ProviderFormState
+  providerState: ProviderState | null
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
+  setProviderForm: Dispatch<SetStateAction<ProviderFormState>>
   onClose: () => void
+  onDeleteProvider: (preset: ProviderPreset) => void
+  onEditProvider: (preset: ProviderPreset) => void
+  onProviderTabChange: (tab: SettingsTab) => void
   onReset: () => void
+  onResetProvider: () => void
   onSave: () => void
+  onSaveProvider: () => void
+  onStartNewProvider: () => void
 }) {
+  const { t } = useI18n()
+
   if (!isOpen) {
     return null
   }
 
+  const activePreset =
+    providerState?.presets.find((preset) => preset.isActive) ?? null
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4">
-      <div className="w-full max-w-2xl rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]">
+      <div className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="font-['Lora',serif] text-2xl font-bold tracking-tight">
-              Chat settings
+              {t('settings.title')}
             </h2>
             <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
-              These settings control the system prompt, model, and generation
-              parameters used for the current conversation or the next new chat.
+              {activeTab === 'chat'
+                ? t('settings.chatDescription')
+                : t('settings.providerDescription')}
             </p>
           </div>
           <button
@@ -1611,95 +1888,377 @@ function SettingsPanel({
           </button>
         </div>
 
-        <div className="mt-6 grid gap-5">
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              Model
-            </span>
-            <Input
-              placeholder="Use backend default model if left blank"
-              value={settings.model}
-              onChange={(event) =>
-                setSettings((previous) => ({
-                  ...previous,
-                  model: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="block space-y-2">
-            <span className="text-sm font-medium text-[var(--foreground)]">
-              System prompt
-            </span>
-            <Textarea
-              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
-              value={settings.systemPrompt}
-              onChange={(event) =>
-                setSettings((previous) => ({
-                  ...previous,
-                  systemPrompt: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-[var(--foreground)]">
-                Temperature
-              </span>
-              <Input
-                min="0"
-                max="2"
-                step="0.1"
-                type="number"
-                value={settings.temperature ?? ''}
-                onChange={(event) =>
-                  setSettings((previous) => ({
-                    ...previous,
-                    temperature:
-                      event.target.value === ''
-                        ? null
-                        : Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-[var(--foreground)]">
-                Max tokens
-              </span>
-              <Input
-                min="0"
-                step="1"
-                type="number"
-                value={settings.maxTokens ?? ''}
-                onChange={(event) =>
-                  setSettings((previous) => ({
-                    ...previous,
-                    maxTokens:
-                      event.target.value === ''
-                        ? null
-                        : Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-          </div>
+        <div className="mt-6 inline-flex rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'chat'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('chat')}
+            type="button"
+          >
+            {t('settings.chatTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'provider'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('provider')}
+            type="button"
+          >
+            {t('settings.providerTab')}
+          </button>
         </div>
 
+        {activeTab === 'chat' ? (
+          <div className="mt-6 grid gap-5">
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                {t('settings.model')}
+              </span>
+              <Input
+                placeholder={t('settings.modelPlaceholder')}
+                value={settings.model}
+                onChange={(event) =>
+                  setSettings((previous) => ({
+                    ...previous,
+                    model: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-[var(--foreground)]">
+                {t('settings.systemPrompt')}
+              </span>
+              <Textarea
+                className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+                value={settings.systemPrompt}
+                onChange={(event) =>
+                  setSettings((previous) => ({
+                    ...previous,
+                    systemPrompt: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  {t('settings.temperature')}
+                </span>
+                <Input
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  type="number"
+                  value={settings.temperature ?? ''}
+                  onChange={(event) =>
+                    setSettings((previous) => ({
+                      ...previous,
+                      temperature:
+                        event.target.value === ''
+                          ? null
+                          : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  {t('settings.maxTokens')}
+                </span>
+                <Input
+                  min="0"
+                  step="1"
+                  type="number"
+                  value={settings.maxTokens ?? ''}
+                  onChange={(event) =>
+                    setSettings((previous) => ({
+                      ...previous,
+                      maxTokens:
+                        event.target.value === ''
+                          ? null
+                          : Number(event.target.value),
+                    }))
+                  }
+                />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-6">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-5 py-4">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                {t('settings.currentSource')}
+              </p>
+              <p className="mt-2 text-sm text-[var(--muted-foreground)]">
+                {describeProviderSource(providerState, activePreset, t)}
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,300px)_1fr]">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                      {t('settings.savedPresets')}
+                    </h3>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {t('settings.onePresetActive')}
+                    </p>
+                  </div>
+                  <button
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+                    onClick={onStartNewProvider}
+                    title={t('settings.createProviderPreset')}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {isLoadingProviders ? (
+                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-4 py-4 text-sm text-[var(--muted-foreground)]">
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    {t('settings.loadingPresets')}
+                  </div>
+                ) : providerState && providerState.presets.length > 0 ? (
+                  <div className="space-y-3">
+                    {providerState.presets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        className={cn(
+                          'w-full rounded-2xl border px-4 py-4 text-left transition',
+                          editingProviderId === preset.id
+                            ? 'border-[var(--brand)]/40 bg-[var(--brand)]/[0.04]'
+                            : 'border-[var(--line)] bg-white hover:bg-black/[0.02]',
+                        )}
+                        onClick={() => onEditProvider(preset)}
+                        type="button"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                              {preset.name}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">
+                              {preset.defaultModel}
+                            </p>
+                          </div>
+                          {preset.isActive ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand)]/[0.08] px-2.5 py-1 text-xs font-medium text-[var(--brand-strong)]">
+                              <Check className="h-3.5 w-3.5" />
+                              {t('settings.active')}
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <p className="mt-3 truncate text-xs text-[var(--muted-foreground)]">
+                          {preset.baseURL}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                          {t('settings.key')}: {preset.apiKeyHint}
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={preset.isActive || isSavingProvider}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onActivateProvider(preset.id)
+                            }}
+                            type="button"
+                          >
+                            {t('settings.setActive')}
+                          </button>
+                          <button
+                            className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--danger)] transition hover:bg-[var(--danger)]/5 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={isSavingProvider}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              onDeleteProvider(preset)
+                            }}
+                            type="button"
+                          >
+                            {t('common.delete')}
+                          </button>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--app-bg)] px-4 py-5 text-sm text-[var(--muted-foreground)]">
+                    {t('settings.noSavedPresets')}
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--foreground)]">
+                        {t('settings.envFallback')}
+                      </p>
+                      <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                        {providerState?.fallback.available
+                          ? t('settings.envReady')
+                          : t('settings.envNotConfigured')}
+                      </p>
+                    </div>
+                    <Server className="mt-0.5 h-4 w-4 text-[var(--muted-foreground)]" />
+                  </div>
+                  <p className="mt-3 truncate text-xs text-[var(--muted-foreground)]">
+                    {providerState?.fallback.baseURL || t('settings.noFallbackBaseUrl')}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {providerState?.fallback.defaultModel || t('settings.noFallbackModel')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[1.75rem] border border-[var(--line)] bg-white p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--foreground)]">
+                      {editingProviderId ? t('settings.editPreset') : t('settings.newPreset')}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                      {t('settings.presetDescription')}
+                    </p>
+                  </div>
+                  {editingProviderId ? (
+                    <button
+                      className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition hover:bg-black/[0.04] hover:text-[var(--foreground)]"
+                      onClick={onResetProvider}
+                      type="button"
+                    >
+                      {t('settings.newPreset')}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="mt-5 grid gap-5">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      {t('settings.presetName')}
+                    </span>
+                    <Input
+                      placeholder={t('settings.presetNamePlaceholder')}
+                      value={providerForm.name}
+                      onChange={(event) =>
+                        setProviderForm((previous) => ({
+                          ...previous,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      {t('settings.defaultModelLabel')}
+                    </span>
+                    <Input
+                      placeholder="gpt-4.1-mini"
+                      value={providerForm.defaultModel}
+                      onChange={(event) =>
+                        setProviderForm((previous) => ({
+                          ...previous,
+                          defaultModel: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      {t('settings.baseUrl')}
+                    </span>
+                    <Input
+                      placeholder={OPENAI_COMPATIBLE_DEFAULT_BASE_URL}
+                      value={providerForm.baseURL}
+                      onChange={(event) =>
+                        setProviderForm((previous) => ({
+                          ...previous,
+                          baseURL: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-[var(--foreground)]">
+                      {t('settings.apiKey')}
+                    </span>
+                    <Input
+                      placeholder={
+                        editingProviderId
+                          ? t('settings.apiKeyPlaceholderEdit')
+                          : t('settings.apiKeyPlaceholderNew')
+                      }
+                      type="password"
+                      value={providerForm.apiKey}
+                      onChange={(event) =>
+                        setProviderForm((previous) => ({
+                          ...previous,
+                          apiKey: event.target.value,
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      {editingProviderId
+                        ? t('settings.apiKeyHelpEdit')
+                        : t('settings.apiKeyHelpNew')}
+                    </p>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex flex-wrap justify-end gap-3">
-          <Button onClick={onReset} variant="ghost">
-            Reset
-          </Button>
-          <Button onClick={onClose} variant="secondary">
-            Close
-          </Button>
-          <Button disabled={isSaving} onClick={onSave}>
-            {isSaving ? 'Saving...' : 'Save settings'}
-          </Button>
+          {activeTab === 'chat' ? (
+            <>
+              <Button onClick={onReset} variant="ghost">
+                {t('common.reset')}
+              </Button>
+              <Button onClick={onClose} variant="secondary">
+                {t('common.close')}
+              </Button>
+              <Button disabled={isSaving} onClick={onSave}>
+                {isSaving ? t('common.saving') : t('settings.saveSettings')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={onResetProvider} variant="ghost">
+                {editingProviderId ? t('settings.newPreset') : t('settings.resetForm')}
+              </Button>
+              <Button onClick={onClose} variant="secondary">
+                {t('common.close')}
+              </Button>
+              <Button
+                disabled={isLoadingProviders || isSavingProvider}
+                onClick={onSaveProvider}
+              >
+                {isSavingProvider
+                  ? t('common.saving')
+                  : editingProviderId
+                    ? t('settings.savePreset')
+                    : t('settings.createPreset')}
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1713,6 +2272,7 @@ function EmptyState({
   hasConversations: boolean
   onContinueLast: () => void
 }) {
+  const { t } = useI18n()
   const hasLastConversation = Boolean(
     localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY),
   )
@@ -1721,17 +2281,17 @@ function EmptyState({
     <div className="mx-auto flex h-full w-full max-w-3xl items-center justify-center">
       <div className="w-full max-w-xl space-y-4 text-center">
         <h2 className="font-['Lora',serif] text-3xl font-bold tracking-tight text-[var(--foreground)] md:text-4xl">
-          How can I help you today?
+          {t('empty.title')}
         </h2>
         <p className="text-base leading-7 text-[var(--muted-foreground)]">
           {hasConversations
-            ? 'Choose a conversation from the sidebar, or start a brand-new chat below.'
-            : 'Start typing below. Images, conversation settings, and markdown replies are all ready.'}
+            ? t('empty.withConversations')
+            : t('empty.withoutConversations')}
         </p>
         {hasConversations && hasLastConversation ? (
           <div className="pt-2">
             <Button onClick={onContinueLast} variant="secondary">
-              Continue last conversation
+              {t('empty.continueLastConversation')}
             </Button>
           </div>
         ) : null}
@@ -1759,6 +2319,7 @@ function MessageBubble({
   onRetry: () => void
   onRegenerate: () => void
 }) {
+  const { locale, t } = useI18n()
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
@@ -1783,11 +2344,11 @@ function MessageBubble({
             <p className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</p>
           </div>
           <div className="flex items-center justify-end gap-3 text-xs text-[var(--muted-foreground)]">
-            <span>{formatMessageTimestamp(message.createdAt)}</span>
-            {isEditing ? <span>Editing</span> : null}
+            <span>{formatMessageTimestamp(message.createdAt, locale)}</span>
+            {isEditing ? <span>{t('message.editing')}</span> : null}
             {canEdit ? (
               <Button className="px-2 py-1 text-xs" onClick={onEdit} variant="ghost">
-                Edit
+                {t('message.edit')}
               </Button>
             ) : null}
           </div>
@@ -1799,9 +2360,9 @@ function MessageBubble({
   return (
     <article className="chat-fade-in">
       <div className="flex items-center gap-3 text-xs text-[var(--muted-foreground)]">
-        <span>{formatMessageTimestamp(message.createdAt)}</span>
-        {isFailed ? <span className="text-[var(--danger)]">Failed</span> : null}
-        {isCancelled ? <span className="text-[var(--danger)]">Stopped</span> : null}
+        <span>{formatMessageTimestamp(message.createdAt, locale)}</span>
+        {isFailed ? <span className="text-[var(--danger)]">{t('message.failed')}</span> : null}
+        {isCancelled ? <span className="text-[var(--danger)]">{t('message.stopped')}</span> : null}
       </div>
       <div className="markdown mt-2 text-[var(--foreground)]">
         <ReactMarkdown
@@ -1824,7 +2385,7 @@ function MessageBubble({
           }}
           remarkPlugins={[remarkGfm]}
         >
-          {message.content || 'Thinking...'}
+          {message.content || t('message.thinking')}
         </ReactMarkdown>
       </div>
 
@@ -1832,12 +2393,12 @@ function MessageBubble({
         <div className="mt-3 flex flex-wrap gap-2">
           {canRetry ? (
             <Button className="px-3 py-2" onClick={onRetry} variant="secondary">
-              Retry
+              {t('message.retry')}
             </Button>
           ) : null}
           {canRegenerate ? (
             <Button className="px-3 py-2" onClick={onRegenerate} variant="secondary">
-              Regenerate
+              {t('chat.regenerate')}
             </Button>
           ) : null}
         </div>
@@ -1853,6 +2414,7 @@ function CodeBlock({
   code: string
   language?: string
 }) {
+  const { t } = useI18n()
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -1864,9 +2426,9 @@ function CodeBlock({
   return (
     <div className="overflow-hidden rounded-2xl border border-black/6 bg-[#1e1e1c]">
       <div className="flex items-center justify-between border-b border-white/6 px-4 py-2 text-xs text-white/70">
-        <span>{language?.replace('language-', '') || 'code'}</span>
+        <span>{language?.replace('language-', '') || t('message.code')}</span>
         <Button className="px-2 py-1 text-xs" onClick={() => void handleCopy()} variant="ghost">
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? t('message.copied') : t('message.copy')}
         </Button>
       </div>
       <pre className="m-0 overflow-x-auto p-4">
@@ -1969,40 +2531,47 @@ function createComposerImagesFromAttachments(attachments: Attachment[]) {
   }))
 }
 
-async function buildAttachmentPayload(images: ComposerImage[]) {
+async function buildAttachmentPayload(
+  images: ComposerImage[],
+  t: I18nContextValue['t'],
+) {
   const payloads = await Promise.all(
     images.map(async (image) => ({
       id: image.id,
       name: image.name,
       mimeType: image.mimeType,
       size: image.size,
-      url: image.sourceUrl ?? (await readFileAsDataURL(image.file)),
+      url: image.sourceUrl ?? (await readFileAsDataURL(image.file, t)),
     })),
   )
 
   return payloads
 }
 
-async function readFileAsDataURL(file?: File) {
+async function readFileAsDataURL(
+  file: File | undefined,
+  t: I18nContextValue['t'],
+) {
   if (!file) {
-    throw new Error('Unable to read the selected image')
+    throw new Error(t('error.readSelectedImage'))
   }
 
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
-    reader.onerror = () => reject(new Error(`Unable to read "${file.name}"`))
+    reader.onerror = () =>
+      reject(new Error(t('error.readImageNamed', { name: file.name })))
     reader.onload = () => resolve(String(reader.result))
     reader.readAsDataURL(file)
   })
 }
 
-function formatMessageTimestamp(value: string) {
+function formatMessageTimestamp(value: string, locale: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) {
     return ''
   }
 
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -2010,17 +2579,24 @@ function formatMessageTimestamp(value: string) {
   }).format(date)
 }
 
-function buildConversationMarkdown(conversation: Conversation, messages: Message[]) {
+function buildConversationMarkdown(
+  conversation: Conversation,
+  messages: Message[],
+  locale: string,
+  t: I18nContextValue['t'],
+) {
   const lines = [
     `# ${conversation.title}`,
     '',
-    `Model: ${conversation.settings.model || 'Default model'}`,
-    `Updated: ${new Date(conversation.updatedAt).toLocaleString()}`,
+    `${t('markdown.model')}: ${conversation.settings.model || t('chat.defaultModel')}`,
+    `${t('markdown.updated')}: ${new Date(conversation.updatedAt).toLocaleString(locale)}`,
     '',
   ]
 
   for (const message of messages) {
-    lines.push(`## ${message.role === 'user' ? 'User' : 'Assistant'}`)
+    lines.push(
+      `## ${message.role === 'user' ? t('markdown.user') : t('markdown.assistant')}`,
+    )
     lines.push('')
 
     if (message.attachments.length > 0) {
@@ -2051,6 +2627,54 @@ function downloadTextFile(filename: string, content: string) {
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+function createProviderForm(
+  fallback?: ProviderState['fallback'],
+  preset?: ProviderPreset | null,
+): ProviderFormState {
+  if (preset) {
+    return {
+      name: preset.name,
+      baseURL: preset.baseURL,
+      apiKey: '',
+      defaultModel: preset.defaultModel,
+    }
+  }
+
+  return {
+    name: '',
+    baseURL: fallback?.baseURL || OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+    apiKey: '',
+    defaultModel: fallback?.defaultModel || '',
+  }
+}
+
+function describeProviderSource(
+  providerState: ProviderState | null,
+  activePreset: ProviderPreset | null,
+  t: I18nContextValue['t'],
+) {
+  if (!providerState) {
+    return t('provider.loadingStatus')
+  }
+
+  if (providerState.currentSource === 'preset' && activePreset) {
+    return t('provider.usingPreset', {
+      name: activePreset.name,
+      model: activePreset.defaultModel,
+    })
+  }
+
+  if (providerState.currentSource === 'env') {
+    return providerState.fallback.available
+      ? t('provider.usingEnvModel', {
+          model: providerState.fallback.defaultModel,
+        })
+      : t('provider.usingEnv')
+  }
+
+  return t('provider.notConfigured')
 }
 
 function readDesktopSidebarCollapsedPreference() {
