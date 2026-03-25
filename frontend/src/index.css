@@ -1,0 +1,183 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --app-bg: #f4f3ee;
+  --app-panel: #f4f3ee;
+  --app-panel-strong: #ffffff;
+  --sidebar-bg: #eeebe6;
+  --sidebar-accent: #e4e1db;
+  --surface: #f4f3ee;
+  --surface-strong: #ffffff;
+  --foreground: #1a1a18;
+  --muted-foreground: #9a9893;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.13);
+  --brand: #c15f3c;
+  --brand-strong: #ae5630;
+  --brand-soft: rgba(193, 95, 60, 0.1);
+  --danger: #c0392b;
+  --assistant-bubble: transparent;
+  --user-bubble: #ddd9ce;
+  --user-bubble-foreground: #1a1a18;
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.06);
+  font-family: 'Inter', sans-serif;
+  color: var(--foreground);
+  background: var(--app-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--foreground);
+  background: var(--app-bg);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(193, 95, 60, 0.15);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(26, 26, 24, 0.15);
+  background-clip: padding-box;
+}
+
+.markdown {
+  color: inherit;
+  font-size: 0.975rem;
+  line-height: 1.75;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote {
+  margin: 0.8rem 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  margin: 1.1rem 0 0.7rem;
+  font-family: 'Lora', serif;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.markdown h1 {
+  font-size: 1.35rem;
+}
+
+.markdown h2 {
+  font-size: 1.15rem;
+}
+
+.markdown h3 {
+  font-size: 1rem;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.3rem;
+}
+
+.markdown li + li {
+  margin-top: 0.35rem;
+}
+
+.markdown a {
+  color: var(--brand);
+}
+
+.markdown blockquote {
+  border-left: 3px solid rgba(193, 95, 60, 0.3);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+}
+
+.markdown img {
+  max-width: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 1rem;
+}
+
+.markdown pre {
+  overflow-x: auto;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 1rem;
+  background: #1e1e1c;
+  color: #f7f7f3;
+  padding: 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.markdown pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.markdown code {
+  border-radius: 0.45rem;
+  background: rgba(26, 26, 24, 0.07);
+  padding: 0.14rem 0.38rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.86em;
+}
+
+.chat-fade-in {
+  animation: chat-fade-in 220ms ease-out;
+}
+
+@keyframes chat-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

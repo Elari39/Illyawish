@@ -1,0 +1,164 @@
+import { useState } from 'react'
+import { MessageSquareMore } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+
+import { useAuth } from '../components/auth/use-auth'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { chatApi } from '../lib/api'
+
+export function LoginPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { login } = useAuth()
+  const [username, setUsername] = useState('Elaina')
+  const [password, setPassword] = useState('Eulus209')
+  const [error, setError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const redirectTo = (location.state as { from?: { pathname?: string } } | null)
+    ?.from?.pathname
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      await login({ username, password })
+      if (redirectTo) {
+        navigate(redirectTo, { replace: true })
+        return
+      }
+
+      const conversations = await chatApi.listConversations()
+      if (conversations.length > 0) {
+        navigate(`/chat/${conversations[0].id}`, { replace: true })
+        return
+      }
+
+      navigate('/chat', { replace: true })
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error
+          ? nextError.message
+          : 'Unable to sign in right now'
+      setError(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="min-h-screen bg-[var(--app-bg)] px-6 py-10 text-[var(--foreground)]">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center">
+        <div className="grid w-full gap-8 lg:grid-cols-[1.2fr_0.9fr]">
+          <section className="relative overflow-hidden rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-12">
+            <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,rgba(193,95,60,0.08),transparent_60%)] lg:block" />
+            <div className="relative max-w-2xl space-y-8">
+              <div className="inline-flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--sidebar-bg)] px-4 py-2 text-sm font-medium text-[var(--muted-foreground)]">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand-soft)] text-[var(--brand)]">
+                  <MessageSquareMore className="h-4 w-4" />
+                </span>
+                AI Chat Workspace
+              </div>
+              <div className="space-y-5">
+                <h1 className="max-w-xl font-['Lora',serif] text-4xl font-bold leading-tight tracking-tight text-[var(--foreground)] md:text-6xl">
+                  A calm Claude-style chat surface, now wired to your own Go
+                  backend.
+                </h1>
+                <p className="max-w-xl text-base leading-8 text-[var(--muted-foreground)] md:text-lg">
+                  This MVP ships with persistent conversations, markdown-aware
+                  answers, streaming responses, and a lightweight fixed-account
+                  sign-in flow backed by SQLite.
+                </p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <FeatureCard
+                  title="Streaming"
+                  description="Assistant tokens arrive incrementally, so the UI feels alive instead of blocked."
+                />
+                <FeatureCard
+                  title="Persistent"
+                  description="Conversation history stays in SQLite and comes back after refresh."
+                />
+                <FeatureCard
+                  title="Focused"
+                  description="A quiet Claude-inspired interface built for reading and long-form prompts."
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-10">
+            <div className="mb-8 space-y-2">
+              <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[var(--brand)]">
+                Sign in
+              </p>
+              <h2 className="text-3xl font-bold tracking-tight">
+                Continue as Elaina
+              </h2>
+              <p className="text-sm leading-7 text-[var(--muted-foreground)]">
+                The fixed MVP account is prefilled so you can get straight into
+                the app.
+              </p>
+            </div>
+
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  Username
+                </span>
+                <Input
+                  autoComplete="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  Password
+                </span>
+                <Input
+                  autoComplete="current-password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+
+              {error ? (
+                <div className="rounded-xl border border-[var(--danger)]/20 bg-[var(--danger)]/8 px-4 py-3 text-sm text-[var(--danger)]">
+                  {error}
+                </div>
+              ) : null}
+
+              <Button className="w-full py-3" disabled={isSubmitting} type="submit">
+                {isSubmitting ? 'Signing in...' : 'Enter workspace'}
+              </Button>
+            </form>
+          </section>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function FeatureCard({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
+  return (
+    <article className="rounded-xl border border-[var(--line)] bg-[var(--sidebar-bg)] p-5">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--foreground)]">
+        {title}
+      </h3>
+      <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">
+        {description}
+      </p>
+    </article>
+  )
+}
