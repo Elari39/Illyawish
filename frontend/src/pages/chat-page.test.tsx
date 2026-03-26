@@ -272,4 +272,53 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.getByRole('button', { name: 'Open conversation sidebar' })).toBeInTheDocument()
     expect(screen.getAllByText('Illyawish').length).toBeGreaterThan(0)
   })
+
+  it('moves language and export actions from the header into settings', async () => {
+    const conversation = createConversation(9, 'Imported layout test')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Visible message')],
+    })
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
+  })
+
+  it('uses the narrower desktop and mobile history sidebar widths', async () => {
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [],
+      total: 0,
+    })
+
+    const { container } = renderChatPage(['/chat'])
+
+    expect(await screen.findByPlaceholderText('Message Illyawish...')).toBeInTheDocument()
+
+    const desktopSidebar = container.querySelector('aside')
+    expect(desktopSidebar).not.toBeNull()
+    expect(desktopSidebar?.className).toContain('w-[288px]')
+    expect(desktopSidebar?.className).not.toContain('w-[320px]')
+
+    const mobileSidebar = container.querySelector('[role="dialog"]')
+    expect(mobileSidebar).not.toBeNull()
+    expect(mobileSidebar?.className).toContain('w-[84vw]')
+    expect(mobileSidebar?.className).toContain('max-w-[300px]')
+    expect(mobileSidebar?.className).not.toContain('max-w-[320px]')
+  })
 })

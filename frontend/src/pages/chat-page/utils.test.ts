@@ -2,8 +2,10 @@ import { formatMessage, messages } from '../../i18n/messages'
 import type { I18nContextValue } from '../../i18n/context'
 import {
   appendToStreamingMessage,
+  buildConversationExportFilename,
   buildConversationMarkdown,
   createProviderFormErrors,
+  parseConversationMarkdownImport,
   resolveChatModelOptions,
   resolveProviderModelDraft,
   upsertMessage,
@@ -89,7 +91,22 @@ describe('chat page utils', () => {
           conversationId: 1,
           role: 'user',
           content: 'Summarize this project.',
-          attachments: [],
+          attachments: [
+            {
+              id: 'image-1',
+              name: 'diagram.png',
+              mimeType: 'image/png',
+              size: 512,
+              url: '/api/attachments/image-1/file',
+            },
+            {
+              id: 'file-1',
+              name: 'notes.pdf',
+              mimeType: 'application/pdf',
+              size: 1024,
+              url: '/api/attachments/file-1/file',
+            },
+          ],
           status: 'completed',
           createdAt: '2026-03-26T00:00:00Z',
         },
@@ -110,7 +127,72 @@ describe('chat page utils', () => {
     expect(markdown).toContain('# Project notes')
     expect(markdown).toContain('## User')
     expect(markdown).toContain('## Assistant')
+    expect(markdown).toContain('![diagram.png](/api/attachments/image-1/file)')
+    expect(markdown).toContain('[notes.pdf](/api/attachments/file-1/file)')
     expect(markdown).toContain('Here is the summary.')
+  })
+
+  it('builds a markdown export filename from the original title', () => {
+    expect(
+      buildConversationExportFilename('中文标题', 'conversation'),
+    ).toBe('中文标题.md')
+    expect(
+      buildConversationExportFilename('Project<>Notes?.md', 'conversation'),
+    ).toBe('Project Notes.md')
+    expect(
+      buildConversationExportFilename('   ...   ', 'conversation'),
+    ).toBe('conversation.md')
+  })
+
+  it('parses exported markdown across localized labels', () => {
+    const parsed = parseConversationMarkdownImport(
+      [
+        '# 项目记录',
+        '',
+        '模型: gpt-4.1-mini',
+        '更新时间: 2026/03/26 20:00:00',
+        '',
+        '## 用户',
+        '',
+        '请总结这份记录。',
+        '![diagram.png](/api/attachments/image-1/file)',
+        '',
+        '## アシスタント',
+        '',
+        '下面是总结。',
+      ].join('\n'),
+      'ignored.md',
+      'conversation',
+    )
+
+    expect(parsed.title).toBe('项目记录')
+    expect(parsed.settings).toEqual({ model: 'gpt-4.1-mini' })
+    expect(parsed.messages).toEqual([
+      {
+        role: 'user',
+        content: '请总结这份记录。\n![diagram.png](/api/attachments/image-1/file)',
+      },
+      {
+        role: 'assistant',
+        content: '下面是总结。',
+      },
+    ])
+  })
+
+  it('falls back to the filename when imported markdown has no title', () => {
+    const parsed = parseConversationMarkdownImport(
+      [
+        'Model: gpt-4.1-mini',
+        '',
+        '## User',
+        '',
+        'hello',
+      ].join('\n'),
+      'meeting-notes.md',
+      'conversation',
+    )
+
+    expect(parsed.title).toBe('meeting-notes')
   })
 
   it('builds chat model options from the active provider', () => {

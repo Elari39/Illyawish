@@ -1,43 +1,31 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-} from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
-import { attachmentApi, chatApi } from '../../../lib/api'
 import type { I18nContextValue } from '../../../i18n/context'
+import { chatApi } from '../../../lib/api'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
   Attachment,
   Conversation,
-  ConversationSettings,
   Message,
   StreamEvent,
 } from '../../../types/chat'
-import {
-  MAX_ATTACHMENT_BYTES,
-  MAX_IMAGE_ATTACHMENTS,
-  defaultConversationSettings,
-  type ComposerImage,
-  type ToastVariant,
-} from '../types'
+import type { ToastVariant } from '../types'
 import {
   appendToStreamingMessage,
   buildAttachmentPayload,
   buildConversationMarkdown,
+  buildConversationExportFilename,
   clearLastConversationId,
-  cleanupComposerImages,
-  createComposerImagesFromAttachments,
-  createImageDraft,
   downloadTextFile,
-  findLatestMessageByRole,
   isConversationNotFoundError,
   isSameMessage,
-  slugify,
+  parseConversationMarkdownImport,
   upsertMessage,
   writeLastConversationId,
 } from '../utils'
+import { useChatComposerState } from './use-chat-composer-state'
+import { useChatMessagesState } from './use-chat-messages-state'
+import { useChatSettingsState } from './use-chat-settings-state'
 
 interface UseChatSessionOptions {
   activeConversationId: number | null
@@ -72,11 +60,55 @@ export function useChatSession({
   t,
   locale,
 }: UseChatSessionOptions) {
-  const composerFormRef = useRef<HTMLFormElement | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const messageViewportRef = useRef<HTMLDivElement | null>(null)
-  const composerIsComposingRef = useRef(false)
-  const selectedImagesRef = useRef<ComposerImage[]>([])
+  const {
+    composerFormRef,
+    fileInputRef,
+    composerIsComposingRef,
+    composerValue,
+    selectedAttachments,
+    editingMessageId,
+    hasPendingUploads,
+    setComposerValue,
+    clearEditingMessage,
+    cancelEditingMessage,
+    handleFilesSelected,
+    removeSelectedAttachment,
+    resetComposer,
+    startEditingMessage,
+  } = useChatComposerState({
+    setChatError,
+    showToast,
+    t,
+  })
+  const {
+    messageViewportRef,
+    messages,
+    isLoadingMessages,
+    isSending,
+    latestUserMessage,
+    latestAssistantMessage,
+    setMessages,
+    setIsLoadingMessages,
+    setIsSending,
+  } = useChatMessagesState()
+  const {
+    pendingConversation,
+    settingsDraft,
+    setPendingConversation,
+    setSettingsDraft,
+    handleSaveSettings,
+    resetForNewChatSettings,
+    resetSettingsDraft,
+    syncSettingsDraft,
+  } = useChatSettingsState({
+    activeConversationId,
+    currentConversation,
+    setChatError,
+    syncConversationIntoList,
+    t,
+  })
+  const [isImporting, setIsImporting] = useState(false)
+
   const streamingConversationIdRef = useRef<number | null>(null)
   const activeConversationIdRef = useRef<number | null>(null)
   const conversationSearchRef = useRef(search)
@@ -86,8 +118,6 @@ export function useChatSession({
   const setSkipAutoResumeRef = useRef(setSkipAutoResume)
   const tRef = useRef(t)
 
-  // Keep the latest list-filter and navigation state available to async work
-  // without retriggering message fetches for the same conversation.
   conversationSearchRef.current = search
   showArchivedRef.current = showArchived
   syncConversationIntoListRef.current = syncConversationIntoList
@@ -95,32 +125,10 @@ export function useChatSession({
   setSkipAutoResumeRef.current = setSkipAutoResume
   tRef.current = t
 
-  const [messages, setMessages] = useState<Message[]>([])
-  const [composerValue, setComposerValue] = useState('')
-  const [selectedImages, setSelectedImages] = useState<ComposerImage[]>([])
-  const [newChatSettings, setNewChatSettings] = useState<ConversationSettings>(
-    defaultConversationSettings,
-  )
-  const [pendingConversation, setPendingConversation] =
-    useState<Conversation | null>(null)
-  const [settingsDraft, setSettingsDraft] = useState<ConversationSettings>(
-    defaultConversationSettings,
-  )
-  const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
-  const [isSending, setIsSending] = useState(false)
-
-  const latestUserMessage = findLatestMessageByRole(messages, 'user')
-  const latestAssistantMessage = findLatestMessageByRole(messages, 'assistant')
-  const hasPendingUploads = selectedImages.some((image) => image.isUploading)
   const canSubmitComposer =
     !isSending &&
     !hasPendingUploads &&
-    (composerValue.trim().length > 0 || selectedImages.length > 0)
-
-  useEffect(() => {
-    selectedImagesRef.current = selectedImages
-  }, [selectedImages])
+    (composerValue.trim().length > 0 || selectedAttachments.length > 0)
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId
@@ -132,14 +140,16 @@ export function useChatSession({
     }
 
     setMessages([])
-    setPendingConversation(null)
+    resetForNewChatSettings()
+    clearEditingMessage()
     setChatError(null)
-    setEditingMessageId(null)
-    setSettingsDraft(newChatSettings)
-  }, [activeConversationId, newChatSettings, setChatError])
+  }, [activeConversationId, clearEditingMessage, resetForNewChatSettings, setChatError, setMessages])
 
   useEffect(() => {
-    if (!activeConversationId || streamingConversationIdRef.current === activeConversationId) {
+    if (
+      !activeConversationId ||
+      streamingConversationIdRef.current === activeConversationId
+    ) {
       return
     }
 
@@ -150,12 +160,15 @@ export function useChatSession({
       try {
         setIsLoadingMessages(true)
         setChatError(null)
+
         const response =
           await chatApi.getConversationMessages(targetConversationId)
         if (cancelled) {
           return
         }
+
         setMessages(response.messages)
+        setPendingConversation(response.conversation)
         setSettingsDraft(response.conversation.settings)
         syncConversationIntoListRef.current(
           resolveConversationForList(
@@ -176,6 +189,7 @@ export function useChatSession({
             : tRef.current('error.loadMessages')
         setChatError(message)
         setMessages([])
+
         if (isConversationNotFoundError(error)) {
           clearLastConversationId(targetConversationId)
           setSkipAutoResumeRef.current(true)
@@ -194,24 +208,7 @@ export function useChatSession({
     return () => {
       cancelled = true
     }
-  }, [activeConversationId, setChatError])
-
-  useEffect(() => {
-    const viewport = messageViewportRef.current
-    if (!viewport) {
-      return
-    }
-    viewport.scrollTo({
-      top: viewport.scrollHeight,
-      behavior: 'smooth',
-    })
-  }, [messages])
-
-  useEffect(() => {
-    return () => {
-      cleanupComposerImages(selectedImagesRef.current)
-    }
-  }, [])
+  }, [activeConversationId, setChatError, setIsLoadingMessages, setMessages, setPendingConversation, setSettingsDraft])
 
   function applyConversationSnapshot(
     response: {
@@ -263,100 +260,6 @@ export function useChatSession({
     }
   }
 
-  function clearSelectedImages() {
-    setSelectedImages((previous) => {
-      cleanupComposerImages(previous)
-      return []
-    })
-  }
-
-  function replaceSelectedImages(nextImages: ComposerImage[]) {
-    setSelectedImages((previous) => {
-      cleanupComposerImages(previous)
-      return nextImages
-    })
-  }
-
-  async function uploadSelectedImages(files: File[]) {
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) {
-        setChatError(t('error.onlyImages'))
-        continue
-      }
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        setChatError(t('error.imageTooLarge', { name: file.name }))
-        continue
-      }
-      if (selectedImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS) {
-        setChatError(t('error.maxImages', { count: MAX_IMAGE_ATTACHMENTS }))
-        break
-      }
-
-      const draftImage = createImageDraft(file)
-      setSelectedImages((previous) => [...previous, draftImage])
-
-      try {
-        const attachment = await attachmentApi.upload(file)
-        setSelectedImages((previous) =>
-          previous.map((image) =>
-            image.id === draftImage.id
-              ? {
-                  ...image,
-                  attachment,
-                  isUploading: false,
-                }
-              : image,
-          ),
-        )
-        setChatError(null)
-      } catch (error) {
-        setSelectedImages((previous) => {
-          const failedImage = previous.find((image) => image.id === draftImage.id)
-          if (failedImage?.revokeOnCleanup) {
-            URL.revokeObjectURL(failedImage.previewUrl)
-          }
-          return previous.filter((image) => image.id !== draftImage.id)
-        })
-
-        const message =
-          error instanceof Error
-            ? error.message
-            : t('error.uploadImageGeneric')
-        setChatError(message || t('error.uploadImage', { name: file.name }))
-        showToast(
-          message || t('error.uploadImage', { name: file.name }),
-          'error',
-        )
-      }
-    }
-  }
-
-  function removeSelectedImage(id: string) {
-    setSelectedImages((previous) => {
-      const image = previous.find((item) => item.id === id)
-      if (image?.revokeOnCleanup) {
-        URL.revokeObjectURL(image.previewUrl)
-      }
-      return previous.filter((item) => item.id !== id)
-    })
-  }
-
-  function startEditingMessage(message: Message) {
-    if (message.role !== 'user') {
-      return
-    }
-
-    setEditingMessageId(message.id)
-    setComposerValue(message.content)
-    replaceSelectedImages(createComposerImagesFromAttachments(message.attachments))
-  }
-
-  function cancelEditingMessage() {
-    setEditingMessageId(null)
-    setComposerValue('')
-    clearSelectedImages()
-  }
-
   function handleStreamEvent(event: StreamEvent, placeholderId: number) {
     const eventMessage = event.message
 
@@ -367,9 +270,10 @@ export function useChatSession({
       return
     }
 
-    const delta = event.content
-    if (event.type === 'delta' && typeof delta === 'string') {
-      setMessages((previous) => appendToStreamingMessage(previous, delta))
+    if (event.type === 'delta' && typeof event.content === 'string') {
+      setMessages((previous) =>
+        appendToStreamingMessage(previous, event.content!),
+      )
       return
     }
 
@@ -394,7 +298,10 @@ export function useChatSession({
           if (isSameMessage(message, eventMessage, placeholderId)) {
             return {
               ...(eventMessage ?? message),
-              content: eventMessage?.content || message.content || t('error.assistantEndedUnexpectedly'),
+              content:
+                eventMessage?.content ||
+                message.content ||
+                t('error.assistantEndedUnexpectedly'),
               status: 'failed',
             }
           }
@@ -434,7 +341,8 @@ export function useChatSession({
         streamingConversationIdRef.current = conversationId
       }
 
-      const conversationSettings = conversation?.settings ?? settingsDraft
+      const conversationSettings =
+        conversation?.settings ?? settingsDraft
       const optimisticUserMessage: Message = {
         id: -Date.now(),
         conversationId,
@@ -459,9 +367,7 @@ export function useChatSession({
         optimisticUserMessage,
         optimisticAssistantMessage,
       ])
-      setComposerValue('')
-      clearSelectedImages()
-      setEditingMessageId(null)
+      resetComposer()
 
       await chatApi.streamMessage(
         conversationId,
@@ -543,9 +449,7 @@ export function useChatSession({
         return updatedMessages
       })
 
-      setComposerValue('')
-      clearSelectedImages()
-      setEditingMessageId(null)
+      resetComposer()
 
       await chatApi.editMessage(
         conversationId,
@@ -644,7 +548,11 @@ export function useChatSession({
   }
 
   async function handleRegenerateAssistant() {
-    if (!activeConversationId || !latestAssistantMessage || isSending) {
+    if (
+      !activeConversationId ||
+      !latestAssistantMessage ||
+      isSending
+    ) {
       return
     }
 
@@ -721,7 +629,7 @@ export function useChatSession({
     }
 
     try {
-      const attachments = await buildAttachmentPayload(selectedImages, t)
+      const attachments = await buildAttachmentPayload(selectedAttachments, t)
       const content = composerValue.trim()
 
       if (!content && attachments.length === 0) {
@@ -746,35 +654,9 @@ export function useChatSession({
     }
   }
 
-  async function handleSaveSettings(onSaved: () => void) {
-    if (!activeConversationId) {
-      setNewChatSettings(settingsDraft)
-      onSaved()
-      return
-    }
-
-    setChatError(null)
-
-    try {
-      const updatedConversation = await chatApi.updateConversation(
-        activeConversationId,
-        {
-          settings: settingsDraft,
-        },
-      )
-      syncConversationIntoList(updatedConversation)
-      setPendingConversation(updatedConversation)
-      setSettingsDraft(updatedConversation.settings)
-      onSaved()
-    } catch (error) {
-      setChatError(
-        error instanceof Error ? error.message : t('error.saveSettings'),
-      )
-    }
-  }
-
   function handleExportConversation() {
-    const exportConversation = currentConversation ?? pendingConversation
+    const exportConversation =
+      currentConversation ?? pendingConversation
     if (!exportConversation || messages.length === 0) {
       return
     }
@@ -786,32 +668,53 @@ export function useChatSession({
       t,
     )
     downloadTextFile(
-      `${slugify(exportConversation.title || t('chat.exportDefaultTitle'))}.md`,
+      buildConversationExportFilename(
+        exportConversation.title,
+        t('chat.exportDefaultTitle'),
+      ),
       markdown,
     )
   }
 
+  async function handleImportConversation(file: File) {
+    setIsImporting(true)
+    setChatError(null)
+
+    try {
+      const content = await file.text()
+      const payload = parseConversationMarkdownImport(
+        content,
+        file.name,
+        t('chat.exportDefaultTitle'),
+      )
+      const importedConversation = await chatApi.importConversation(payload)
+
+      setSkipAutoResume(true)
+      setPendingConversation(importedConversation)
+      insertCreatedConversation(importedConversation)
+      await loadConversations()
+      navigateToConversation(importedConversation.id)
+      showToast(t('settings.importSuccess'), 'success')
+
+      return importedConversation
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : t('error.importConversation'),
+      )
+      throw error
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   function resetForNewChat() {
     activeConversationIdRef.current = null
-    setEditingMessageId(null)
     setChatError(null)
     setMessages([])
-    setPendingConversation(null)
-    setComposerValue('')
-    clearSelectedImages()
-    setSettingsDraft(newChatSettings)
-  }
-
-  function syncSettingsDraft() {
-    if (currentConversation) {
-      setSettingsDraft(currentConversation.settings)
-      return
-    }
-    setSettingsDraft(newChatSettings)
-  }
-
-  function resetSettingsDraft() {
-    syncSettingsDraft()
+    resetForNewChatSettings()
+    resetComposer()
   }
 
   return {
@@ -821,12 +724,13 @@ export function useChatSession({
     composerIsComposingRef,
     messages,
     composerValue,
-    selectedImages,
+    selectedAttachments,
     settingsDraft,
     pendingConversation,
     editingMessageId,
     isLoadingMessages,
     isSending,
+    isImporting,
     latestUserMessage,
     latestAssistantMessage,
     hasPendingUploads,
@@ -836,13 +740,14 @@ export function useChatSession({
     resetSettingsDraft,
     syncSettingsDraft,
     handleExportConversation,
-    handleFilesSelected: uploadSelectedImages,
+    handleImportConversation,
+    handleFilesSelected,
     handleRegenerateAssistant,
     handleRetryAssistant,
     handleSaveSettings,
     handleStopGeneration,
     handleSubmit,
-    removeSelectedImage,
+    removeSelectedAttachment,
     resetForNewChat,
     startEditingMessage,
     cancelEditingMessage,

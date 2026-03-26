@@ -4,17 +4,19 @@ import type {
   Attachment,
   Conversation,
   ConversationSettings,
+  ImportConversationPayload,
   Message,
   ProviderPreset,
   ProviderState,
 } from '../../types/chat'
 import type {
-  ComposerImage,
+  ComposerAttachment,
   ProviderEditorMode,
   ProviderFormErrors,
   ProviderFormState,
 } from './types'
 import {
+  ATTACHMENT_INPUT_ACCEPT,
   DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
   LAST_CONVERSATION_STORAGE_KEY,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
@@ -176,40 +178,85 @@ export function findLatestMessageByRole(
   return null
 }
 
-export function cleanupComposerImages(images: ComposerImage[]) {
-  for (const image of images) {
-    if (image.revokeOnCleanup) {
-      URL.revokeObjectURL(image.previewUrl)
+export function isImageAttachment(attachment: Pick<Attachment, 'mimeType'>) {
+  return attachment.mimeType.startsWith('image/')
+}
+
+export function formatAttachmentSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`
+  }
+  if (size >= 1024) {
+    return `${Math.round(size / 1024)} KB`
+  }
+  return `${size} B`
+}
+
+export function resolveAttachmentMimeType(file: File) {
+  const fileType = file.type.trim()
+  if (fileType) {
+    return fileType
+  }
+
+  const lowerName = file.name.toLowerCase()
+  if (lowerName.endsWith('.pdf')) {
+    return 'application/pdf'
+  }
+  if (lowerName.endsWith('.md') || lowerName.endsWith('.markdown')) {
+    return 'text/markdown'
+  }
+  if (lowerName.endsWith('.txt')) {
+    return 'text/plain'
+  }
+  return ''
+}
+
+export function isSupportedAttachmentFile(file: File) {
+  const mimeType = resolveAttachmentMimeType(file)
+  return (
+    mimeType.startsWith('image/') ||
+    mimeType === 'application/pdf' ||
+    mimeType === 'text/markdown' ||
+    mimeType === 'text/plain'
+  )
+}
+
+export function cleanupComposerAttachments(attachments: ComposerAttachment[]) {
+  for (const attachment of attachments) {
+    if (attachment.revokeOnCleanup && attachment.previewUrl) {
+      URL.revokeObjectURL(attachment.previewUrl)
     }
   }
 }
 
-export function createComposerImagesFromAttachments(attachments: Attachment[]) {
+export function createComposerAttachmentsFromMessageAttachments(
+  attachments: Attachment[],
+) {
   return attachments.map((attachment) => ({
     id: attachment.id,
     name: attachment.name,
     mimeType: attachment.mimeType,
     size: attachment.size,
-    previewUrl: attachment.url,
+    previewUrl: isImageAttachment(attachment) ? attachment.url : undefined,
     attachment,
     revokeOnCleanup: false,
   }))
 }
 
 export async function buildAttachmentPayload(
-  images: ComposerImage[],
+  attachments: ComposerAttachment[],
   t: I18nContextValue['t'],
 ) {
-  return images.map((image) => {
-    if (!image.attachment) {
+  return attachments.map((attachment) => {
+    if (!attachment.attachment) {
       throw new Error(
-        image.name
-          ? t('error.uploadImage', { name: image.name })
-          : t('error.uploadImageGeneric'),
+        attachment.name
+          ? t('error.uploadAttachment', { name: attachment.name })
+          : t('error.uploadAttachmentGeneric'),
       )
     }
 
-    return image.attachment
+    return attachment.attachment
   })
 }
 
@@ -249,7 +296,11 @@ export function buildConversationMarkdown(
 
     if (message.attachments.length > 0) {
       for (const attachment of message.attachments) {
-        lines.push(`![${attachment.name}](${attachment.url})`)
+        lines.push(
+          isImageAttachment(attachment)
+            ? `![${attachment.name}](${attachment.url})`
+            : `[${attachment.name}](${attachment.url})`,
+        )
       }
       lines.push('')
     }
@@ -269,12 +320,147 @@ export function downloadTextFile(filename: string, content: string) {
   const link = document.createElement('a')
   link.href = url
   link.download = filename
+  document.body.append(link)
   link.click()
-  URL.revokeObjectURL(url)
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+export function buildConversationExportFilename(
+  title: string | null | undefined,
+  fallbackTitle: string,
+) {
+  const cleanedTitle = cleanConversationFileBaseName(title)
+  const cleanedFallback = cleanConversationFileBaseName(fallbackTitle)
+  const baseName = cleanedTitle || cleanedFallback || 'conversation'
+
+  if (/\.md$/i.test(baseName)) {
+    return baseName
+  }
+
+  return `${baseName}.md`
+}
+
+export function parseConversationMarkdownImport(
+  content: string,
+  filename: string,
+  fallbackTitle: string,
+): ImportConversationPayload {
+  const normalizedContent = content.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+  const lines = normalizedContent.split('\n')
+  const messages: ImportConversationPayload['messages'] = []
+  let title = ''
+  let model = ''
+  let activeRole: ImportConversationPayload['messages'][number]['role'] | null = null
+  let activeLines: string[] = []
+
+  for (const line of lines) {
+    if (!title) {
+      const titleMatch = line.match(/^#\s+(.+?)\s*$/)
+      if (titleMatch) {
+        title = titleMatch[1] ?? ''
+        continue
+      }
+    }
+
+    const headingMatch = line.match(/^##\s+(.+?)\s*$/)
+    if (headingMatch) {
+      const nextRole = resolveImportedMessageRole(headingMatch[1] ?? '')
+      if (nextRole) {
+        flushImportedMessage(messages, activeRole, activeLines)
+        activeRole = nextRole
+        activeLines = []
+        continue
+      }
+    }
+
+    if (!activeRole) {
+      const modelMatch = line.match(/^(Model|模型|モデル):\s*(.+?)\s*$/)
+      if (modelMatch) {
+        model = modelMatch[2] ?? ''
+      }
+      continue
+    }
+
+    activeLines.push(line)
+  }
+
+  flushImportedMessage(messages, activeRole, activeLines)
+
+  if (messages.length === 0) {
+    throw new Error('No importable messages were found in the selected Markdown file.')
+  }
+
+  const resolvedTitle =
+    cleanConversationFileBaseName(title) ||
+    cleanConversationFileBaseName(stripConversationImportExtension(filename)) ||
+    cleanConversationFileBaseName(fallbackTitle) ||
+    'conversation'
+
+  return {
+    title: resolvedTitle,
+    settings: model.trim() ? { model: model.trim() } : undefined,
+    messages,
+  }
+}
+
+function cleanConversationFileBaseName(value: string | null | undefined) {
+  return (value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[<>:"/\\|?*]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s+(\.md)$/i, '$1')
+    .replace(/^[.\s]+|[.\s]+$/g, '')
+}
+
+function resolveImportedMessageRole(value: string) {
+  const label = value.trim()
+  if (label === 'User' || label === '用户' || label === 'ユーザー') {
+    return 'user'
+  }
+  if (label === 'Assistant' || label === '助手' || label === 'アシスタント') {
+    return 'assistant'
+  }
+  return null
+}
+
+function flushImportedMessage(
+  messages: ImportConversationPayload['messages'],
+  role: ImportConversationPayload['messages'][number]['role'] | null,
+  lines: string[],
+) {
+  if (!role) {
+    return
+  }
+
+  const content = trimSectionBlankLines(lines.join('\n'))
+  if (!content) {
+    return
+  }
+
+  messages.push({
+    role,
+    content,
+  })
+}
+
+function trimSectionBlankLines(value: string) {
+  const lines = value.split('\n')
+
+  while (lines.length > 0 && lines[0]?.trim() === '') {
+    lines.shift()
+  }
+
+  while (lines.length > 0 && lines[lines.length - 1]?.trim() === '') {
+    lines.pop()
+  }
+
+  return lines.join('\n')
+}
+
+function stripConversationImportExtension(filename: string) {
+  return filename.replace(/\.(md|markdown|txt)$/i, '')
 }
 
 export function createProviderForm(
@@ -591,18 +777,21 @@ export function getConversationMonogram(title: string) {
   return trimmedTitle[0]?.toUpperCase() ?? 'C'
 }
 
-export function createImageDraft(file: File): ComposerImage {
+export function createAttachmentDraft(file: File): ComposerAttachment {
+  const mimeType = resolveAttachmentMimeType(file)
   return {
     id: `${file.name}-${file.lastModified}-${Date.now()}`,
     name: file.name,
-    mimeType: file.type,
+    mimeType,
     size: file.size,
-    previewUrl: URL.createObjectURL(file),
+    previewUrl: mimeType.startsWith('image/') ? URL.createObjectURL(file) : undefined,
     file,
     isUploading: true,
-    revokeOnCleanup: true,
+    revokeOnCleanup: mimeType.startsWith('image/'),
   }
 }
+
+export { ATTACHMENT_INPUT_ACCEPT }
 
 export function mergeConversationSettings(
   previous: ConversationSettings,

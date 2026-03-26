@@ -13,9 +13,11 @@ import (
 )
 
 type Attachment struct {
+	Kind     string
 	Name     string
 	MIMEType string
 	URL      string
+	Text     string
 }
 
 type ChatMessage struct {
@@ -23,6 +25,11 @@ type ChatMessage struct {
 	Content     string
 	Attachments []Attachment
 }
+
+const (
+	AttachmentKindImage = "image"
+	AttachmentKindText  = "text"
+)
 
 type ProviderConfig struct {
 	BaseURL      string
@@ -218,7 +225,16 @@ func toSchemaMessages(messages []ChatMessage) []*schema.Message {
 				})
 			}
 			for _, attachment := range msg.Attachments {
-				if attachment.URL == "" {
+				if attachment.Kind != AttachmentKindText || attachment.Text == "" {
+					continue
+				}
+				parts = append(parts, schema.MessageInputPart{
+					Type: schema.ChatMessagePartTypeText,
+					Text: formatTextAttachment(attachment),
+				})
+			}
+			for _, attachment := range msg.Attachments {
+				if attachment.Kind != AttachmentKindImage || attachment.URL == "" {
 					continue
 				}
 				url := attachment.URL
@@ -251,6 +267,15 @@ func toSchemaMessages(messages []ChatMessage) []*schema.Message {
 	}
 
 	return result
+}
+
+func formatTextAttachment(attachment Attachment) string {
+	return fmt.Sprintf(
+		"Attachment: %s\nType: %s\nContent:\n%s",
+		strings.TrimSpace(attachment.Name),
+		strings.TrimSpace(attachment.MIMEType),
+		attachment.Text,
+	)
 }
 
 func toModelOptions(options RequestOptions) []componentmodel.Option {

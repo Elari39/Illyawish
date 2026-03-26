@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -81,14 +82,11 @@ func New() (*App, error) {
 	router.Use(gin.Logger(), gin.Recovery())
 
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
-	store.Options(sessions.Options{
-		Path:     "/",
-		HttpOnly: true,
-		MaxAge:   60 * 60 * 24 * 7,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   false,
-	})
 	router.Use(sessions.Sessions("aichat_session", store))
+	router.Use(func(c *gin.Context) {
+		sessions.Default(c).Options(sessionOptionsForRequest(c.Request))
+		c.Next()
+	})
 
 	router.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -118,6 +116,7 @@ func New() (*App, error) {
 
 		api.GET("/conversations", chatHandler.ListConversations)
 		api.POST("/conversations", chatHandler.CreateConversation)
+		api.POST("/conversations/import", limitRequestBody(chatJSONBodyLimit), chatHandler.ImportConversation)
 		api.PATCH("/conversations/:id", limitRequestBody(mediumJSONBodyLimit), chatHandler.UpdateConversation)
 		api.GET("/conversations/:id/messages", chatHandler.ListMessages)
 		api.POST("/conversations/:id/messages", limitRequestBody(chatJSONBodyLimit), chatHandler.StreamMessage)
@@ -142,6 +141,33 @@ func New() (*App, error) {
 		router: router,
 		server: server,
 	}, nil
+}
+
+func sessionOptionsForRequest(request *http.Request) sessions.Options {
+	return sessions.Options{
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   60 * 60 * 24 * 7,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   isSecureRequest(request),
+	}
+}
+
+func isSecureRequest(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	if request.TLS != nil {
+		return true
+	}
+
+	forwardedProto := strings.ToLower(strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")))
+	if forwardedProto == "https" {
+		return true
+	}
+
+	forwardedSSL := strings.ToLower(strings.TrimSpace(request.Header.Get("X-Forwarded-Ssl")))
+	return forwardedSSL == "on"
 }
 
 func (a *App) Run() error {

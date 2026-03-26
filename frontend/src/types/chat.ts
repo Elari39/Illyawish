@@ -95,6 +95,19 @@ export interface UpdateConversationPayload {
   settings?: ConversationSettings
 }
 
+export interface ImportConversationMessagePayload {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ImportConversationPayload {
+  title: string
+  settings?: {
+    model?: string
+  }
+  messages: ImportConversationMessagePayload[]
+}
+
 export interface CreateProviderPayload {
   name: string
   baseURL: string

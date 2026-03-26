@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,7 +66,7 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 		return nil, requestError{message: "attachment file is empty"}
 	}
 	if fileHeader.Size > maxAttachmentBytes {
-		return nil, requestError{message: fmt.Sprintf("image %q is too large", fileHeader.Filename)}
+		return nil, requestError{message: fmt.Sprintf("attachment %q is too large", fileHeader.Filename)}
 	}
 
 	file, err := fileHeader.Open()
@@ -77,27 +75,20 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 	}
 	defer file.Close()
 
-	head := make([]byte, 512)
-	readBytes, err := io.ReadFull(file, head)
-	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
-		return nil, fmt.Errorf("read upload header: %w", err)
+	payload, err := io.ReadAll(io.LimitReader(file, maxAttachmentBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read upload payload: %w", err)
 	}
-	head = head[:readBytes]
-
-	mimeType := strings.TrimSpace(http.DetectContentType(head))
-	if !strings.HasPrefix(mimeType, "image/") {
-		return nil, requestError{message: "only image attachments are supported"}
+	if int64(len(payload)) > maxAttachmentBytes {
+		return nil, requestError{message: fmt.Sprintf("attachment %q is too large", fileHeader.Filename)}
 	}
 
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("rewind upload: %w", err)
+	mimeType, extension, err := normalizeUploadMetadata(fileHeader.Filename, payload)
+	if err != nil {
+		return nil, err
 	}
-
-	extension := filepath.Ext(fileHeader.Filename)
-	if extension == "" {
-		if extensions, err := mime.ExtensionsByType(mimeType); err == nil && len(extensions) > 0 {
-			extension = extensions[0]
-		}
+	if _, err := extractAttachmentText(mimeType, payload); err != nil {
+		return nil, err
 	}
 
 	attachmentID := uuid.NewString()
@@ -109,7 +100,7 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 		return nil, fmt.Errorf("create upload destination: %w", err)
 	}
 
-	if _, err := io.Copy(destination, file); err != nil {
+	if _, err := destination.Write(payload); err != nil {
 		_ = destination.Close()
 		_ = os.Remove(absolutePath)
 		return nil, fmt.Errorf("persist upload: %w", err)
@@ -124,11 +115,11 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 		UserID:     userID,
 		Name:       strings.TrimSpace(fileHeader.Filename),
 		MIMEType:   mimeType,
-		Size:       fileHeader.Size,
+		Size:       int64(len(payload)),
 		StorageKey: storageKey,
 	}
 	if record.Name == "" {
-		record.Name = "image" + extension
+		record.Name = "attachment" + extension
 	}
 
 	if err := s.db.Create(record).Error; err != nil {
@@ -136,13 +127,13 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 		return nil, fmt.Errorf("save upload metadata: %w", err)
 	}
 
-	attachment := toAttachment(record)
+	attachment := ToAttachment(record)
 	return &attachment, nil
 }
 
 func (s *Service) ValidateForUser(userID uint, attachments []models.Attachment) ([]models.Attachment, error) {
 	if len(attachments) > maxAttachments {
-		return nil, requestError{message: fmt.Sprintf("a maximum of %d images can be attached", maxAttachments)}
+		return nil, requestError{message: fmt.Sprintf("a maximum of %d attachments can be attached", maxAttachments)}
 	}
 
 	normalized := make([]models.Attachment, 0, len(attachments))
@@ -161,7 +152,7 @@ func (s *Service) ValidateForUser(userID uint, attachments []models.Attachment) 
 		if err != nil {
 			return nil, err
 		}
-		normalized = append(normalized, toAttachment(record))
+		normalized = append(normalized, ToAttachment(record))
 		seen[attachmentID] = struct{}{}
 	}
 
@@ -185,15 +176,31 @@ func (s *Service) BuildModelAttachments(attachments []models.Attachment) ([]llm.
 			return nil, err
 		}
 
-		dataURL, err := s.dataURL(record)
+		payload, err := os.ReadFile(filepath.Join(s.uploadDir, record.StorageKey))
+		if err != nil {
+			return nil, fmt.Errorf("read attachment payload: %w", err)
+		}
+
+		if strings.HasPrefix(record.MIMEType, "image/") {
+			result = append(result, llm.Attachment{
+				Kind:     llm.AttachmentKindImage,
+				Name:     record.Name,
+				MIMEType: record.MIMEType,
+				URL:      "data:" + record.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(payload),
+			})
+			continue
+		}
+
+		text, err := extractAttachmentText(record.MIMEType, payload)
 		if err != nil {
 			return nil, err
 		}
 
 		result = append(result, llm.Attachment{
+			Kind:     llm.AttachmentKindText,
 			Name:     record.Name,
 			MIMEType: record.MIMEType,
-			URL:      dataURL,
+			Text:     truncateAttachmentText(text),
 		})
 	}
 
@@ -263,20 +270,10 @@ func (s *Service) getByID(attachmentID string) (*models.StoredAttachment, error)
 	return &record, nil
 }
 
-func (s *Service) dataURL(record *models.StoredAttachment) (string, error) {
-	payload, err := os.ReadFile(filepath.Join(s.uploadDir, record.StorageKey))
-	if err != nil {
-		return "", fmt.Errorf("read attachment payload: %w", err)
-	}
-
-	return "data:" + record.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(payload), nil
-}
-
 func (s *Service) referenceCount(attachmentID string) (int64, error) {
 	var count int64
-	likePattern := fmt.Sprintf("%%\"id\":\"%s\"%%", attachmentID)
-	if err := s.db.Model(&models.Message{}).
-		Where("attachments LIKE ?", likePattern).
+	if err := s.db.Model(&models.MessageAttachment{}).
+		Where("attachment_id = ?", attachmentID).
 		Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count attachment references: %w", err)
 	}
@@ -284,7 +281,7 @@ func (s *Service) referenceCount(attachmentID string) (int64, error) {
 	return count, nil
 }
 
-func toAttachment(record *models.StoredAttachment) models.Attachment {
+func ToAttachment(record *models.StoredAttachment) models.Attachment {
 	return models.Attachment{
 		ID:       record.ID,
 		Name:     record.Name,

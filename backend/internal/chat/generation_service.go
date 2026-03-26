@@ -52,7 +52,7 @@ func (s *Service) StreamAssistantReply(
 			Attachments:    normalizedInput.Attachments,
 			Status:         models.MessageStatusCompleted,
 		}
-		if err := tx.Create(&userMessage).Error; err != nil {
+		if err := createMessageRecord(tx, &userMessage); err != nil {
 			return fmt.Errorf("create user message: %w", err)
 		}
 
@@ -73,7 +73,7 @@ func (s *Service) StreamAssistantReply(
 			Content:        "",
 			Status:         models.MessageStatusStreaming,
 		}
-		if err := tx.Create(&assistantMessage).Error; err != nil {
+		if err := createMessageRecord(tx, &assistantMessage); err != nil {
 			return fmt.Errorf("create assistant placeholder: %w", err)
 		}
 
@@ -220,11 +220,13 @@ func (s *Service) EditUserMessageAndRegenerate(
 		}
 		cleanupMessages = trailingMessages
 
-		if err := tx.Model(message).Updates(map[string]any{
-			"content":     normalizedInput.Content,
-			"attachments": normalizedInput.Attachments,
-			"status":      models.MessageStatusCompleted,
-		}).Error; err != nil {
+		if err := updateMessageRecord(
+			tx,
+			message,
+			normalizedInput.Content,
+			normalizedInput.Attachments,
+			models.MessageStatusCompleted,
+		); err != nil {
 			return fmt.Errorf("update user message: %w", err)
 		}
 
@@ -249,7 +251,7 @@ func (s *Service) EditUserMessageAndRegenerate(
 			Content:        "",
 			Status:         models.MessageStatusStreaming,
 		}
-		if err := tx.Create(&assistantMessage).Error; err != nil {
+		if err := createMessageRecord(tx, &assistantMessage); err != nil {
 			return fmt.Errorf("create assistant placeholder: %w", err)
 		}
 

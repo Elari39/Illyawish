@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -145,5 +147,55 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 	}
 	if !strings.Contains(body, "stream exploded") {
 		t.Fatalf("expected request error body, got %s", body)
+	}
+}
+
+func TestImportConversationReturnsCreatedConversation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	payload, err := json.Marshal(ImportConversationInput{
+		Title: "Imported chat",
+		Settings: &ConversationSettings{
+			Model: "gpt-4.1-mini",
+		},
+		Messages: []ImportMessageInput{
+			{
+				Role:    models.RoleUser,
+				Content: "Hello import",
+			},
+			{
+				Role:    models.RoleAssistant,
+				Content: "Hello back",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations/import", bytes.NewReader(payload))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).ImportConversation(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "\"title\":\"Imported chat\"") {
+		t.Fatalf("expected imported conversation body, got %s", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "\"model\":\"gpt-4.1-mini\"") {
+		t.Fatalf("expected imported model in response, got %s", recorder.Body.String())
 	}
 }

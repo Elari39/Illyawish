@@ -214,3 +214,50 @@ func TestBuildChatModelConfigUsesProviderDefaults(t *testing.T) {
 		t.Fatalf("expected provider default model, got %q", cfg.Model)
 	}
 }
+
+func TestToSchemaMessagesOrdersUserTextDocumentAndImages(t *testing.T) {
+	messages := toSchemaMessages([]ChatMessage{
+		{
+			Role:    "user",
+			Content: "Please review these attachments.",
+			Attachments: []Attachment{
+				{
+					Kind:     AttachmentKindText,
+					Name:     "notes.txt",
+					MIMEType: "text/plain",
+					Text:     "Important notes",
+				},
+				{
+					Kind:     AttachmentKindImage,
+					Name:     "diagram.png",
+					MIMEType: "image/png",
+					URL:      "data:image/png;base64,abc",
+				},
+			},
+		},
+	})
+
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 schema message, got %d", len(messages))
+	}
+
+	parts := messages[0].UserInputMultiContent
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 message parts, got %d", len(parts))
+	}
+	if parts[0].Type != schema.ChatMessagePartTypeText || parts[0].Text != "Please review these attachments." {
+		t.Fatalf("unexpected first part: %#v", parts[0])
+	}
+	if parts[1].Type != schema.ChatMessagePartTypeText {
+		t.Fatalf("expected second part to be text, got %#v", parts[1])
+	}
+	if parts[1].Text != "Attachment: notes.txt\nType: text/plain\nContent:\nImportant notes" {
+		t.Fatalf("unexpected attachment text block: %q", parts[1].Text)
+	}
+	if parts[2].Type != schema.ChatMessagePartTypeImageURL || parts[2].Image == nil {
+		t.Fatalf("expected third part to be image, got %#v", parts[2])
+	}
+	if parts[2].Image.URL == nil || *parts[2].Image.URL != "data:image/png;base64,abc" {
+		t.Fatalf("unexpected image URL: %#v", parts[2].Image)
+	}
+}

@@ -1,8 +1,14 @@
+import { FileText } from 'lucide-react'
+
 import { Button } from '../../../components/ui/button'
 import { MarkdownContent } from '../../../components/chat/markdown-content'
 import { useI18n } from '../../../i18n/use-i18n'
 import type { Message } from '../../../types/chat'
-import { formatMessageTimestamp } from '../utils'
+import {
+  formatAttachmentSize,
+  formatMessageTimestamp,
+  isImageAttachment,
+} from '../utils'
 
 interface MessageBubbleProps {
   message: Message
@@ -29,21 +35,50 @@ export function MessageBubble({
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
+  const imageAttachments = message.attachments.filter((attachment) =>
+    isImageAttachment(attachment),
+  )
+  const documentAttachments = message.attachments.filter(
+    (attachment) => !isImageAttachment(attachment),
+  )
 
   if (isUser) {
     return (
       <article className="chat-fade-in flex justify-end">
         <div className="max-w-[85%] space-y-2 md:max-w-[560px]">
           <div className="rounded-2xl bg-[var(--user-bubble)] px-4 py-3 text-[var(--user-bubble-foreground)]">
-            {message.attachments.length > 0 ? (
+            {imageAttachments.length > 0 ? (
               <div className="mb-3 grid grid-cols-2 gap-3">
-                {message.attachments.map((attachment) => (
+                {imageAttachments.map((attachment) => (
                   <img
                     key={attachment.id}
                     alt={attachment.name}
                     className="w-full rounded-xl border border-black/10 object-cover"
                     src={attachment.url}
                   />
+                ))}
+              </div>
+            ) : null}
+            {documentAttachments.length > 0 ? (
+              <div className="mb-3 space-y-2">
+                {documentAttachments.map((attachment) => (
+                  <a
+                    key={attachment.id}
+                    className="flex items-center gap-3 rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-left text-[var(--foreground)] transition hover:bg-white"
+                    href={attachment.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <FileText className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {attachment.name}
+                      </span>
+                      <span className="block text-xs text-[var(--muted-foreground)]">
+                        {attachment.mimeType} · {formatAttachmentSize(attachment.size)}
+                      </span>
+                    </span>
+                  </a>
                 ))}
               </div>
             ) : null}

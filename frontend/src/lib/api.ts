@@ -14,6 +14,7 @@ import type {
   CreateProviderPayload,
   ConversationSettings,
   Conversation,
+  ImportConversationPayload,
   LoginPayload,
   Message,
   ProviderState,
@@ -129,6 +130,16 @@ export const chatApi = {
       '/api/conversations',
       {
         method: 'POST',
+      },
+    )
+    return response.conversation
+  },
+  async importConversation(payload: ImportConversationPayload) {
+    const response = await apiRequest<{ conversation: Conversation }>(
+      '/api/conversations/import',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
       },
     )
     return response.conversation

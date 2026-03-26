@@ -71,6 +71,79 @@ func (s *Service) CreateConversation(userID uint) (*models.Conversation, error) 
 	return conversation, nil
 }
 
+func (s *Service) ImportConversation(
+	userID uint,
+	input ImportConversationInput,
+) (*models.Conversation, error) {
+	title := strings.TrimSpace(input.Title)
+	if title == "" {
+		return nil, requestError{message: "conversation title is required"}
+	}
+	if len(input.Messages) == 0 {
+		return nil, requestError{message: "at least one message is required"}
+	}
+
+	model := ""
+	if input.Settings != nil {
+		model = strings.TrimSpace(input.Settings.Model)
+	}
+
+	importedAt := time.Now()
+	temperature := defaultTemperature
+	conversation := &models.Conversation{}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		conversation = &models.Conversation{
+			UserID:       userID,
+			Title:        title,
+			SystemPrompt: defaultSystemPrompt,
+			Model:        model,
+			Temperature:  &temperature,
+			UpdatedAt:    importedAt,
+		}
+
+		if err := tx.Create(conversation).Error; err != nil {
+			return fmt.Errorf("create imported conversation: %w", err)
+		}
+
+		messages := make([]models.Message, 0, len(input.Messages))
+		for _, message := range input.Messages {
+			role := strings.TrimSpace(message.Role)
+			if role != models.RoleUser && role != models.RoleAssistant {
+				return requestError{message: "message role must be user or assistant"}
+			}
+
+			content := strings.TrimSpace(message.Content)
+			if content == "" {
+				return requestError{message: "message content is required"}
+			}
+
+			messages = append(messages, models.Message{
+				ConversationID: conversation.ID,
+				Role:           role,
+				Content:        content,
+				Status:         models.MessageStatusCompleted,
+			})
+		}
+
+		if err := tx.Create(&messages).Error; err != nil {
+			return fmt.Errorf("create imported messages: %w", err)
+		}
+
+		if err := tx.Model(conversation).
+			Update("updated_at", importedAt).Error; err != nil {
+			return fmt.Errorf("touch imported conversation: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.GetConversation(userID, conversation.ID)
+}
+
 func (s *Service) GetConversation(userID uint, conversationID uint) (*models.Conversation, error) {
 	var conversation models.Conversation
 	if err := s.db.Where("id = ? AND user_id = ?", conversationID, userID).First(&conversation).Error; err != nil {
@@ -169,6 +242,9 @@ func (s *Service) ListMessages(userID uint, conversationID uint) ([]models.Messa
 	var messages []models.Message
 	if err := s.db.Where("conversation_id = ?", conversationID).Order("id asc").Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
+	}
+	if err := hydrateMessageAttachments(s.db, messages); err != nil {
+		return nil, err
 	}
 	return messages, nil
 }

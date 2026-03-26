@@ -11,6 +11,7 @@ require (
 	golang.org/x/crypto v0.49.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
+	rsc.io/pdf v0.1.1
 )
 
 require (

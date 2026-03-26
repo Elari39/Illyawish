@@ -99,6 +99,24 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation)})
 }
 
+func (h *Handler) ImportConversation(c *gin.Context) {
+	user := auth.CurrentUser(c)
+
+	var req ImportConversationInput
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid import payload"})
+		return
+	}
+
+	conversation, err := h.service.ImportConversation(user.ID, req)
+	if err != nil {
+		handleChatError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation)})
+}
+
 func (h *Handler) UpdateConversation(c *gin.Context) {
 	user := auth.CurrentUser(c)
 	conversationID, err := conversationIDParam(c)

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
-import type { ConversationSettings, ProviderState } from '../../../types/chat'
+import type { Conversation, ConversationSettings, ProviderState } from '../../../types/chat'
 import { TestProviders } from '../../../test/test-providers'
 import { createProviderFormErrors } from '../utils'
 import { ConfirmationDialog } from './confirmation-dialog'
@@ -14,6 +14,16 @@ const settings: ConversationSettings = {
   model: '',
   temperature: 1,
   maxTokens: null,
+}
+
+const conversation: Conversation = {
+  id: 1,
+  title: 'Imported conversation',
+  isPinned: false,
+  isArchived: false,
+  settings,
+  createdAt: '2026-03-26T00:00:00Z',
+  updatedAt: '2026-03-26T00:00:00Z',
 }
 
 const providerState: ProviderState = {
@@ -31,6 +41,7 @@ const providerState: ProviderState = {
 describe('overlay accessibility', () => {
   it('renders the settings panel as a dismissible dialog', () => {
     const onClose = vi.fn()
+    const onProviderTabChange = vi.fn()
 
     render(
       <TestProviders>
@@ -38,7 +49,9 @@ describe('overlay accessibility', () => {
           activeTab="chat"
           editingProviderId={null}
           isLoadingProviders={false}
+          isImporting={false}
           isOpen
+          messageCount={2}
           isSaving={false}
           isSavingProvider={false}
           isTestingProvider={false}
@@ -46,9 +59,11 @@ describe('overlay accessibility', () => {
           onClose={onClose}
           onDeleteProvider={vi.fn()}
           onEditProvider={vi.fn()}
+          onExport={vi.fn()}
+          onImport={vi.fn()}
           onProviderFieldChange={vi.fn()}
           onProviderModelsChange={vi.fn()}
-          onProviderTabChange={vi.fn()}
+          onProviderTabChange={onProviderTabChange}
           onReset={vi.fn()}
           onResetProvider={vi.fn()}
           onSave={vi.fn()}
@@ -66,6 +81,7 @@ describe('overlay accessibility', () => {
           providerState={providerState}
           settings={settings}
           setSettings={vi.fn()}
+          transferConversation={conversation}
         />
       </TestProviders>,
     )
@@ -74,6 +90,13 @@ describe('overlay accessibility', () => {
       'aria-modal',
       'true',
     )
+    expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AI Provider' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import / Export' }))
+    expect(onProviderTabChange).toHaveBeenCalledWith('transfer')
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(1)

@@ -8,9 +8,11 @@ import {
 } from 'react'
 
 import { Button } from '../../../components/ui/button'
+import { LanguageSwitcher } from '../../../i18n/language-switcher'
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import type {
+  Conversation,
   ConversationSettings,
   ProviderPreset,
   ProviderState,
@@ -19,16 +21,20 @@ import type { ProviderFormState, SettingsTab } from '../types'
 import { resolveChatModelOptions } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
+import { TransferSettingsTab } from './transfer-settings-tab'
 
 interface SettingsPanelProps {
   activeTab: SettingsTab
   editingProviderId: number | null
   isLoadingProviders: boolean
+  isImporting: boolean
   isOpen: boolean
+  messageCount: number
   isSavingProvider: boolean
   isTestingProvider: boolean
   isSaving: boolean
   onActivateProvider: (providerId: number) => void
+  transferConversation: Conversation | null
   settings: ConversationSettings
   providerForm: ProviderFormState
   providerState: ProviderState | null
@@ -36,6 +42,8 @@ interface SettingsPanelProps {
   onClose: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
   onEditProvider: (preset: ProviderPreset) => void
+  onExport: () => void
+  onImport: (file: File) => void
   onProviderFieldChange: (
     field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
     value: string,
@@ -59,11 +67,14 @@ export function SettingsPanel({
   activeTab,
   editingProviderId,
   isLoadingProviders,
+  isImporting,
   isOpen,
+  messageCount,
   isSavingProvider,
   isTestingProvider,
   isSaving,
   onActivateProvider,
+  transferConversation,
   settings,
   providerForm,
   providerState,
@@ -71,6 +82,8 @@ export function SettingsPanel({
   onClose,
   onDeleteProvider,
   onEditProvider,
+  onExport,
+  onImport,
   onProviderFieldChange,
   onProviderModelsChange,
   onProviderTabChange,
@@ -110,6 +123,14 @@ export function SettingsPanel({
   }
 
   const modelOptions = resolveChatModelOptions(providerState, settings.model)
+  const descriptionKey =
+    activeTab === 'chat'
+      ? 'settings.chatDescription'
+      : activeTab === 'provider'
+        ? 'settings.providerDescription'
+        : activeTab === 'language'
+          ? 'settings.languageDescription'
+          : 'settings.transferDescription'
 
   return (
     <div
@@ -133,9 +154,7 @@ export function SettingsPanel({
               {t('settings.title')}
             </h2>
             <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]" id={descriptionId}>
-              {activeTab === 'chat'
-                ? t('settings.chatDescription')
-                : t('settings.providerDescription')}
+              {t(descriptionKey)}
             </p>
           </div>
           <button
@@ -174,6 +193,30 @@ export function SettingsPanel({
           >
             {t('settings.providerTab')}
           </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'language'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('language')}
+            type="button"
+          >
+            {t('settings.languageTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'transfer'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('transfer')}
+            type="button"
+          >
+            {t('settings.transferTab')}
+          </button>
         </div>
 
         {activeTab === 'chat' ? (
@@ -182,7 +225,7 @@ export function SettingsPanel({
             settings={settings}
             setSettings={setSettings}
           />
-        ) : (
+        ) : activeTab === 'provider' ? (
           <ProviderSettingsTab
             editingProviderId={editingProviderId}
             isLoadingProviders={isLoadingProviders}
@@ -196,6 +239,23 @@ export function SettingsPanel({
             onStartNewProvider={onStartNewProvider}
             providerForm={providerForm}
             providerState={providerState}
+          />
+        ) : activeTab === 'language' ? (
+          <div className="mt-6">
+            <div className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
+              <p className="text-sm leading-7 text-[var(--muted-foreground)]">
+                {t('settings.languageHelp')}
+              </p>
+              <LanguageSwitcher className="mt-4" />
+            </div>
+          </div>
+        ) : (
+          <TransferSettingsTab
+            conversation={transferConversation}
+            isImporting={isImporting}
+            messageCount={messageCount}
+            onExport={onExport}
+            onImport={onImport}
           />
         )}
 
@@ -212,7 +272,7 @@ export function SettingsPanel({
                 {isSaving ? t('common.saving') : t('settings.saveSettings')}
               </Button>
             </>
-          ) : (
+          ) : activeTab === 'provider' ? (
             <>
               <Button onClick={onResetProvider} variant="ghost">
                 {editingProviderId
@@ -242,6 +302,10 @@ export function SettingsPanel({
                     : t('settings.createPreset')}
               </Button>
             </>
+          ) : (
+            <Button onClick={onClose} variant="secondary">
+              {t('common.close')}
+            </Button>
           )}
         </div>
       </div>

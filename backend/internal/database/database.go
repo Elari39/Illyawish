@@ -26,10 +26,15 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		&models.User{},
 		&models.Conversation{},
 		&models.Message{},
+		&models.MessageAttachment{},
 		&models.LLMProviderPreset{},
 		&models.StoredAttachment{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate database: %w", err)
+	}
+
+	if err := migrateLegacyMessageAttachments(db); err != nil {
+		return nil, err
 	}
 
 	return db, nil

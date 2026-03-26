@@ -1,8 +1,5 @@
 import {
-  Suspense,
-  lazy,
   useCallback,
-  useEffect,
   useState,
 } from 'react'
 import {
@@ -14,43 +11,22 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../components/auth/use-auth'
 import { Button } from '../components/ui/button'
-import { LanguageSwitcher } from '../i18n/language-switcher'
 import { useI18n } from '../i18n/use-i18n'
 import { chatApi } from '../lib/api'
 import { cn } from '../lib/utils'
 import type { Conversation } from '../types/chat'
 import { ChatComposer } from './chat-page/components/chat-composer'
+import { ChatOverlays } from './chat-page/components/chat-overlays'
 import { MessageList } from './chat-page/components/message-list'
 import { MobileSidebar } from './chat-page/components/mobile-sidebar'
 import { SidebarContent } from './chat-page/components/sidebar-content'
 import { useChatSession } from './chat-page/hooks/use-chat-session'
 import { useConversationList } from './chat-page/hooks/use-conversation-list'
 import { useProviderSettings } from './chat-page/hooks/use-provider-settings'
-import {
-  DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
-  type ConfirmationState,
-  type PromptState,
-  type SettingsTab,
-  type ToastState,
-  type ToastVariant,
-} from './chat-page/types'
+import { useChatUIState } from './chat-page/hooks/use-chat-ui-state'
 import {
   clearLastConversationId,
-  readDesktopSidebarCollapsedPreference,
 } from './chat-page/utils'
-
-const SettingsPanel = lazy(async () => import('./chat-page/components/settings-panel').then((module) => ({
-  default: module.SettingsPanel,
-})))
-const ConfirmationDialog = lazy(async () => import('./chat-page/components/confirmation-dialog').then((module) => ({
-  default: module.ConfirmationDialog,
-})))
-const PromptDialog = lazy(async () => import('./chat-page/components/prompt-dialog').then((module) => ({
-  default: module.PromptDialog,
-})))
-const ToastViewport = lazy(async () => import('./chat-page/components/toast-viewport').then((module) => ({
-  default: module.ToastViewport,
-})))
 
 export function ChatPage() {
   const { user, logout } = useAuth()
@@ -67,17 +43,9 @@ export function ChatPage() {
     navigate('/chat', { replace })
   }, [navigate])
 
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(
-    () => readDesktopSidebarCollapsedPreference(),
-  )
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('chat')
   const [chatError, setChatError] = useState<string | null>(null)
-  const [toasts, setToasts] = useState<ToastState[]>([])
-  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null)
-  const [promptState, setPromptState] = useState<PromptState | null>(null)
+  const uiState = useChatUIState()
 
   const conversationList = useConversationList({
     activeConversationId,
@@ -95,7 +63,7 @@ export function ChatPage() {
     search: conversationList.deferredConversationSearch,
     showArchived: conversationList.showArchived,
     setChatError,
-    showToast,
+    showToast: uiState.showToast,
     insertCreatedConversation: conversationList.insertCreatedConversation,
     syncConversationIntoList: conversationList.syncConversationIntoList,
     loadConversations: conversationList.loadConversations,
@@ -107,32 +75,17 @@ export function ChatPage() {
   })
 
   const providerSettings = useProviderSettings({
-    isSettingsOpen,
+    isSettingsOpen: uiState.isSettingsOpen,
     setChatError,
-    showToast,
+    showToast: uiState.showToast,
   })
   const displayConversation =
     currentConversation ?? chatSession.pendingConversation
 
-  useEffect(() => {
-    window.localStorage.setItem(
-      DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
-      JSON.stringify(isDesktopSidebarCollapsed),
-    )
-  }, [isDesktopSidebarCollapsed])
-
-  function showToast(message: string, variant: ToastVariant = 'info') {
-    const toastId = Date.now() + Math.random()
-    setToasts((previous) => [...previous, { id: toastId, message, variant }])
-    window.setTimeout(() => {
-      setToasts((previous) => previous.filter((toast) => toast.id !== toastId))
-    }, 2800)
-  }
-
   function handleOpenSettings() {
-    setActiveSettingsTab('chat')
+    uiState.setActiveSettingsTab('chat')
     chatSession.syncSettingsDraft()
-    setIsSettingsOpen(true)
+    uiState.setIsSettingsOpen(true)
   }
 
   function handleCreateNewChat() {
@@ -140,14 +93,14 @@ export function ChatPage() {
       return
     }
     conversationList.setSkipAutoResume(true)
-    setSidebarOpen(false)
+    uiState.setSidebarOpen(false)
     conversationList.setShowArchived(false)
     chatSession.resetForNewChat()
     navigateHome()
   }
 
   function handleDeleteConversation(conversationId: number) {
-    setConfirmation({
+    uiState.setConfirmation({
       title: t('common.delete'),
       description: t('confirm.deleteConversation'),
       confirmLabel: t('common.delete'),
@@ -162,7 +115,7 @@ export function ChatPage() {
             chatSession.resetForNewChat()
             navigateHome(true)
           }
-          showToast(t('common.delete'), 'success')
+          uiState.showToast(t('common.delete'), 'success')
         } catch (error) {
           setChatError(
             error instanceof Error
@@ -175,7 +128,7 @@ export function ChatPage() {
   }
 
   function handleRenameConversation(conversation: Conversation) {
-    setPromptState({
+    uiState.setPromptState({
       title: t('prompt.renameConversation'),
       initialValue: conversation.title,
       confirmLabel: t('sidebar.rename'),
@@ -185,7 +138,7 @@ export function ChatPage() {
             title: nextTitle,
           })
           conversationList.syncConversationIntoList(updatedConversation)
-          showToast(t('sidebar.rename'), 'success')
+          uiState.showToast(t('sidebar.rename'), 'success')
         } catch (error) {
           setChatError(
             error instanceof Error
@@ -203,7 +156,7 @@ export function ChatPage() {
         isPinned: !conversation.isPinned,
       })
       conversationList.syncConversationIntoList(updatedConversation)
-      showToast(
+      uiState.showToast(
         conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin'),
         'success',
       )
@@ -232,7 +185,7 @@ export function ChatPage() {
         navigateHome(true)
       }
 
-      showToast(
+      uiState.showToast(
         nextArchived ? t('sidebar.archive') : t('sidebar.restore'),
         'success',
       )
@@ -256,7 +209,7 @@ export function ChatPage() {
 
     try {
       await chatSession.handleSaveSettings(() => {
-        setIsSettingsOpen(false)
+        uiState.setIsSettingsOpen(false)
       })
     } finally {
       setIsSavingSettings(false)
@@ -264,7 +217,7 @@ export function ChatPage() {
   }
 
   function handleDeleteProvider(conversation: Parameters<typeof providerSettings.handleDeleteProvider>[0]) {
-    setConfirmation({
+    uiState.setConfirmation({
       title: t('common.delete'),
       description: t('confirm.deleteProviderPreset', { name: conversation.name }),
       confirmLabel: t('common.delete'),
@@ -275,11 +228,16 @@ export function ChatPage() {
     })
   }
 
+  async function handleImportConversation(file: File) {
+    await chatSession.handleImportConversation(file)
+    uiState.setIsSettingsOpen(false)
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--app-bg)] text-[var(--foreground)]">
       <MobileSidebar
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        isOpen={uiState.sidebarOpen}
+        onClose={() => uiState.setSidebarOpen(false)}
         currentConversationId={activeConversationId}
         conversations={conversationList.conversations}
         hasMoreConversations={conversationList.hasMoreConversations}
@@ -292,7 +250,7 @@ export function ChatPage() {
         onLoadMore={() => void conversationList.loadConversations({ append: true })}
         onSelectConversation={(conversationId) => {
           navigateToConversation(conversationId)
-          setSidebarOpen(false)
+          uiState.setSidebarOpen(false)
         }}
         onRenameConversation={handleRenameConversation}
         onTogglePinned={handleTogglePinned}
@@ -306,11 +264,12 @@ export function ChatPage() {
       <aside
         className={cn(
           'hidden shrink-0 flex-col border-r border-[var(--line)] bg-[var(--sidebar-bg)] transition-[width] duration-200 md:flex',
-          isDesktopSidebarCollapsed ? 'w-[72px]' : 'w-[320px]',
+          uiState.isDesktopSidebarCollapsed ? 'w-[72px]' : 'w-[288px]',
         )}
       >
         <SidebarContent
-          collapsed={isDesktopSidebarCollapsed}
+          collapsed={uiState.isDesktopSidebarCollapsed}
+          variant="desktop"
           currentConversationId={activeConversationId}
           conversations={conversationList.conversations}
           hasMoreConversations={conversationList.hasMoreConversations}
@@ -336,7 +295,7 @@ export function ChatPage() {
         <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 md:px-8">
           <button
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-black/5 md:hidden"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => uiState.setSidebarOpen(true)}
             type="button"
             aria-label={t('chat.openSidebar')}
           >
@@ -344,24 +303,24 @@ export function ChatPage() {
           </button>
 
           <button
-            aria-expanded={!isDesktopSidebarCollapsed}
+            aria-expanded={!uiState.isDesktopSidebarCollapsed}
             aria-label={
-              isDesktopSidebarCollapsed
+              uiState.isDesktopSidebarCollapsed
                 ? t('chat.expandSidebar')
                 : t('chat.collapseSidebar')
             }
             className="hidden h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)] md:inline-flex"
             onClick={() =>
-              setIsDesktopSidebarCollapsed((previous) => !previous)
+              uiState.setIsDesktopSidebarCollapsed((previous) => !previous)
             }
             title={
-              isDesktopSidebarCollapsed
+              uiState.isDesktopSidebarCollapsed
                 ? t('chat.expandSidebar')
                 : t('chat.collapseSidebar')
             }
             type="button"
           >
-            {isDesktopSidebarCollapsed ? (
+            {uiState.isDesktopSidebarCollapsed ? (
               <ChevronRight className="h-5 w-5" />
             ) : (
               <ChevronLeft className="h-5 w-5" />
@@ -381,15 +340,6 @@ export function ChatPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <LanguageSwitcher />
-            <Button
-              className="px-3 py-2"
-              disabled={chatSession.messages.length === 0}
-              onClick={chatSession.handleExportConversation}
-              variant="secondary"
-            >
-              {t('chat.export')}
-            </Button>
             <Button
               className="px-3 py-2"
               onClick={handleOpenSettings}
@@ -444,7 +394,7 @@ export function ChatPage() {
           composerFormRef={chatSession.composerFormRef}
           fileInputRef={chatSession.fileInputRef}
           composerValue={chatSession.composerValue}
-          selectedImages={chatSession.selectedImages}
+          selectedAttachments={chatSession.selectedAttachments}
           editingMessageId={chatSession.editingMessageId}
           hasPendingUploads={chatSession.hasPendingUploads}
           canSubmitComposer={chatSession.canSubmitComposer}
@@ -454,52 +404,51 @@ export function ChatPage() {
           onCancelEdit={chatSession.cancelEditingMessage}
           onSubmit={(event) => void chatSession.handleSubmit(event)}
           onFilesSelected={(files) => void chatSession.handleFilesSelected(files)}
-          onRemoveImage={chatSession.removeSelectedImage}
+          onRemoveAttachment={chatSession.removeSelectedAttachment}
         />
       </main>
 
-      <Suspense fallback={null}>
-        <SettingsPanel
-          activeTab={activeSettingsTab}
-          editingProviderId={providerSettings.editingProviderId}
-          isLoadingProviders={providerSettings.isLoadingProviders}
-          isOpen={isSettingsOpen}
-          isSavingProvider={providerSettings.isSavingProvider}
-          isTestingProvider={providerSettings.isTestingProvider}
-          isSaving={isSavingSettings}
-          onActivateProvider={(providerId) => void providerSettings.handleActivateProvider(providerId)}
-          onClose={() => setIsSettingsOpen(false)}
-          onDeleteProvider={handleDeleteProvider}
-          onEditProvider={providerSettings.handleEditProvider}
-          onProviderFieldChange={providerSettings.handleProviderFieldChange}
-          onProviderModelsChange={providerSettings.handleProviderModelsChange}
-          onProviderTabChange={setActiveSettingsTab}
-          onReset={chatSession.resetSettingsDraft}
-          onResetProvider={providerSettings.handleStartNewProvider}
-          onSave={() => void handleSaveSettings()}
-          onSaveProvider={() => void providerSettings.handleSaveProvider()}
-          onStartNewProvider={providerSettings.handleStartNewProvider}
-          onTestProvider={() => void providerSettings.handleTestProvider()}
-          providerForm={providerSettings.providerForm}
-          providerState={providerSettings.providerState}
-          settings={chatSession.settingsDraft}
-          setSettings={chatSession.setSettingsDraft}
-        />
-        <ConfirmationDialog
-          confirmation={confirmation}
-          onClose={() => setConfirmation(null)}
-        />
-        <PromptDialog
-          promptState={promptState}
-          onClose={() => setPromptState(null)}
-        />
-        <ToastViewport
-          toasts={toasts}
-          onDismiss={(toastId) =>
-            setToasts((previous) => previous.filter((toast) => toast.id !== toastId))
-          }
-        />
-      </Suspense>
+      <ChatOverlays
+        activeTab={uiState.activeSettingsTab}
+        confirmation={uiState.confirmation}
+        editingProviderId={providerSettings.editingProviderId}
+        isLoadingProviders={providerSettings.isLoadingProviders}
+        isOpen={uiState.isSettingsOpen}
+        isSaving={isSavingSettings}
+        isImporting={chatSession.isImporting}
+        isSavingProvider={providerSettings.isSavingProvider}
+        isTestingProvider={providerSettings.isTestingProvider}
+        messageCount={chatSession.messages.length}
+        onExport={chatSession.handleExportConversation}
+        onImport={(file) => void handleImportConversation(file)}
+        onActivateProvider={providerSettings.handleActivateProvider}
+        onCloseConfirmation={() => uiState.setConfirmation(null)}
+        onClosePrompt={() => uiState.setPromptState(null)}
+        onCloseSettings={() => uiState.setIsSettingsOpen(false)}
+        onDeleteProvider={handleDeleteProvider}
+        onDismissToast={(toastId) =>
+          uiState.setToasts((previous) =>
+            previous.filter((toast) => toast.id !== toastId),
+          )
+        }
+        onEditProvider={providerSettings.handleEditProvider}
+        onProviderFieldChange={providerSettings.handleProviderFieldChange}
+        onProviderModelsChange={providerSettings.handleProviderModelsChange}
+        onProviderTabChange={uiState.setActiveSettingsTab}
+        onReset={chatSession.resetSettingsDraft}
+        onResetProvider={providerSettings.handleStartNewProvider}
+        onSave={handleSaveSettings}
+        onSaveProvider={providerSettings.handleSaveProvider}
+        onStartNewProvider={providerSettings.handleStartNewProvider}
+        onTestProvider={providerSettings.handleTestProvider}
+        promptState={uiState.promptState}
+        providerForm={providerSettings.providerForm}
+        providerState={providerSettings.providerState}
+        transferConversation={displayConversation}
+        settings={chatSession.settingsDraft}
+        setSettings={chatSession.setSettingsDraft}
+        toasts={uiState.toasts}
+      />
     </div>
   )
 }

@@ -66,8 +66,8 @@ const enUSMessages = {
     'Editing your latest message. Sending will regenerate the reply.',
   'chat.updateMessagePlaceholder': 'Update your message...',
   'chat.messagePlaceholder': 'Message Illyawish...',
-  'chat.attachImage': 'Attach image',
-  'chat.removeImage': 'Remove image {{name}}',
+  'chat.attachFile': 'Attach file',
+  'chat.removeAttachment': 'Remove attachment {{name}}',
   'chat.sendMessage': 'Send message',
   'chat.shortcutHint': 'Enter to send, Ctrl+Enter for a new line',
   'chat.exportDefaultTitle': 'conversation',
@@ -85,6 +85,8 @@ const enUSMessages = {
   'sidebar.restore': 'Restore',
   'sidebar.archive': 'Archive',
   'sidebar.deleteConversation': 'Delete conversation {{title}}',
+  'sidebar.moreActions': 'More actions for {{title}}',
+  'sidebar.hideActions': 'Hide actions for {{title}}',
   'sidebar.signOut': 'Sign out',
 
   'settings.title': 'Settings',
@@ -94,6 +96,25 @@ const enUSMessages = {
     'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
   'settings.chatTab': 'Chat',
   'settings.providerTab': 'AI Provider',
+  'settings.languageTab': 'Language',
+  'settings.transferTab': 'Import / Export',
+  'settings.languageDescription':
+    'Choose the interface language used across the workspace. Changes apply immediately.',
+  'settings.transferDescription':
+    'Export the current conversation as Markdown, or import a Markdown file as a new conversation.',
+  'settings.languageHelp':
+    'Switch the interface language here. Your selection is saved locally for the next visit.',
+  'settings.exportSectionTitle': 'Export conversation',
+  'settings.exportReadyDescription':
+    'Export the current conversation "{{title}}" as a Markdown file.',
+  'settings.exportEmptyDescription':
+    'Open a conversation with messages before exporting it as Markdown.',
+  'settings.importSectionTitle': 'Import conversation',
+  'settings.importDescription':
+    'Import a Markdown file previously exported from this workspace as a new conversation.',
+  'settings.importConversation': 'Import Markdown',
+  'settings.importingConversation': 'Importing...',
+  'settings.importSuccess': 'Conversation imported',
   'settings.model': 'Model',
   'settings.modelPlaceholder': 'Use provider default model if left blank',
   'settings.modelDefaultOption': 'Use provider default model',
@@ -155,7 +176,7 @@ const enUSMessages = {
   'empty.withConversations':
     'Choose a conversation from the sidebar, or start a brand-new chat below.',
   'empty.withoutConversations':
-    'Start typing below. Images, conversation settings, and markdown replies are all ready.',
+    'Start typing below. Attachments, conversation settings, and markdown replies are all ready.',
   'empty.continueLastConversation': 'Continue last conversation',
 
   'message.editing': 'Editing',
@@ -182,9 +203,10 @@ const enUSMessages = {
   'error.saveProviderSettings': 'Unable to save AI provider settings',
   'error.activateProviderPreset': 'Unable to activate AI provider preset',
   'error.deleteProviderPreset': 'Unable to delete AI provider preset',
-  'error.onlyImages': 'Only image attachments are supported right now',
-  'error.imageTooLarge': 'Image "{{name}}" is larger than 6 MB',
-  'error.maxImages': 'You can attach up to {{count}} images',
+  'error.onlyAttachments':
+    'Only image, PDF, Markdown, and TXT attachments are supported right now',
+  'error.attachmentTooLarge': 'Attachment "{{name}}" is larger than 6 MB',
+  'error.maxAttachments': 'You can attach up to {{count}} files',
   'error.deleteConversation': 'Unable to delete this conversation',
   'error.renameConversation': 'Unable to rename this conversation',
   'error.updateConversation': 'Unable to update this conversation',
@@ -201,10 +223,11 @@ const enUSMessages = {
   'error.streamingFailed': 'Streaming failed',
   'error.assistantEndedUnexpectedly':
     'The assistant response ended unexpectedly.',
-  'error.readSelectedImage': 'Unable to read the selected image',
-  'error.readImageNamed': 'Unable to read "{{name}}"',
-  'error.uploadImage': 'Unable to upload image "{{name}}"',
-  'error.uploadImageGeneric': 'Unable to upload the selected image',
+  'error.readSelectedAttachment': 'Unable to read the selected attachment',
+  'error.readAttachmentNamed': 'Unable to read "{{name}}"',
+  'error.uploadAttachment': 'Unable to upload attachment "{{name}}"',
+  'error.uploadAttachmentGeneric': 'Unable to upload the selected attachment',
+  'error.importConversation': 'Unable to import the selected Markdown file',
   'error.sessionExpired': 'Session expired. Please sign in again.',
 
   'provider.loadingStatus': 'Loading provider status...',
@@ -284,8 +307,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'chat.editingBanner': '正在编辑你的最新一条消息。发送后会重新生成回复。',
     'chat.updateMessagePlaceholder': '更新你的消息...',
     'chat.messagePlaceholder': '向 Illyawish 发送消息...',
-    'chat.attachImage': '添加图片',
-    'chat.removeImage': '移除图片 {{name}}',
+    'chat.attachFile': '添加附件',
+    'chat.removeAttachment': '移除附件 {{name}}',
     'chat.sendMessage': '发送消息',
     'chat.shortcutHint': 'Enter 发送，Ctrl+Enter 换行',
     'chat.exportDefaultTitle': 'conversation',
@@ -303,6 +326,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'sidebar.restore': '恢复',
     'sidebar.archive': '归档',
     'sidebar.deleteConversation': '删除会话 {{title}}',
+    'sidebar.moreActions': '{{title}} 的更多操作',
+    'sidebar.hideActions': '收起 {{title}} 的操作',
     'sidebar.signOut': '退出登录',
 
     'settings.title': '设置',
@@ -312,6 +337,20 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '管理你保存的 OpenAI 兼容提供商预设。新请求会优先使用当前激活的预设，`data/app.json` 中的服务器回退配置仍可继续使用。',
     'settings.chatTab': '聊天',
     'settings.providerTab': 'AI 提供商',
+    'settings.languageTab': '语言',
+    'settings.transferTab': '导入 / 导出',
+    'settings.languageDescription': '在这里切换整个工作区的界面语言，修改后会立即生效。',
+    'settings.transferDescription':
+      '把当前会话导出为 Markdown，或者把 Markdown 文件导入为一个新的会话。',
+    'settings.languageHelp': '在这里切换界面语言。你的选择会保存在本地，并在下次访问时继续生效。',
+    'settings.exportSectionTitle': '导出会话',
+    'settings.exportReadyDescription': '将当前会话“{{title}}”导出为 Markdown 文件。',
+    'settings.exportEmptyDescription': '请先打开一个包含消息的会话，然后再导出 Markdown。',
+    'settings.importSectionTitle': '导入会话',
+    'settings.importDescription': '将此前从此工作区导出的 Markdown 文件导入为一个新的会话。',
+    'settings.importConversation': '导入 Markdown',
+    'settings.importingConversation': '导入中...',
+    'settings.importSuccess': '会话导入成功',
     'settings.model': '模型',
     'settings.modelPlaceholder': '留空则使用提供商默认模型',
     'settings.modelDefaultOption': '使用提供商默认模型',
@@ -369,7 +408,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'empty.title': '今天想让我帮你做点什么？',
     'empty.withConversations': '从侧边栏选择一个会话，或者直接在下方开始一段全新的聊天。',
     'empty.withoutConversations':
-      '直接在下方开始输入。图片、会话设置和 Markdown 回复都已经准备好了。',
+      '直接在下方开始输入。附件、会话设置和 Markdown 回复都已经准备好了。',
     'empty.continueLastConversation': '继续上一次对话',
 
     'message.editing': '编辑中',
@@ -394,9 +433,9 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.saveProviderSettings': '暂时无法保存 AI 提供商设置',
     'error.activateProviderPreset': '暂时无法激活 AI 提供商预设',
     'error.deleteProviderPreset': '暂时无法删除 AI 提供商预设',
-    'error.onlyImages': '当前只支持图片附件',
-    'error.imageTooLarge': '图片“{{name}}”超过了 6 MB',
-    'error.maxImages': '最多只能附加 {{count}} 张图片',
+    'error.onlyAttachments': '当前仅支持图片、PDF、Markdown 和 TXT 附件',
+    'error.attachmentTooLarge': '附件“{{name}}”超过了 6 MB',
+    'error.maxAttachments': '最多只能附加 {{count}} 个文件',
     'error.deleteConversation': '暂时无法删除这个会话',
     'error.renameConversation': '暂时无法重命名这个会话',
     'error.updateConversation': '暂时无法更新这个会话',
@@ -412,10 +451,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.generationStopped': '已停止生成',
     'error.streamingFailed': '流式输出失败',
     'error.assistantEndedUnexpectedly': '助手回复意外中断了。',
-    'error.readSelectedImage': '无法读取所选图片',
-    'error.readImageNamed': '无法读取“{{name}}”',
-    'error.uploadImage': '无法上传图片“{{name}}”',
-    'error.uploadImageGeneric': '无法上传所选图片',
+    'error.readSelectedAttachment': '无法读取所选附件',
+    'error.readAttachmentNamed': '无法读取“{{name}}”',
+    'error.uploadAttachment': '无法上传附件“{{name}}”',
+    'error.uploadAttachmentGeneric': '无法上传所选附件',
+    'error.importConversation': '无法导入所选 Markdown 文件',
     'error.sessionExpired': '登录状态已过期，请重新登录。',
 
     'provider.loadingStatus': '正在加载提供商状态...',
@@ -491,8 +531,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '最新メッセージを編集中です。送信すると返信が再生成されます。',
     'chat.updateMessagePlaceholder': 'メッセージを更新...',
     'chat.messagePlaceholder': 'Illyawish にメッセージを送る...',
-    'chat.attachImage': '画像を添付',
-    'chat.removeImage': '画像 {{name}} を削除',
+    'chat.attachFile': '添付ファイルを追加',
+    'chat.removeAttachment': '添付ファイル {{name}} を削除',
     'chat.sendMessage': 'メッセージを送信',
     'chat.shortcutHint': 'Enter で送信、Ctrl+Enter で改行',
     'chat.exportDefaultTitle': 'conversation',
@@ -510,6 +550,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'sidebar.restore': '復元',
     'sidebar.archive': 'アーカイブ',
     'sidebar.deleteConversation': '会話 {{title}} を削除',
+    'sidebar.moreActions': '{{title}} のその他の操作',
+    'sidebar.hideActions': '{{title}} の操作を閉じる',
     'sidebar.signOut': 'サインアウト',
 
     'settings.title': '設定',
@@ -519,6 +561,25 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
     'settings.chatTab': 'チャット',
     'settings.providerTab': 'AI プロバイダー',
+    'settings.languageTab': '言語',
+    'settings.transferTab': 'インポート / エクスポート',
+    'settings.languageDescription':
+      'ワークスペース全体で使う表示言語を切り替えます。変更はすぐに反映されます。',
+    'settings.transferDescription':
+      '現在の会話を Markdown として書き出すか、Markdown ファイルを新しい会話として取り込みます。',
+    'settings.languageHelp':
+      'ここで表示言語を切り替えます。選択内容はローカルに保存され、次回も引き継がれます。',
+    'settings.exportSectionTitle': '会話をエクスポート',
+    'settings.exportReadyDescription':
+      '現在の会話「{{title}}」を Markdown ファイルとしてエクスポートします。',
+    'settings.exportEmptyDescription':
+      'Markdown をエクスポートする前に、メッセージのある会話を開いてください。',
+    'settings.importSectionTitle': '会話をインポート',
+    'settings.importDescription':
+      'このワークスペースから以前エクスポートした Markdown ファイルを、新しい会話として取り込みます。',
+    'settings.importConversation': 'Markdown をインポート',
+    'settings.importingConversation': 'インポート中...',
+    'settings.importSuccess': '会話をインポートしました',
     'settings.model': 'モデル',
     'settings.modelPlaceholder': '空欄の場合はプロバイダー既定のモデルを使用',
     'settings.modelDefaultOption': 'プロバイダー既定のモデルを使う',
@@ -579,7 +640,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'empty.withConversations':
       'サイドバーから会話を選ぶか、下から新しいチャットを始めてください。',
     'empty.withoutConversations':
-      '下から入力を始めてください。画像、会話設定、Markdown 返信はすべて使えます。',
+      '下から入力を始めてください。添付ファイル、会話設定、Markdown 返信はすべて使えます。',
     'empty.continueLastConversation': '前回の会話を続ける',
 
     'message.editing': '編集中',
@@ -607,9 +668,10 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.activateProviderPreset':
       '現在 AI プロバイダープリセットを有効化できません',
     'error.deleteProviderPreset': '現在 AI プロバイダープリセットを削除できません',
-    'error.onlyImages': '現在は画像添付のみ対応しています',
-    'error.imageTooLarge': '画像「{{name}}」は 6 MB を超えています',
-    'error.maxImages': '添付できる画像は最大 {{count}} 枚です',
+    'error.onlyAttachments':
+      '現在は画像、PDF、Markdown、TXT の添付に対応しています',
+    'error.attachmentTooLarge': '添付ファイル「{{name}}」は 6 MB を超えています',
+    'error.maxAttachments': '添付できるファイルは最大 {{count}} 個です',
     'error.deleteConversation': '現在この会話を削除できません',
     'error.renameConversation': '現在この会話名を変更できません',
     'error.updateConversation': '現在この会話を更新できません',
@@ -625,10 +687,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.generationStopped': '生成を停止しました',
     'error.streamingFailed': 'ストリーミングに失敗しました',
     'error.assistantEndedUnexpectedly': 'アシスタントの応答が途中で終了しました。',
-    'error.readSelectedImage': '選択した画像を読み込めません',
-    'error.readImageNamed': '「{{name}}」を読み込めません',
-    'error.uploadImage': '画像「{{name}}」をアップロードできません',
-    'error.uploadImageGeneric': '選択した画像をアップロードできません',
+    'error.readSelectedAttachment': '選択した添付ファイルを読み込めません',
+    'error.readAttachmentNamed': '「{{name}}」を読み込めません',
+    'error.uploadAttachment': '添付ファイル「{{name}}」をアップロードできません',
+    'error.uploadAttachmentGeneric': '選択した添付ファイルをアップロードできません',
+    'error.importConversation': '選択した Markdown ファイルをインポートできません',
     'error.sessionExpired': 'セッションの有効期限が切れました。もう一度サインインしてください。',
 
     'provider.loadingStatus': 'プロバイダー状態を読み込み中...',

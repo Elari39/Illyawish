@@ -95,6 +95,17 @@ type ConversationUpdateInput struct {
 	Settings   *ConversationSettings `json:"settings"`
 }
 
+type ImportMessageInput struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ImportConversationInput struct {
+	Title    string                `json:"title"`
+	Settings *ConversationSettings `json:"settings"`
+	Messages []ImportMessageInput  `json:"messages"`
+}
+
 type SendMessageInput struct {
 	Content     string                `json:"content"`
 	Attachments []models.Attachment   `json:"attachments"`
@@ -131,7 +142,7 @@ func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*Send
 		}
 	}
 	if content == "" && len(attachments) == 0 {
-		return nil, requestError{message: "message content or image attachment is required"}
+		return nil, requestError{message: "message content or attachment is required"}
 	}
 
 	var options *ConversationSettings
@@ -237,11 +248,13 @@ func (s *Service) prepareAssistantRetry(conversationID uint, assistantMessageID 
 			return ErrInvalidAssistantAction
 		}
 
-		if err := tx.Model(message).Updates(map[string]any{
-			"content":     "",
-			"attachments": []models.Attachment{},
-			"status":      models.MessageStatusStreaming,
-		}).Error; err != nil {
+		if err := updateMessageRecord(
+			tx,
+			message,
+			"",
+			nil,
+			models.MessageStatusStreaming,
+		); err != nil {
 			return fmt.Errorf("reset assistant message: %w", err)
 		}
 
@@ -253,6 +266,7 @@ func (s *Service) prepareAssistantRetry(conversationID uint, assistantMessageID 
 
 		assistantMessage = *message
 		assistantMessage.Content = ""
+		assistantMessage.LegacyAttachments = nil
 		assistantMessage.Attachments = nil
 		assistantMessage.Status = models.MessageStatusStreaming
 		return nil
@@ -349,6 +363,9 @@ func (s *Service) historyForModel(
 	var messages []models.Message
 	if err := query.Find(&messages).Error; err != nil {
 		return nil, fmt.Errorf("load conversation history: %w", err)
+	}
+	if err := hydrateMessageAttachments(s.db, messages); err != nil {
+		return nil, err
 	}
 
 	history := []llm.ChatMessage{
@@ -545,7 +562,14 @@ func maxInt(left int, right int) int {
 func collectMessageAttachments(messages []models.Message) []models.Attachment {
 	attachments := make([]models.Attachment, 0)
 	for _, message := range messages {
-		attachments = append(attachments, message.Attachments...)
+		attachments = append(attachments, messageAttachments(message)...)
 	}
 	return attachments
+}
+
+func messageAttachments(message models.Message) []models.Attachment {
+	if len(message.Attachments) > 0 {
+		return message.Attachments
+	}
+	return message.LegacyAttachments
 }

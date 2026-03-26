@@ -5,7 +5,7 @@ import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import { SidebarContent } from './sidebar-content'
 
-type MobileSidebarProps = Omit<ComponentProps<typeof SidebarContent>, 'collapsed'> & {
+type MobileSidebarProps = Omit<ComponentProps<typeof SidebarContent>, 'collapsed' | 'variant'> & {
   isOpen: boolean
   onClose: () => void
 }
@@ -55,14 +55,19 @@ export function MobileSidebar({
         aria-label={t('chat.sidebarNavigation')}
         aria-modal="true"
         className={cn(
-          'absolute inset-y-0 left-0 w-[88vw] max-w-[320px] -translate-x-full bg-[var(--sidebar-bg)] shadow-xl transition-transform duration-200',
+          'absolute inset-y-0 left-0 w-[84vw] max-w-[300px] -translate-x-full bg-[var(--sidebar-bg)] shadow-xl transition-transform duration-200',
           isOpen && 'translate-x-0',
         )}
         ref={panelRef}
         role="dialog"
         tabIndex={-1}
       >
-        <SidebarContent collapsed={false} {...props} />
+        <SidebarContent
+          key={isOpen ? 'mobile-sidebar-open' : 'mobile-sidebar-closed'}
+          collapsed={false}
+          variant="mobile"
+          {...props}
+        />
       </div>
     </div>
   )
