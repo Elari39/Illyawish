@@ -1,3 +1,9 @@
+import {
+  fetchOrThrow,
+  notifyUnauthorized,
+  toApiError,
+} from './http'
+
 export interface ParsedSSEEvent {
   event: string
   data: string
@@ -8,23 +14,15 @@ export async function streamSSE(
   init: RequestInit,
   onEvent: (event: ParsedSSEEvent) => void | Promise<void>,
 ) {
-  const response = await fetch(input, init)
+  const response = await fetchOrThrow(input, init)
 
   if (!response.ok) {
-    let message = `Request failed with status ${response.status}`
-    const text = await response.text()
-    try {
-      const payload = JSON.parse(text) as { error?: string }
-      if (payload.error) {
-        message = payload.error
-      }
-    } catch {
-      if (text.trim()) {
-        message = text.trim()
-      }
+    const apiError = await toApiError(response)
+    if (response.status === 401 && typeof window !== 'undefined') {
+      notifyUnauthorized(apiError.code)
     }
 
-    throw new Error(message)
+    throw apiError
   }
 
   if (!response.body) {

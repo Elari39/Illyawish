@@ -22,7 +22,7 @@ const enUSMessages = {
   'login.heroTitle':
     'A calm Claude-style chat surface, now wired to your own Go backend.',
   'login.heroDescription':
-    'This MVP ships with persistent conversations, markdown-aware answers, streaming responses, and a lightweight fixed-account sign-in flow backed by SQLite.',
+    'This MVP ships with persistent conversations, markdown-aware answers, streaming responses, and a lightweight session-based sign-in flow backed by SQLite.',
   'login.featureStreamingTitle': 'Streaming',
   'login.featureStreamingDescription':
     'Assistant tokens arrive incrementally, so the UI feels alive instead of blocked.',
@@ -35,7 +35,14 @@ const enUSMessages = {
   'login.signIn': 'Sign in',
   'login.continueAs': 'Continue as {{name}}',
   'login.prefilledDescription':
-    'The fixed MVP account is prefilled so you can get straight into the app.',
+    'Sign in with your workspace account to continue.',
+  'login.yourAccount': 'your account',
+  'login.bootstrapEyebrow': 'Initialize workspace',
+  'login.bootstrapTitle': 'Create the first administrator',
+  'login.bootstrapDescription':
+    'This workspace has not been initialized yet. Create the first admin account to finish setup.',
+  'login.creatingAccount': 'Creating account...',
+  'login.createFirstAdmin': 'Create first admin',
   'login.username': 'Username',
   'login.password': 'Password',
   'login.signingIn': 'Signing in...',
@@ -119,6 +126,8 @@ const enUSMessages = {
   'settings.resetForm': 'Reset form',
   'settings.savePreset': 'Save preset',
   'settings.createPreset': 'Create preset',
+  'settings.testConnection': 'Test connection',
+  'settings.testingConnection': 'Testing...',
 
   'empty.title': 'How can I help you today?',
   'empty.withConversations':
@@ -143,6 +152,8 @@ const enUSMessages = {
     'Delete provider preset "{{name}}" permanently?',
 
   'error.signIn': 'Unable to sign in right now',
+  'error.backendUnavailable':
+    'Unable to reach the backend service. Make sure the Go server is running.',
   'error.loadConversations': 'Unable to load conversations right now',
   'error.loadMessages': 'Unable to load message history right now',
   'error.loadProviders': 'Unable to load AI provider settings right now',
@@ -170,6 +181,9 @@ const enUSMessages = {
     'The assistant response ended unexpectedly.',
   'error.readSelectedImage': 'Unable to read the selected image',
   'error.readImageNamed': 'Unable to read "{{name}}"',
+  'error.uploadImage': 'Unable to upload image "{{name}}"',
+  'error.uploadImageGeneric': 'Unable to upload the selected image',
+  'error.sessionExpired': 'Session expired. Please sign in again.',
 
   'provider.loadingStatus': 'Loading provider status...',
   'provider.usingPreset':
@@ -206,7 +220,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'login.workspaceBadge': 'AI 聊天工作区',
     'login.heroTitle': '一个沉静的 Claude 风格聊天界面，现在已经接入你自己的 Go 后端。',
     'login.heroDescription':
-      '这个 MVP 已经具备持久化会话、Markdown 感知回复、流式输出，以及基于 SQLite 的轻量固定账号登录流程。',
+      '这个 MVP 已经具备持久化会话、Markdown 感知回复、流式输出，以及基于 SQLite 的轻量会话登录流程。',
     'login.featureStreamingTitle': '流式输出',
     'login.featureStreamingDescription':
       '助手回复会逐步到达，让界面始终保持流动感，而不是一直等待。',
@@ -218,7 +232,14 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '一个安静、偏 Claude 风格的界面，适合阅读和长文本提问。',
     'login.signIn': '登录',
     'login.continueAs': '以 {{name}} 身份继续',
-    'login.prefilledDescription': 'MVP 固定账号已预填好，你可以直接进入应用。',
+    'login.prefilledDescription': '使用你的工作区账号继续登录。',
+    'login.yourAccount': '你的账号',
+    'login.bootstrapEyebrow': '初始化工作区',
+    'login.bootstrapTitle': '创建第一个管理员',
+    'login.bootstrapDescription':
+      '这个工作区还没有初始化。先创建第一个管理员账号来完成设置。',
+    'login.creatingAccount': '正在创建账号...',
+    'login.createFirstAdmin': '创建首个管理员',
     'login.username': '用户名',
     'login.password': '密码',
     'login.signingIn': '登录中...',
@@ -300,6 +321,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.resetForm': '重置表单',
     'settings.savePreset': '保存预设',
     'settings.createPreset': '创建预设',
+    'settings.testConnection': '测试连接',
+    'settings.testingConnection': '测试中...',
 
     'empty.title': '今天想让我帮你做点什么？',
     'empty.withConversations': '从侧边栏选择一个会话，或者直接在下方开始一段全新的聊天。',
@@ -322,6 +345,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'confirm.deleteProviderPreset': '确定永久删除提供商预设“{{name}}”吗？',
 
     'error.signIn': '暂时无法登录',
+    'error.backendUnavailable': '暂时无法连接后端服务，请确认 Go 服务已经启动。',
     'error.loadConversations': '暂时无法加载会话列表',
     'error.loadMessages': '暂时无法加载消息历史',
     'error.loadProviders': '暂时无法加载 AI 提供商设置',
@@ -348,6 +372,9 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.assistantEndedUnexpectedly': '助手回复意外中断了。',
     'error.readSelectedImage': '无法读取所选图片',
     'error.readImageNamed': '无法读取“{{name}}”',
+    'error.uploadImage': '无法上传图片“{{name}}”',
+    'error.uploadImageGeneric': '无法上传所选图片',
+    'error.sessionExpired': '登录状态已过期，请重新登录。',
 
     'provider.loadingStatus': '正在加载提供商状态...',
     'provider.usingPreset': '新请求将使用预设“{{name}}”和模型 {{model}}。',
@@ -378,7 +405,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'login.heroTitle':
       '落ち着いた Claude 風のチャット画面を、あなた自身の Go バックエンドに接続しました。',
     'login.heroDescription':
-      'この MVP には、会話の永続化、Markdown 対応の回答、ストリーミング応答、そして SQLite を使った固定アカウントの軽量ログインフローが含まれています。',
+      'この MVP には、会話の永続化、Markdown 対応の回答、ストリーミング応答、そして SQLite を使った軽量なセッションベースのログインフローが含まれています。',
     'login.featureStreamingTitle': 'ストリーミング',
     'login.featureStreamingDescription':
       'アシスタントのトークンが少しずつ届くので、UI が止まらず生きているように感じられます。',
@@ -391,7 +418,14 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'login.signIn': 'サインイン',
     'login.continueAs': '{{name}} として続行',
     'login.prefilledDescription':
-      'MVP の固定アカウントは入力済みなので、そのままアプリに入れます。',
+      'ワークスペースのアカウントでサインインして続行します。',
+    'login.yourAccount': 'あなたのアカウント',
+    'login.bootstrapEyebrow': 'ワークスペース初期化',
+    'login.bootstrapTitle': '最初の管理者を作成',
+    'login.bootstrapDescription':
+      'このワークスペースはまだ初期化されていません。最初の管理者アカウントを作成してセットアップを完了してください。',
+    'login.creatingAccount': 'アカウントを作成中...',
+    'login.createFirstAdmin': '最初の管理者を作成',
     'login.username': 'ユーザー名',
     'login.password': 'パスワード',
     'login.signingIn': 'サインイン中...',
@@ -474,6 +508,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.resetForm': 'フォームをリセット',
     'settings.savePreset': 'プリセットを保存',
     'settings.createPreset': 'プリセットを作成',
+    'settings.testConnection': '接続をテスト',
+    'settings.testingConnection': 'テスト中...',
 
     'empty.title': '今日は何を手伝おうか？',
     'empty.withConversations':
@@ -498,6 +534,8 @@ export const messages: Record<AppLocale, TranslationTable> = {
       'プロバイダープリセット「{{name}}」を完全に削除しますか？',
 
     'error.signIn': '現在サインインできません',
+    'error.backendUnavailable':
+      'バックエンドサービスに接続できません。Go サーバーが起動しているか確認してください。',
     'error.loadConversations': '現在会話を読み込めません',
     'error.loadMessages': '現在メッセージ履歴を読み込めません',
     'error.loadProviders': '現在 AI プロバイダー設定を読み込めません',
@@ -525,6 +563,9 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.assistantEndedUnexpectedly': 'アシスタントの応答が途中で終了しました。',
     'error.readSelectedImage': '選択した画像を読み込めません',
     'error.readImageNamed': '「{{name}}」を読み込めません',
+    'error.uploadImage': '画像「{{name}}」をアップロードできません',
+    'error.uploadImageGeneric': '選択した画像をアップロードできません',
+    'error.sessionExpired': 'セッションの有効期限が切れました。もう一度サインインしてください。',
 
     'provider.loadingStatus': 'プロバイダー状態を読み込み中...',
     'provider.usingPreset':

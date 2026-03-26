@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -74,13 +76,32 @@ type ResolvedProvider struct {
 	Config         llm.ProviderConfig
 }
 
+type TestPresetInput struct {
+	PresetID     *uint
+	BaseURL      string
+	APIKey       string
+	DefaultModel string
+}
+
+type TestResult struct {
+	OK              bool
+	Message         string
+	ResolvedBaseURL string
+	ResolvedModel   string
+}
+
 type Service struct {
 	db       *gorm.DB
 	fallback llm.ProviderConfig
 	crypter  *apiKeyCrypter
+	tester   providerTester
 }
 
-func NewService(db *gorm.DB, cfg *config.Config) (*Service, error) {
+type providerTester interface {
+	Test(context.Context, llm.ProviderConfig) error
+}
+
+func NewService(db *gorm.DB, cfg *config.Config, tester providerTester) (*Service, error) {
 	encryptionSecret := strings.TrimSpace(cfg.SettingsEncryptionKey)
 	if encryptionSecret == "" {
 		encryptionSecret = strings.TrimSpace(cfg.SessionSecret)
@@ -99,6 +120,7 @@ func NewService(db *gorm.DB, cfg *config.Config) (*Service, error) {
 			DefaultModel: strings.TrimSpace(cfg.Model),
 		},
 		crypter: crypter,
+		tester:  tester,
 	}, nil
 }
 
@@ -260,6 +282,31 @@ func (s *Service) DeletePreset(userID uint, presetID uint) error {
 	return nil
 }
 
+func (s *Service) TestPreset(ctx context.Context, userID uint, input TestPresetInput) (*TestResult, error) {
+	if s.tester == nil {
+		return nil, requestError{message: "provider tester is unavailable"}
+	}
+
+	resolved, err := s.resolveTestConfig(userID, input)
+	if err != nil {
+		return nil, err
+	}
+
+	testCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	if err := s.tester.Test(testCtx, resolved); err != nil {
+		return nil, requestError{message: "provider connection test failed: " + err.Error()}
+	}
+
+	return &TestResult{
+		OK:              true,
+		Message:         "provider connection verified",
+		ResolvedBaseURL: resolved.BaseURL,
+		ResolvedModel:   resolved.DefaultModel,
+	}, nil
+}
+
 func (s *Service) ResolveForUser(userID uint) (*ResolvedProvider, error) {
 	preset, err := s.activePreset(userID)
 	if err != nil {
@@ -405,7 +452,20 @@ func sanitizeUpdatePresetInput(input UpdatePresetInput) (UpdatePresetInput, erro
 }
 
 func normalizeBaseURL(value string) string {
-	return strings.TrimRight(strings.TrimSpace(value), "/")
+	trimmed := strings.TrimRight(strings.TrimSpace(value), "/")
+	if trimmed == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(trimmed)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return ""
+	}
+
+	return parsed.String()
 }
 
 func apiKeyHint(value string) string {
@@ -476,4 +536,47 @@ func (c *apiKeyCrypter) Decrypt(value string) (string, error) {
 	}
 
 	return string(plaintext), nil
+}
+
+func (s *Service) resolveTestConfig(userID uint, input TestPresetInput) (llm.ProviderConfig, error) {
+	baseURL := strings.TrimSpace(input.BaseURL)
+	apiKey := strings.TrimSpace(input.APIKey)
+	defaultModel := strings.TrimSpace(input.DefaultModel)
+
+	if input.PresetID != nil {
+		preset, err := s.getPreset(userID, *input.PresetID)
+		if err != nil {
+			return llm.ProviderConfig{}, err
+		}
+
+		if baseURL == "" {
+			baseURL = preset.BaseURL
+		}
+		if defaultModel == "" {
+			defaultModel = preset.DefaultModel
+		}
+		if apiKey == "" {
+			apiKey, err = s.crypter.Decrypt(preset.EncryptedAPIKey)
+			if err != nil {
+				return llm.ProviderConfig{}, fmt.Errorf("decrypt provider API key: %w", err)
+			}
+		}
+	}
+
+	normalized := normalizeBaseURL(baseURL)
+	if normalized == "" {
+		return llm.ProviderConfig{}, requestError{message: "provider base URL must be a valid http or https URL"}
+	}
+	if apiKey == "" {
+		return llm.ProviderConfig{}, requestError{message: "provider API key is required"}
+	}
+	if defaultModel == "" {
+		return llm.ProviderConfig{}, requestError{message: "provider model is required"}
+	}
+
+	return llm.ProviderConfig{
+		BaseURL:      normalized,
+		APIKey:       apiKey,
+		DefaultModel: defaultModel,
+	}, nil
 }

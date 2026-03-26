@@ -71,6 +71,15 @@ export interface LoginPayload {
   password: string
 }
 
+export interface BootstrapPayload {
+  username: string
+  password: string
+}
+
+export interface BootstrapStatus {
+  required: boolean
+}
+
 export interface SendMessagePayload {
   content: string
   attachments?: Attachment[]
@@ -96,6 +105,20 @@ export interface UpdateProviderPayload {
   baseURL?: string
   apiKey?: string
   defaultModel?: string
+}
+
+export interface TestProviderPayload {
+  providerId?: number
+  baseURL: string
+  apiKey?: string
+  defaultModel: string
+}
+
+export interface TestProviderResult {
+  ok: boolean
+  message: string
+  resolvedBaseURL: string
+  resolvedModel: string
 }
 
 export interface StreamEvent {

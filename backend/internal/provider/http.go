@@ -56,6 +56,13 @@ type updateProviderRequest struct {
 	DefaultModel *string `json:"defaultModel"`
 }
 
+type testProviderRequest struct {
+	ProviderID   *uint  `json:"providerId"`
+	BaseURL      string `json:"baseURL"`
+	APIKey       string `json:"apiKey"`
+	DefaultModel string `json:"defaultModel"`
+}
+
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
@@ -150,6 +157,34 @@ func (h *Handler) DeleteProvider(c *gin.Context) {
 	}
 
 	h.renderProviderState(c, user.ID, http.StatusOK)
+}
+
+func (h *Handler) TestProvider(c *gin.Context) {
+	user := auth.CurrentUser(c)
+
+	var req testProviderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid provider payload"})
+		return
+	}
+
+	result, err := h.service.TestPreset(c.Request.Context(), user.ID, TestPresetInput{
+		PresetID:     req.ProviderID,
+		BaseURL:      req.BaseURL,
+		APIKey:       req.APIKey,
+		DefaultModel: req.DefaultModel,
+	})
+	if err != nil {
+		handleProviderError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":              result.OK,
+		"message":         result.Message,
+		"resolvedBaseURL": result.ResolvedBaseURL,
+		"resolvedModel":   result.ResolvedModel,
+	})
 }
 
 func (h *Handler) renderProviderState(c *gin.Context, userID uint, status int) {

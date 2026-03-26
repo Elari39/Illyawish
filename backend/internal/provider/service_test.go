@@ -1,17 +1,27 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"backend/internal/config"
+	"backend/internal/llm"
 	"backend/internal/models"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type fakeProviderTester struct {
+	err error
+}
+
+func (f *fakeProviderTester) Test(context.Context, llm.ProviderConfig) error {
+	return f.err
+}
 
 func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 	service := newTestService(t, &config.Config{
@@ -208,7 +218,74 @@ func TestSettingsEncryptionKeyOverridesSessionSecret(t *testing.T) {
 	}
 }
 
+func TestTestPresetUsesStoredAPIKeyWhenEditing(t *testing.T) {
+	tester := &capturingProviderTester{}
+	service := newTestServiceWithTester(t, &config.Config{
+		SessionSecret: "session-secret",
+	}, tester)
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Preset A",
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "stored-key",
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	result, err := service.TestPreset(context.Background(), 1, TestPresetInput{
+		PresetID:     &preset.ID,
+		DefaultModel: "model-b",
+	})
+	if err != nil {
+		t.Fatalf("TestPreset() error = %v", err)
+	}
+
+	if !result.OK {
+		t.Fatal("expected successful provider test")
+	}
+	if tester.lastConfig.APIKey != "stored-key" {
+		t.Fatalf("expected stored API key to be reused, got %q", tester.lastConfig.APIKey)
+	}
+	if tester.lastConfig.DefaultModel != "model-b" {
+		t.Fatalf("expected override model to be used, got %q", tester.lastConfig.DefaultModel)
+	}
+}
+
+func TestTestPresetRejectsInvalidBaseURL(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	_, err := service.TestPreset(context.Background(), 1, TestPresetInput{
+		BaseURL:      "not-a-url",
+		APIKey:       "test-key",
+		DefaultModel: "gpt-4.1-mini",
+	})
+	if err == nil {
+		t.Fatal("expected invalid URL error")
+	}
+	if !IsRequestError(err) {
+		t.Fatalf("expected request error, got %v", err)
+	}
+}
+
 func newTestService(t *testing.T, cfg *config.Config) *Service {
+	t.Helper()
+	return newTestServiceWithTester(t, cfg, &fakeProviderTester{})
+}
+
+type capturingProviderTester struct {
+	lastConfig llm.ProviderConfig
+}
+
+func (c *capturingProviderTester) Test(_ context.Context, provider llm.ProviderConfig) error {
+	c.lastConfig = provider
+	return nil
+}
+
+func newTestServiceWithTester(t *testing.T, cfg *config.Config, tester providerTester) *Service {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:provider-%d?mode=memory&cache=shared", time.Now().UnixNano())
@@ -229,7 +306,7 @@ func newTestService(t *testing.T, cfg *config.Config) *Service {
 		t.Fatalf("create user: %v", err)
 	}
 
-	service, err := NewService(db, cfg)
+	service, err := NewService(db, cfg, tester)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}

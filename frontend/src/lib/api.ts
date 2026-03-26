@@ -1,5 +1,16 @@
 import { streamSSE } from './sse'
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  fetchOrThrow,
+  isNetworkError,
+  isUnauthorizedError,
+  notifyUnauthorized,
+  toApiError,
+} from './http'
 import type {
+  Attachment,
+  BootstrapPayload,
+  BootstrapStatus,
   CreateProviderPayload,
   ConversationSettings,
   Conversation,
@@ -8,6 +19,8 @@ import type {
   ProviderState,
   SendMessagePayload,
   StreamEvent,
+  TestProviderPayload,
+  TestProviderResult,
   UpdateProviderPayload,
   UpdateConversationPayload,
   User,
@@ -16,34 +29,28 @@ import type {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
-class ApiError extends Error {
-  status: number
-
-  constructor(message: string, status: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
-
 async function apiRequest<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has('Content-Type')) {
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   headers.set('Accept', 'application/json')
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetchOrThrow(`${API_BASE_URL}${path}`, {
     ...init,
     headers,
     credentials: 'include',
   })
 
   if (!response.ok) {
-    throw await toApiError(response)
+    const apiError = await toApiError(response)
+    if (response.status === 401) {
+      notifyUnauthorized(apiError.code)
+    }
+    throw apiError
   }
 
   if (response.status === 204) {
@@ -52,29 +59,22 @@ async function apiRequest<T>(
 
   return (await response.json()) as T
 }
-
-async function toApiError(response: Response) {
-  let message = `Request failed with status ${response.status}`
-  const text = await response.text()
-  try {
-    const payload = JSON.parse(text) as { error?: string }
-    if (payload.error) {
-      message = payload.error
-    }
-  } catch {
-    if (text.trim()) {
-      message = text.trim()
-    }
-  }
-
-  return new ApiError(message, response.status)
-}
-
-export function isUnauthorizedError(error: unknown) {
-  return error instanceof ApiError && error.status === 401
+export {
+  AUTH_UNAUTHORIZED_EVENT,
+  isNetworkError,
+  isUnauthorizedError,
 }
 
 export const authApi = {
+  bootstrapStatus() {
+    return apiRequest<BootstrapStatus>('/api/auth/bootstrap/status')
+  },
+  bootstrap(payload: BootstrapPayload) {
+    return apiRequest<User>('/api/auth/bootstrap', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
   login(payload: LoginPayload) {
     return apiRequest<User>('/api/auth/login', {
       method: 'POST',
@@ -238,6 +238,24 @@ export const providerApi = {
     return apiRequest<ProviderState>(`/api/ai/providers/${providerId}`, {
       method: 'DELETE',
     })
+  },
+  test(payload: TestProviderPayload) {
+    return apiRequest<TestProviderResult>('/api/ai/providers/test', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+}
+
+export const attachmentApi = {
+  async upload(file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await apiRequest<{ attachment: Attachment }>('/api/attachments', {
+      method: 'POST',
+      body: formData,
+    })
+    return response.attachment
   },
 }
 

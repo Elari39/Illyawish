@@ -77,6 +77,13 @@ func (m *EinoChatModel) Stream(
 
 	stream, err := chatModel.Stream(ctx, toSchemaMessages(messages), toModelOptions(options)...)
 	if err != nil {
+		if shouldFallbackToGenerate(err) {
+			fullText, fallbackErr := m.generateOnce(ctx, chatModel, messages, options, onDelta)
+			if fallbackErr == nil {
+				return fullText, nil
+			}
+			return "", fmt.Errorf("start model stream: %v; fallback completion failed: %w", err, fallbackErr)
+		}
 		return "", fmt.Errorf("start model stream: %w", err)
 	}
 	defer stream.Close()
@@ -103,6 +110,74 @@ func (m *EinoChatModel) Stream(
 	}
 
 	return fullText, nil
+}
+
+func (m *EinoChatModel) generateOnce(
+	ctx context.Context,
+	chatModel componentmodel.BaseChatModel,
+	messages []ChatMessage,
+	options RequestOptions,
+	onDelta func(string),
+) (string, error) {
+	msg, err := chatModel.Generate(ctx, toSchemaMessages(messages), toModelOptions(options)...)
+	if err != nil {
+		return "", fmt.Errorf("generate model completion: %w", err)
+	}
+
+	fullText := extractAssistantText(msg)
+	if fullText != "" && onDelta != nil {
+		onDelta(fullText)
+	}
+
+	return fullText, nil
+}
+
+func shouldFallbackToGenerate(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) {
+		return looksLikeUnsupportedStreaming(apiErr.Message)
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	return strings.HasSuffix(message, "eof") || looksLikeUnsupportedStreaming(message)
+}
+
+func looksLikeUnsupportedStreaming(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	if normalized == "" || !strings.Contains(normalized, "stream") {
+		return false
+	}
+
+	return strings.Contains(normalized, "not support") ||
+		strings.Contains(normalized, "unsupported")
+}
+
+func extractAssistantText(message *schema.Message) string {
+	if message == nil {
+		return ""
+	}
+
+	if message.Content != "" {
+		return message.Content
+	}
+
+	var builder strings.Builder
+	for _, part := range message.AssistantGenMultiContent {
+		if part.Text == "" {
+			continue
+		}
+		builder.WriteString(part.Text)
+	}
+
+	return builder.String()
 }
 
 func buildChatModelConfig(provider ProviderConfig, options RequestOptions) (*openai.ChatModelConfig, error) {

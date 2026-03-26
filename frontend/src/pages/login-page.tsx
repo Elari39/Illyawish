@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import {
+  useEffect,
+  useState,
+} from 'react'
 import { MessageSquareMore } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -7,20 +10,54 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { LanguageSwitcher } from '../i18n/language-switcher'
 import { useI18n } from '../i18n/use-i18n'
-import { chatApi } from '../lib/api'
+import { authApi, chatApi, isNetworkError } from '../lib/api'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login } = useAuth()
+  const { login, refreshUser } = useAuth()
   const { t } = useI18n()
-  const [username, setUsername] = useState('Elaina')
-  const [password, setPassword] = useState('Eulus209')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isCheckingBootstrap, setIsCheckingBootstrap] = useState(true)
+  const [bootstrapRequired, setBootstrapRequired] = useState(false)
 
   const redirectTo = (location.state as { from?: { pathname?: string } } | null)
     ?.from?.pathname
+
+  useEffect(() => {
+    let isMounted = true
+
+    void (async () => {
+      try {
+        setIsCheckingBootstrap(true)
+        const status = await authApi.bootstrapStatus()
+        if (isMounted) {
+          setBootstrapRequired(status.required)
+        }
+      } catch (nextError) {
+        if (isMounted) {
+          setError(
+            isNetworkError(nextError)
+              ? t('error.backendUnavailable')
+              : nextError instanceof Error
+                ? nextError.message
+                : t('login.error'),
+          )
+        }
+      } finally {
+        if (isMounted) {
+          setIsCheckingBootstrap(false)
+        }
+      }
+    })()
+
+    return () => {
+      isMounted = false
+    }
+  }, [t])
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -28,7 +65,14 @@ export function LoginPage() {
     setError(null)
 
     try {
-      await login({ username, password })
+      if (bootstrapRequired) {
+        await authApi.bootstrap({ username, password })
+        await refreshUser()
+        setBootstrapRequired(false)
+      } else {
+        await login({ username, password })
+      }
+
       if (redirectTo) {
         navigate(redirectTo, { replace: true })
         return
@@ -42,14 +86,20 @@ export function LoginPage() {
 
       navigate('/chat', { replace: true })
     } catch (nextError) {
-      const message =
-        nextError instanceof Error
-          ? nextError.message
-          : t('login.error')
-      setError(message)
+      setError(resolveErrorMessage(nextError, 'login.error'))
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  function resolveErrorMessage(nextError: unknown, fallbackKey: 'login.error') {
+    if (isNetworkError(nextError)) {
+      return t('error.backendUnavailable')
+    }
+
+    return nextError instanceof Error
+      ? nextError.message
+      : t(fallbackKey)
   }
 
   return (
@@ -96,13 +146,17 @@ export function LoginPage() {
           <section className="rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-10">
             <div className="mb-8 space-y-2">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[var(--brand)]">
-                {t('login.signIn')}
+                {bootstrapRequired ? t('login.bootstrapEyebrow') : t('login.signIn')}
               </p>
               <h2 className="text-3xl font-bold tracking-tight">
-                {t('login.continueAs', { name: username || 'Elaina' })}
+                {bootstrapRequired
+                  ? t('login.bootstrapTitle')
+                  : t('login.continueAs', { name: username || t('login.yourAccount') })}
               </h2>
               <p className="text-sm leading-7 text-[var(--muted-foreground)]">
-                {t('login.prefilledDescription')}
+                {bootstrapRequired
+                  ? t('login.bootstrapDescription')
+                  : t('login.prefilledDescription')}
               </p>
             </div>
 
@@ -135,8 +189,16 @@ export function LoginPage() {
                 </div>
               ) : null}
 
-              <Button className="w-full py-3" disabled={isSubmitting} type="submit">
-                {isSubmitting ? t('login.signingIn') : t('login.enterWorkspace')}
+              <Button
+                className="w-full py-3"
+                disabled={isSubmitting || isCheckingBootstrap}
+                type="submit"
+              >
+                {isCheckingBootstrap
+                  ? t('common.loading')
+                  : isSubmitting
+                    ? (bootstrapRequired ? t('login.creatingAccount') : t('login.signingIn'))
+                    : (bootstrapRequired ? t('login.createFirstAdmin') : t('login.enterWorkspace'))}
               </Button>
             </form>
           </section>

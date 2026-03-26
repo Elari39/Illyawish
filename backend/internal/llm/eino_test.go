@@ -12,12 +12,17 @@ import (
 )
 
 type fakeBaseChatModel struct {
-	stream *schema.StreamReader[*schema.Message]
-	err    error
+	stream      *schema.StreamReader[*schema.Message]
+	err         error
+	generated   *schema.Message
+	generateErr error
 }
 
 func (f *fakeBaseChatModel) Generate(context.Context, []*schema.Message, ...einomodel.Option) (*schema.Message, error) {
-	return nil, errors.New("not implemented")
+	if f.generateErr != nil {
+		return nil, f.generateErr
+	}
+	return f.generated, nil
 }
 
 func (f *fakeBaseChatModel) Stream(context.Context, []*schema.Message, ...einomodel.Option) (*schema.StreamReader[*schema.Message], error) {
@@ -103,6 +108,36 @@ func TestEinoChatModelStreamReturnsStartErrors(t *testing.T) {
 	}
 	if err.Error() != "start model stream: upstream unavailable" {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEinoChatModelFallsBackToGenerateOnEOFStartError(t *testing.T) {
+	model := &EinoChatModel{
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &fakeBaseChatModel{
+				err:       errors.New("Post https://example.com/v1/chat/completions: EOF"),
+				generated: schema.AssistantMessage("Fallback response", nil),
+			}, nil
+		},
+	}
+
+	var chunks []string
+	fullText, err := model.Stream(context.Background(), ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		DefaultModel: "default-model",
+	}, nil, RequestOptions{}, func(delta string) {
+		chunks = append(chunks, delta)
+	})
+	if err != nil {
+		t.Fatalf("expected fallback generate to succeed, got error %v", err)
+	}
+
+	if fullText != "Fallback response" {
+		t.Fatalf("expected fallback response, got %q", fullText)
+	}
+	if len(chunks) != 1 || chunks[0] != "Fallback response" {
+		t.Fatalf("expected a single fallback chunk, got %#v", chunks)
 	}
 }
 

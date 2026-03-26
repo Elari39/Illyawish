@@ -19,8 +19,6 @@ import (
 const (
 	defaultConversationTitle = "New chat"
 	defaultSystemPrompt      = "You are a helpful assistant."
-	maxImageAttachments      = 4
-	maxAttachmentBytes       = 6 * 1024 * 1024
 )
 
 var (
@@ -48,6 +46,7 @@ type Service struct {
 	db        *gorm.DB
 	model     llm.ChatModel
 	providers providerResolver
+	uploads   attachmentStore
 
 	activeMu      sync.Mutex
 	activeStreams map[uint]context.CancelFunc
@@ -55,6 +54,12 @@ type Service struct {
 
 type providerResolver interface {
 	ResolveForUser(userID uint) (*provider.ResolvedProvider, error)
+}
+
+type attachmentStore interface {
+	ValidateForUser(userID uint, attachments []models.Attachment) ([]models.Attachment, error)
+	BuildModelAttachments(attachments []models.Attachment) ([]llm.Attachment, error)
+	CleanupUnreferenced(attachments []models.Attachment) error
 }
 
 type StreamEvent struct {
@@ -96,11 +101,17 @@ type SendMessageInput struct {
 	Options     *ConversationSettings `json:"options"`
 }
 
-func NewService(db *gorm.DB, model llm.ChatModel, providers providerResolver) *Service {
+func NewService(
+	db *gorm.DB,
+	model llm.ChatModel,
+	providers providerResolver,
+	uploads attachmentStore,
+) *Service {
 	return &Service{
 		db:            db,
 		model:         model,
 		providers:     providers,
+		uploads:       uploads,
 		activeStreams: map[uint]context.CancelFunc{},
 	}
 }
@@ -228,7 +239,12 @@ func (s *Service) DeleteConversation(userID uint, conversationID uint) error {
 		return err
 	}
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
+	messages, err := s.ListMessages(userID, conversationID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("conversation_id = ?", conversation.ID).Delete(&models.Message{}).Error; err != nil {
 			return fmt.Errorf("delete conversation messages: %w", err)
 		}
@@ -236,7 +252,18 @@ func (s *Service) DeleteConversation(userID uint, conversationID uint) error {
 			return fmt.Errorf("delete conversation: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	return s.cleanupAttachments(messages)
+}
+
+func (s *Service) cleanupAttachments(messages []models.Message) error {
+	if s.uploads == nil {
+		return nil
+	}
+	return s.uploads.CleanupUnreferenced(collectMessageAttachments(messages))
 }
 
 func (s *Service) ListMessages(userID uint, conversationID uint) ([]models.Message, error) {
@@ -275,7 +302,7 @@ func (s *Service) StreamAssistantReply(
 	input SendMessageInput,
 	emit func(StreamEvent) error,
 ) error {
-	normalizedInput, err := s.normalizeSendInput(input)
+	normalizedInput, err := s.normalizeSendInput(userID, input)
 	if err != nil {
 		return err
 	}
@@ -423,7 +450,7 @@ func (s *Service) EditUserMessageAndRegenerate(
 	input SendMessageInput,
 	emit func(StreamEvent) error,
 ) error {
-	normalizedInput, err := s.normalizeSendInput(input)
+	normalizedInput, err := s.normalizeSendInput(userID, input)
 	if err != nil {
 		return err
 	}
@@ -448,7 +475,10 @@ func (s *Service) EditUserMessageAndRegenerate(
 	}
 	defer cleanup()
 
-	var assistantMessage models.Message
+	var (
+		assistantMessage models.Message
+		cleanupMessages  []models.Message
+	)
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
 		message, err := conversationMessageByID(tx, conversation.ID, messageID)
 		if err != nil {
@@ -465,6 +495,14 @@ func (s *Service) EditUserMessageAndRegenerate(
 		if latestUserMessage.ID != message.ID {
 			return ErrInvalidUserEdit
 		}
+
+		var trailingMessages []models.Message
+		if err := tx.Where("conversation_id = ? AND id >= ?", conversation.ID, message.ID).
+			Order("id asc").
+			Find(&trailingMessages).Error; err != nil {
+			return fmt.Errorf("load trailing messages: %w", err)
+		}
+		cleanupMessages = trailingMessages
 
 		if err := tx.Model(message).Updates(map[string]any{
 			"content":     normalizedInput.Content,
@@ -508,6 +546,10 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
+	if err := s.cleanupAttachments(cleanupMessages); err != nil {
+		return err
+	}
+
 	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, settings.SystemPrompt)
 	if err != nil {
 		return err
@@ -516,11 +558,19 @@ func (s *Service) EditUserMessageAndRegenerate(
 	return s.streamIntoAssistantMessage(ctx, &assistantMessage, resolvedProvider.Config, history, settings, emit)
 }
 
-func (s *Service) normalizeSendInput(input SendMessageInput) (*SendMessageInput, error) {
+func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*SendMessageInput, error) {
 	content := strings.TrimSpace(input.Content)
-	attachments, err := normalizeAttachments(input.Attachments)
-	if err != nil {
-		return nil, err
+	attachments := []models.Attachment{}
+	if len(input.Attachments) > 0 {
+		if s.uploads == nil {
+			return nil, requestError{message: "attachments are unavailable"}
+		}
+
+		var err error
+		attachments, err = s.uploads.ValidateForUser(userID, input.Attachments)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if content == "" && len(attachments) == 0 {
 		return nil, requestError{message: "message content or image attachment is required"}
@@ -754,10 +804,23 @@ func (s *Service) historyForModel(
 		if !includeMessageInHistory(message) {
 			continue
 		}
+
+		modelAttachments := []llm.Attachment{}
+		if len(message.Attachments) > 0 {
+			if s.uploads == nil {
+				return nil, requestError{message: "attachments are unavailable"}
+			}
+
+			var err error
+			modelAttachments, err = s.uploads.BuildModelAttachments(message.Attachments)
+			if err != nil {
+				return nil, err
+			}
+		}
 		history = append(history, llm.ChatMessage{
 			Role:        message.Role,
 			Content:     message.Content,
-			Attachments: toLLMAttachments(message.Attachments),
+			Attachments: modelAttachments,
 		})
 	}
 
@@ -811,47 +874,6 @@ func includeMessageInHistory(message models.Message) bool {
 	return strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0
 }
 
-func normalizeAttachments(attachments []models.Attachment) ([]models.Attachment, error) {
-	if len(attachments) > maxImageAttachments {
-		return nil, requestError{message: fmt.Sprintf("a maximum of %d images can be attached", maxImageAttachments)}
-	}
-
-	normalized := make([]models.Attachment, 0, len(attachments))
-	for index, attachment := range attachments {
-		name := strings.TrimSpace(attachment.Name)
-		mimeType := strings.TrimSpace(attachment.MIMEType)
-		url := strings.TrimSpace(attachment.URL)
-
-		if mimeType == "" || !strings.HasPrefix(mimeType, "image/") {
-			return nil, requestError{message: "only image attachments are supported"}
-		}
-		if url == "" || !strings.HasPrefix(url, "data:"+mimeType+";") {
-			return nil, requestError{message: "image attachments must be sent as data URLs"}
-		}
-		if attachment.Size > maxAttachmentBytes {
-			return nil, requestError{message: fmt.Sprintf("image %q is too large", name)}
-		}
-		if len(url) > maxAttachmentBytes*2 {
-			return nil, requestError{message: fmt.Sprintf("image %q is too large", name)}
-		}
-
-		id := strings.TrimSpace(attachment.ID)
-		if id == "" {
-			id = fmt.Sprintf("attachment-%d", index+1)
-		}
-
-		normalized = append(normalized, models.Attachment{
-			ID:       id,
-			Name:     name,
-			MIMEType: mimeType,
-			URL:      url,
-			Size:     attachment.Size,
-		})
-	}
-
-	return normalized, nil
-}
-
 func deriveConversationTitle(content string, attachments []models.Attachment) string {
 	content = strings.TrimSpace(content)
 	if content == "" && len(attachments) > 0 {
@@ -872,21 +894,6 @@ func deriveConversationTitle(content string, attachments []models.Attachment) st
 
 	runes := []rune(content)
 	return string(runes[:maxRunes]) + "..."
-}
-
-func toLLMAttachments(attachments []models.Attachment) []llm.Attachment {
-	result := make([]llm.Attachment, 0, len(attachments))
-	for _, attachment := range attachments {
-		if attachment.URL == "" {
-			continue
-		}
-		result = append(result, llm.Attachment{
-			Name:     attachment.Name,
-			MIMEType: attachment.MIMEType,
-			URL:      attachment.URL,
-		})
-	}
-	return result
 }
 
 func conversationMessageByID(tx *gorm.DB, conversationID uint, messageID uint) (*models.Message, error) {
@@ -975,4 +982,12 @@ func maxInt(left int, right int) int {
 		return left
 	}
 	return right
+}
+
+func collectMessageAttachments(messages []models.Message) []models.Attachment {
+	attachments := make([]models.Attachment, 0)
+	for _, message := range messages {
+		attachments = append(attachments, message.Attachments...)
+	}
+	return attachments
 }

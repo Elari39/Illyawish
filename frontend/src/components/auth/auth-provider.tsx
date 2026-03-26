@@ -4,7 +4,12 @@ import {
   type ReactNode,
 } from 'react'
 
-import { authApi, isUnauthorizedError } from '../../lib/api'
+import {
+  AUTH_UNAUTHORIZED_EVENT,
+  authApi,
+  isNetworkError,
+  isUnauthorizedError,
+} from '../../lib/api'
 import type { LoginPayload, User } from '../../types/chat'
 import { AuthContext } from './auth-context'
 
@@ -16,12 +21,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshUser()
   }, [])
 
+  useEffect(() => {
+    function handleUnauthorized() {
+      setUser(null)
+      setIsLoading(false)
+    }
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
+    }
+  }, [])
+
   async function refreshUser() {
     try {
       const nextUser = await authApi.me()
       setUser(nextUser)
     } catch (error) {
-      if (!isUnauthorizedError(error)) {
+      if (!isUnauthorizedError(error) && !isNetworkError(error)) {
         console.error(error)
       }
       setUser(null)

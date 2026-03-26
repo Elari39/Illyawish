@@ -21,6 +21,17 @@ type Attachment struct {
 	Size     int64  `json:"size"`
 }
 
+type StoredAttachment struct {
+	ID         string `gorm:"primaryKey;size:64"`
+	UserID     uint   `gorm:"index;not null"`
+	Name       string `gorm:"size:255;not null"`
+	MIMEType   string `gorm:"size:128;not null"`
+	Size       int64  `gorm:"not null"`
+	StorageKey string `gorm:"size:255;not null;uniqueIndex"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type User struct {
 	ID                 uint   `gorm:"primaryKey"`
 	Username           string `gorm:"uniqueIndex;size:64;not null"`
@@ -29,6 +40,7 @@ type User struct {
 	UpdatedAt          time.Time
 	Conversations      []Conversation
 	LLMProviderPresets []LLMProviderPreset
+	Attachments        []StoredAttachment
 }
 
 type Conversation struct {

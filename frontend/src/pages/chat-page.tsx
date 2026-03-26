@@ -9,8 +9,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SetStateAction,
 } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import {
   Check,
   ChevronLeft,
@@ -29,13 +27,15 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../components/auth/use-auth'
+import { MarkdownContent } from '../components/chat/markdown-content'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import type { I18nContextValue } from '../i18n/context'
 import { LanguageSwitcher } from '../i18n/language-switcher'
 import { useI18n } from '../i18n/use-i18n'
-import { chatApi, providerApi } from '../lib/api'
+import { attachmentApi, chatApi, providerApi } from '../lib/api'
+import { ApiError } from '../lib/http'
 import {
   cn,
   createLocalISOString,
@@ -65,8 +65,9 @@ interface ComposerImage {
   mimeType: string
   size: number
   previewUrl: string
-  sourceUrl?: string
+  attachment?: Attachment
   file?: File
+  isUploading?: boolean
   revokeOnCleanup: boolean
 }
 
@@ -77,6 +78,29 @@ interface ProviderFormState {
   baseURL: string
   apiKey: string
   defaultModel: string
+}
+
+type ToastVariant = 'success' | 'error' | 'info'
+
+interface ToastState {
+  id: number
+  message: string
+  variant: ToastVariant
+}
+
+interface ConfirmationState {
+  title: string
+  description?: string
+  confirmLabel: string
+  variant?: 'danger' | 'primary'
+  onConfirm: () => void | Promise<void>
+}
+
+interface PromptState {
+  title: string
+  initialValue: string
+  confirmLabel: string
+  onSubmit: (value: string) => void | Promise<void>
 }
 
 const defaultConversationSettings: ConversationSettings = {
@@ -100,6 +124,11 @@ export function ChatPage() {
   const selectedImagesRef = useRef<ComposerImage[]>([])
   const skipAutoResumeRef = useRef(false)
   const streamingConversationIdRef = useRef<number | null>(null)
+  const conversationsRef = useRef<Conversation[]>([])
+  const activeConversationIdRef = useRef<number | null>(null)
+  const editingProviderIdRef = useRef<number | null>(null)
+  const isLoadingMoreConversationsRef = useRef(false)
+  const conversationQueryKeyRef = useRef('')
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null
@@ -134,7 +163,11 @@ export function ChatPage() {
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
   const [isLoadingProviders, setIsLoadingProviders] = useState(false)
   const [isSavingProvider, setIsSavingProvider] = useState(false)
+  const [isTestingProvider, setIsTestingProvider] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const [toasts, setToasts] = useState<ToastState[]>([])
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null)
+  const [promptState, setPromptState] = useState<PromptState | null>(null)
   const deferredConversationSearch = useDeferredValue(conversationSearch.trim())
 
   const currentConversation =
@@ -142,12 +175,25 @@ export function ChatPage() {
     null
   const latestUserMessage = findLatestMessageByRole(messages, 'user')
   const latestAssistantMessage = findLatestMessageByRole(messages, 'assistant')
+  const hasPendingUploads = selectedImages.some((image) => image.isUploading)
   const canSubmitComposer =
     !isSending &&
+    !hasPendingUploads &&
     (composerValue.trim().length > 0 || selectedImages.length > 0)
+  const conversationQueryKey = [
+    showArchived ? 'archived' : 'active',
+    deferredConversationSearch.toLowerCase(),
+  ].join(':')
+  const restorableConversationId = resolveRestorableConversationId(
+    conversations,
+    readLastConversationId(),
+    showArchived,
+    deferredConversationSearch,
+  )
 
   useEffect(() => {
     let cancelled = false
+    const requestQueryKey = conversationQueryKey
 
     async function fetchConversations() {
       try {
@@ -160,12 +206,14 @@ export function ChatPage() {
           offset: 0,
         })
 
-        if (cancelled) {
+        if (
+          cancelled ||
+          conversationQueryKeyRef.current !== requestQueryKey
+        ) {
           return
         }
 
-        setConversations(sortConversations(result.conversations))
-        setConversationTotal(result.total)
+        applyConversationPage(result)
       } catch (error) {
         if (cancelled) {
           return
@@ -188,7 +236,7 @@ export function ChatPage() {
     return () => {
       cancelled = true
     }
-  }, [deferredConversationSearch, showArchived, t])
+  }, [conversationQueryKey, deferredConversationSearch, showArchived, t])
 
   useEffect(() => {
     if (!activeConversationId) {
@@ -204,6 +252,7 @@ export function ChatPage() {
     }
 
     const targetConversationId = activeConversationId
+    let cancelled = false
 
     async function syncMessages() {
       try {
@@ -211,43 +260,48 @@ export function ChatPage() {
         setChatError(null)
         const response =
           await chatApi.getConversationMessages(targetConversationId)
+        if (cancelled) {
+          return
+        }
         setMessages(response.messages)
-        setConversations((previous) => {
-          const filtered = previous.filter(
-            (item) => item.id !== response.conversation.id,
-          )
-          if (
-            response.conversation.isArchived !== showArchived ||
-            (deferredConversationSearch &&
-              !response.conversation.title
-                .toLowerCase()
-                .includes(deferredConversationSearch.toLowerCase()))
-          ) {
-            return sortConversations(filtered)
-          }
-          return sortConversations([response.conversation, ...filtered])
-        })
         setSettingsDraft(response.conversation.settings)
-        localStorage.setItem(
-          LAST_CONVERSATION_STORAGE_KEY,
-          String(targetConversationId),
+        setConversations((previous) =>
+          syncConversationList(
+            previous,
+            response.conversation,
+            showArchived,
+            deferredConversationSearch,
+          ),
         )
+        writeLastConversationId(response.conversation.id)
       } catch (error) {
+        if (cancelled) {
+          return
+        }
         const message =
           error instanceof Error
             ? error.message
             : t('error.loadMessages')
         setChatError(message)
         setMessages([])
-        if (message.toLowerCase().includes('not found')) {
+        if (isConversationNotFoundError(error)) {
+          clearLastConversationId(targetConversationId)
+          skipAutoResumeRef.current = true
+          activeConversationIdRef.current = null
           navigate('/chat', { replace: true })
         }
       } finally {
-        setIsLoadingMessages(false)
+        if (!cancelled) {
+          setIsLoadingMessages(false)
+        }
       }
     }
 
     void syncMessages()
+
+    return () => {
+      cancelled = true
+    }
   }, [activeConversationId, deferredConversationSearch, navigate, showArchived, t])
 
   useEffect(() => {
@@ -266,6 +320,26 @@ export function ChatPage() {
   }, [selectedImages])
 
   useEffect(() => {
+    conversationsRef.current = conversations
+  }, [conversations])
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+  }, [activeConversationId])
+
+  useEffect(() => {
+    editingProviderIdRef.current = editingProviderId
+  }, [editingProviderId])
+
+  useEffect(() => {
+    isLoadingMoreConversationsRef.current = isLoadingMoreConversations
+  }, [isLoadingMoreConversations])
+
+  useEffect(() => {
+    conversationQueryKeyRef.current = conversationQueryKey
+  }, [conversationQueryKey])
+
+  useEffect(() => {
     return () => {
       cleanupComposerImages(selectedImagesRef.current)
     }
@@ -274,10 +348,7 @@ export function ChatPage() {
   useEffect(() => {
     if (activeConversationId) {
       skipAutoResumeRef.current = false
-      localStorage.setItem(
-        LAST_CONVERSATION_STORAGE_KEY,
-        String(activeConversationId),
-      )
+      writeLastConversationId(activeConversationId)
     }
   }, [activeConversationId])
 
@@ -302,7 +373,13 @@ export function ChatPage() {
         if (cancelled) {
           return
         }
-        applyProviderState(nextState)
+        const nextProviderEditor = resolveProviderEditorState(
+          nextState,
+          editingProviderIdRef.current,
+        )
+        setProviderState(nextState)
+        setEditingProviderId(nextProviderEditor.editingProviderId)
+        setProviderForm(nextProviderEditor.providerForm)
       } catch (error) {
         if (cancelled) {
           return
@@ -330,38 +407,30 @@ export function ChatPage() {
     if (
       activeConversationId ||
       isLoadingConversations ||
-      showArchived ||
-      deferredConversationSearch !== '' ||
-      skipAutoResumeRef.current
+      skipAutoResumeRef.current ||
+      restorableConversationId == null
     ) {
       return
     }
 
-    const lastConversationId = Number(
-      localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY),
-    )
-    if (!lastConversationId) {
-      return
-    }
-
-    const hasConversation = conversations.some(
-      (conversation) => conversation.id === lastConversationId,
-    )
-    if (hasConversation) {
-      navigate(`/chat/${lastConversationId}`, { replace: true })
-    }
+    navigate(`/chat/${restorableConversationId}`, { replace: true })
   }, [
     activeConversationId,
-    conversations,
-    deferredConversationSearch,
     isLoadingConversations,
     navigate,
-    showArchived,
+    restorableConversationId,
   ])
 
   async function loadConversations({ append = false }: { append?: boolean } = {}) {
+    if (append && isLoadingMoreConversationsRef.current) {
+      return
+    }
+
+    const requestQueryKey = conversationQueryKeyRef.current
+
     try {
       if (append) {
+        isLoadingMoreConversationsRef.current = true
         setIsLoadingMoreConversations(true)
       } else {
         setIsLoadingConversations(true)
@@ -371,17 +440,14 @@ export function ChatPage() {
         search: deferredConversationSearch || undefined,
         archived: showArchived,
         limit: CONVERSATION_PAGE_SIZE,
-        offset: append ? conversations.length : 0,
+        offset: append ? conversationsRef.current.length : 0,
       })
 
-      setConversations((previous) =>
-        append
-          ? sortConversations(
-              dedupeConversations([...previous, ...result.conversations]),
-            )
-          : sortConversations(result.conversations),
-      )
-      setConversationTotal(result.total)
+      if (conversationQueryKeyRef.current !== requestQueryKey) {
+        return
+      }
+
+      applyConversationPage(result, append)
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -389,51 +455,108 @@ export function ChatPage() {
           : t('error.loadConversations'),
       )
     } finally {
+      if (append) {
+        isLoadingMoreConversationsRef.current = false
+      }
       setIsLoadingConversations(false)
       setIsLoadingMoreConversations(false)
     }
   }
 
+  function applyConversationPage(
+    result: {
+      conversations: Conversation[]
+      total: number
+    },
+    append = false,
+  ) {
+    setConversations((previous) =>
+      append
+        ? sortConversations(
+            dedupeConversations([...previous, ...result.conversations]),
+          )
+        : sortConversations(result.conversations),
+    )
+    setConversationTotal(result.total)
+  }
+
   function syncConversationIntoList(conversation: Conversation) {
-    setConversations((previous) => {
-      const filtered = previous.filter((item) => item.id !== conversation.id)
-      if (
-        conversation.isArchived !== showArchived ||
-        (deferredConversationSearch &&
-          !conversation.title
-            .toLowerCase()
-            .includes(deferredConversationSearch.toLowerCase()))
-      ) {
-        return sortConversations(filtered)
+    setConversations((previous) =>
+      syncConversationList(
+        previous,
+        conversation,
+        showArchived,
+        deferredConversationSearch,
+      ),
+    )
+  }
+
+  function applyConversationSnapshot(
+    response: {
+      conversation: Conversation
+      messages: Message[]
+    },
+    replaceMessages: boolean,
+  ) {
+    syncConversationIntoList(response.conversation)
+    if (replaceMessages) {
+      setMessages(response.messages)
+      setSettingsDraft(response.conversation.settings)
+    }
+    writeLastConversationId(response.conversation.id)
+  }
+
+  async function reconcileConversationState(
+    conversationId: number,
+    { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
+  ) {
+    try {
+      const response = await chatApi.getConversationMessages(conversationId)
+      applyConversationSnapshot(
+        response,
+        activeConversationIdRef.current === conversationId,
+      )
+      if (clearErrorOnSuccess) {
+        setChatError(null)
       }
-      return sortConversations([conversation, ...filtered])
-    })
+      return response
+    } catch (error) {
+      if (isConversationNotFoundError(error)) {
+        clearLastConversationId(conversationId)
+        if (activeConversationIdRef.current === conversationId) {
+          skipAutoResumeRef.current = true
+          activeConversationIdRef.current = null
+          setMessages([])
+          navigate('/chat', { replace: true })
+        }
+      }
+      return null
+    }
   }
 
   function handleOpenImagePicker() {
     inputRef.current?.click()
   }
 
+  function showToast(message: string, variant: ToastVariant = 'info') {
+    const toastId = Date.now() + Math.random()
+    setToasts((previous) => [...previous, { id: toastId, message, variant }])
+    window.setTimeout(() => {
+      setToasts((previous) => previous.filter((toast) => toast.id !== toastId))
+    }, 2800)
+  }
+
   function applyProviderState(
     nextState: ProviderState,
-    preferredPresetId: number | null = editingProviderId,
+    preferredPresetId: number | null = editingProviderIdRef.current,
   ) {
+    const nextProviderEditor = resolveProviderEditorState(
+      nextState,
+      preferredPresetId,
+    )
     setProviderState(nextState)
-
-    const preferredPreset =
-      nextState.presets.find((preset) => preset.id === preferredPresetId) ?? null
-    const activePreset =
-      nextState.presets.find((preset) => preset.isActive) ?? null
-    const nextPreset = preferredPreset ?? activePreset
-
-    if (nextPreset) {
-      setEditingProviderId(nextPreset.id)
-      setProviderForm(createProviderForm(nextState.fallback, nextPreset))
-      return
-    }
-
-    setEditingProviderId(null)
-    setProviderForm(createProviderForm(nextState.fallback))
+    setEditingProviderId(nextProviderEditor.editingProviderId)
+    setProviderForm(nextProviderEditor.providerForm)
   }
 
   function handleOpenSettings() {
@@ -473,6 +596,10 @@ export function ChatPage() {
           })
 
       applyProviderState(nextState, editingProviderId ?? nextState.activePresetId)
+      showToast(
+        editingProviderId ? t('settings.savePreset') : t('settings.createPreset'),
+        'success',
+      )
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -484,6 +611,30 @@ export function ChatPage() {
     }
   }
 
+  async function handleTestProvider() {
+    setIsTestingProvider(true)
+    setChatError(null)
+
+    try {
+      const result = await providerApi.test({
+        ...(editingProviderId ? { providerId: editingProviderId } : {}),
+        baseURL: providerForm.baseURL,
+        ...(providerForm.apiKey.trim() ? { apiKey: providerForm.apiKey } : {}),
+        defaultModel: providerForm.defaultModel,
+      })
+      showToast(result.message, 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t('error.saveProviderSettings')
+      setChatError(message)
+      showToast(message, 'error')
+    } finally {
+      setIsTestingProvider(false)
+    }
+  }
+
   async function handleActivateProvider(providerId: number) {
     setIsSavingProvider(true)
     setChatError(null)
@@ -491,6 +642,7 @@ export function ChatPage() {
     try {
       const nextState = await providerApi.activate(providerId)
       applyProviderState(nextState, providerId)
+      showToast(t('settings.setActive'), 'success')
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -502,32 +654,34 @@ export function ChatPage() {
     }
   }
 
-  async function handleDeleteProvider(preset: ProviderPreset) {
-    const confirmed = window.confirm(
-      t('confirm.deleteProviderPreset', { name: preset.name }),
-    )
-    if (!confirmed) {
-      return
-    }
+  function handleDeleteProvider(preset: ProviderPreset) {
+    setConfirmation({
+      title: t('common.delete'),
+      description: t('confirm.deleteProviderPreset', { name: preset.name }),
+      confirmLabel: t('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        setIsSavingProvider(true)
+        setChatError(null)
 
-    setIsSavingProvider(true)
-    setChatError(null)
-
-    try {
-      const nextState = await providerApi.delete(preset.id)
-      applyProviderState(
-        nextState,
-        editingProviderId === preset.id ? null : editingProviderId,
-      )
-    } catch (error) {
-      setChatError(
-        error instanceof Error
-          ? error.message
-          : t('error.deleteProviderPreset'),
-      )
-    } finally {
-      setIsSavingProvider(false)
-    }
+        try {
+          const nextState = await providerApi.delete(preset.id)
+          applyProviderState(
+            nextState,
+            editingProviderId === preset.id ? null : editingProviderId,
+          )
+          showToast(t('common.delete'), 'success')
+        } catch (error) {
+          setChatError(
+            error instanceof Error
+              ? error.message
+              : t('error.deleteProviderPreset'),
+          )
+        } finally {
+          setIsSavingProvider(false)
+        }
+      },
+    })
   }
 
   function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
@@ -535,8 +689,12 @@ export function ChatPage() {
     if (files.length === 0) {
       return
     }
+    event.target.value = ''
 
-    const nextImages: ComposerImage[] = []
+    void uploadSelectedImages(files)
+  }
+
+  async function uploadSelectedImages(files: File[]) {
     for (const file of files) {
       if (!file.type.startsWith('image/')) {
         setChatError(t('error.onlyImages'))
@@ -546,43 +704,59 @@ export function ChatPage() {
         setChatError(t('error.imageTooLarge', { name: file.name }))
         continue
       }
-      nextImages.push({
-        id: `${file.name}-${file.lastModified}`,
+      if (selectedImagesRef.current.length >= MAX_IMAGE_ATTACHMENTS) {
+        setChatError(t('error.maxImages', { count: MAX_IMAGE_ATTACHMENTS }))
+        break
+      }
+
+      const imageId = `${file.name}-${file.lastModified}-${Date.now()}`
+      const draftImage: ComposerImage = {
+        id: imageId,
         name: file.name,
         mimeType: file.type,
         size: file.size,
         previewUrl: URL.createObjectURL(file),
         file,
+        isUploading: true,
         revokeOnCleanup: true,
-      })
-    }
-
-    if (nextImages.length === 0) {
-      event.target.value = ''
-      return
-    }
-
-    setSelectedImages((previous) => {
-      const mergedImages = dedupeComposerImages([...previous, ...nextImages])
-      const keptImages = mergedImages.slice(0, MAX_IMAGE_ATTACHMENTS)
-
-      for (const image of mergedImages.slice(MAX_IMAGE_ATTACHMENTS)) {
-        if (image.revokeOnCleanup) {
-          URL.revokeObjectURL(image.previewUrl)
-        }
       }
 
-      if (mergedImages.length > MAX_IMAGE_ATTACHMENTS) {
-        setChatError(
-          t('error.maxImages', { count: MAX_IMAGE_ATTACHMENTS }),
+      setSelectedImages((previous) => [...previous, draftImage])
+
+      try {
+        const attachment = await attachmentApi.upload(file)
+        setSelectedImages((previous) =>
+          previous.map((image) =>
+            image.id === imageId
+              ? {
+                  ...image,
+                  attachment,
+                  isUploading: false,
+                }
+              : image,
+          ),
         )
-      } else {
         setChatError(null)
-      }
+      } catch (error) {
+        setSelectedImages((previous) => {
+          const failedImage = previous.find((image) => image.id === imageId)
+          if (failedImage?.revokeOnCleanup) {
+            URL.revokeObjectURL(failedImage.previewUrl)
+          }
+          return previous.filter((image) => image.id !== imageId)
+        })
 
-      return keptImages
-    })
-    event.target.value = ''
+        const message =
+          error instanceof Error
+            ? error.message
+            : t('error.uploadImageGeneric')
+        setChatError(message || t('error.uploadImage', { name: file.name }))
+        showToast(
+          message || t('error.uploadImage', { name: file.name }),
+          'error',
+        )
+      }
+    }
   }
 
   function removeSelectedImage(id: string) {
@@ -600,6 +774,7 @@ export function ChatPage() {
       return
     }
     skipAutoResumeRef.current = true
+    activeConversationIdRef.current = null
     setSidebarOpen(false)
     setShowArchived(false)
     setEditingMessageId(null)
@@ -611,52 +786,59 @@ export function ChatPage() {
     navigate('/chat')
   }
 
-  async function handleDeleteConversation(conversationId: number) {
-    const confirmed = window.confirm(t('confirm.deleteConversation'))
-    if (!confirmed) {
-      return
-    }
-
-    try {
-      await chatApi.deleteConversation(conversationId)
-      setConversations((previous) =>
-        previous.filter((conversation) => conversation.id !== conversationId),
-      )
-      setConversationTotal((previous) => Math.max(previous - 1, 0))
-      if (activeConversationId === conversationId) {
-        navigate('/chat', { replace: true })
-        setMessages([])
-      }
-    } catch (error) {
-      setChatError(
-        error instanceof Error
-          ? error.message
-          : t('error.deleteConversation'),
-      )
-    }
+  function handleDeleteConversation(conversationId: number) {
+    setConfirmation({
+      title: t('common.delete'),
+      description: t('confirm.deleteConversation'),
+      confirmLabel: t('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await chatApi.deleteConversation(conversationId)
+          setConversations((previous) =>
+            previous.filter((conversation) => conversation.id !== conversationId),
+          )
+          setConversationTotal((previous) => Math.max(previous - 1, 0))
+          clearLastConversationId(conversationId)
+          if (activeConversationId === conversationId) {
+            skipAutoResumeRef.current = true
+            activeConversationIdRef.current = null
+            navigate('/chat', { replace: true })
+            setMessages([])
+          }
+          showToast(t('common.delete'), 'success')
+        } catch (error) {
+          setChatError(
+            error instanceof Error
+              ? error.message
+              : t('error.deleteConversation'),
+          )
+        }
+      },
+    })
   }
 
-  async function handleRenameConversation(conversation: Conversation) {
-    const nextTitle = window.prompt(
-      t('prompt.renameConversation'),
-      conversation.title,
-    )
-    if (nextTitle === null) {
-      return
-    }
-
-    try {
-      const updatedConversation = await chatApi.updateConversation(conversation.id, {
-        title: nextTitle,
-      })
-      syncConversationIntoList(updatedConversation)
-    } catch (error) {
-      setChatError(
-        error instanceof Error
-          ? error.message
-          : t('error.renameConversation'),
-      )
-    }
+  function handleRenameConversation(conversation: Conversation) {
+    setPromptState({
+      title: t('prompt.renameConversation'),
+      initialValue: conversation.title,
+      confirmLabel: t('sidebar.rename'),
+      onSubmit: async (nextTitle) => {
+        try {
+          const updatedConversation = await chatApi.updateConversation(conversation.id, {
+            title: nextTitle,
+          })
+          syncConversationIntoList(updatedConversation)
+          showToast(t('sidebar.rename'), 'success')
+        } catch (error) {
+          setChatError(
+            error instanceof Error
+              ? error.message
+              : t('error.renameConversation'),
+          )
+        }
+      },
+    })
   }
 
   async function handleTogglePinned(conversation: Conversation) {
@@ -665,6 +847,10 @@ export function ChatPage() {
         isPinned: !conversation.isPinned,
       })
       syncConversationIntoList(updatedConversation)
+      showToast(
+        conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin'),
+        'success',
+      )
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -690,9 +876,16 @@ export function ChatPage() {
       }
 
       if (activeConversationId === conversation.id && nextArchived !== showArchived) {
+        clearLastConversationId(conversation.id)
+        skipAutoResumeRef.current = true
+        activeConversationIdRef.current = null
         navigate('/chat', { replace: true })
         setMessages([])
       }
+      showToast(
+        nextArchived ? t('sidebar.archive') : t('sidebar.restore'),
+        'success',
+      )
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -740,10 +933,10 @@ export function ChatPage() {
     setChatError(null)
 
     const optimisticAssistantId = -(Date.now() + 1)
+    let conversationId = activeConversationId
 
     try {
       let conversation = currentConversation
-      let conversationId = activeConversationId
 
       if (!conversationId) {
         const createdConversation = await chatApi.createConversation()
@@ -756,6 +949,7 @@ export function ChatPage() {
         conversation = configuredConversation
         conversationId = configuredConversation.id
         streamingConversationIdRef.current = conversationId
+        activeConversationIdRef.current = conversationId
         syncConversationIntoList(configuredConversation)
         navigate(`/chat/${conversationId}`)
       } else {
@@ -803,6 +997,7 @@ export function ChatPage() {
         },
       )
 
+      await reconcileConversationState(conversationId)
       await loadConversations()
     } catch (error) {
       setChatError(
@@ -820,6 +1015,11 @@ export function ChatPage() {
           }
         }),
       )
+      if (conversationId) {
+        await reconcileConversationState(conversationId, {
+          clearErrorOnSuccess: false,
+        })
+      }
     } finally {
       streamingConversationIdRef.current = null
       setIsSending(false)
@@ -882,6 +1082,7 @@ export function ChatPage() {
         },
       )
 
+      await reconcileConversationState(conversationId)
       await loadConversations()
     } catch (error) {
       setChatError(
@@ -898,6 +1099,9 @@ export function ChatPage() {
             : message,
         ),
       )
+      await reconcileConversationState(conversationId, {
+        clearErrorOnSuccess: false,
+      })
     } finally {
       streamingConversationIdRef.current = null
       setIsSending(false)
@@ -935,6 +1139,7 @@ export function ChatPage() {
         },
       )
 
+      await reconcileConversationState(activeConversationId)
       await loadConversations()
     } catch (error) {
       setChatError(
@@ -951,6 +1156,9 @@ export function ChatPage() {
             : item,
         ),
       )
+      await reconcileConversationState(activeConversationId, {
+        clearErrorOnSuccess: false,
+      })
     } finally {
       streamingConversationIdRef.current = null
       setIsSending(false)
@@ -987,6 +1195,7 @@ export function ChatPage() {
         },
       )
 
+      await reconcileConversationState(activeConversationId)
       await loadConversations()
     } catch (error) {
       setChatError(
@@ -1003,6 +1212,9 @@ export function ChatPage() {
             : item,
         ),
       )
+      await reconcileConversationState(activeConversationId, {
+        clearErrorOnSuccess: false,
+      })
     } finally {
       streamingConversationIdRef.current = null
       setIsSending(false)
@@ -1346,19 +1558,17 @@ export function ChatPage() {
               ))}
             </div>
           ) : (
-            <EmptyState
-              hasConversations={conversations.length > 0}
-              onContinueLast={() => {
-                const lastConversationId = Number(
-                  localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY),
-                )
-                if (lastConversationId) {
-                  navigate(`/chat/${lastConversationId}`)
-                }
-              }}
-            />
-          )}
-        </div>
+          <EmptyState
+            hasConversations={conversations.length > 0}
+            hasLastConversation={restorableConversationId != null}
+            onContinueLast={() => {
+              if (restorableConversationId) {
+                navigate(`/chat/${restorableConversationId}`)
+              }
+            }}
+          />
+        )}
+      </div>
 
         <footer className="border-t border-[var(--line)] bg-[var(--app-bg)] px-4 py-4 md:px-8 md:py-5">
           <div className="mx-auto max-w-3xl space-y-3">
@@ -1383,8 +1593,14 @@ export function ChatPage() {
                       className="h-20 w-20 rounded-lg object-cover"
                       src={image.previewUrl}
                     />
+                    {image.isUploading ? (
+                      <div className="absolute inset-x-1 bottom-1 rounded-lg bg-black/70 px-2 py-1 text-center text-[11px] text-white">
+                        {t('common.loading')}
+                      </div>
+                    ) : null}
                     <button
                       className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white"
+                      disabled={image.isUploading}
                       onClick={() => removeSelectedImage(image.id)}
                       type="button"
                     >
@@ -1428,7 +1644,7 @@ export function ChatPage() {
                 </button>
 
                 <p className="px-3 text-xs text-[var(--muted-foreground)]">
-                  {t('chat.shortcutHint')}
+                  {hasPendingUploads ? t('common.loading') : t('chat.shortcutHint')}
                 </p>
 
                 <button
@@ -1454,6 +1670,7 @@ export function ChatPage() {
         isLoadingProviders={isLoadingProviders}
         isOpen={isSettingsOpen}
         isSavingProvider={isSavingProvider}
+        isTestingProvider={isTestingProvider}
         isSaving={isSavingSettings}
         onClose={() => setIsSettingsOpen(false)}
         onDeleteProvider={handleDeleteProvider}
@@ -1463,6 +1680,7 @@ export function ChatPage() {
         onResetProvider={handleStartNewProvider}
         onSave={() => void handleSaveSettings()}
         onSaveProvider={() => void handleSaveProvider()}
+        onTestProvider={() => void handleTestProvider()}
         onActivateProvider={(providerId) => void handleActivateProvider(providerId)}
         onStartNewProvider={handleStartNewProvider}
         providerForm={providerForm}
@@ -1479,6 +1697,21 @@ export function ChatPage() {
         onChange={handleImageSelection}
         ref={inputRef}
         type="file"
+      />
+
+      <ConfirmationDialog
+        confirmation={confirmation}
+        onClose={() => setConfirmation(null)}
+      />
+      <PromptDialog
+        promptState={promptState}
+        onClose={() => setPromptState(null)}
+      />
+      <ToastViewport
+        toasts={toasts}
+        onDismiss={(toastId) =>
+          setToasts((previous) => previous.filter((toast) => toast.id !== toastId))
+        }
       />
     </div>
   )
@@ -1817,6 +2050,7 @@ function SettingsPanel({
   isLoadingProviders,
   isOpen,
   isSavingProvider,
+  isTestingProvider,
   isSaving,
   onActivateProvider,
   settings,
@@ -1832,6 +2066,7 @@ function SettingsPanel({
   onResetProvider,
   onSave,
   onSaveProvider,
+  onTestProvider,
   onStartNewProvider,
 }: {
   activeTab: SettingsTab
@@ -1839,6 +2074,7 @@ function SettingsPanel({
   isLoadingProviders: boolean
   isOpen: boolean
   isSavingProvider: boolean
+  isTestingProvider: boolean
   isSaving: boolean
   onActivateProvider: (providerId: number) => void
   settings: ConversationSettings
@@ -1854,6 +2090,7 @@ function SettingsPanel({
   onResetProvider: () => void
   onSave: () => void
   onSaveProvider: () => void
+  onTestProvider: () => void
   onStartNewProvider: () => void
 }) {
   const { t } = useI18n()
@@ -2244,6 +2481,15 @@ function SettingsPanel({
               <Button onClick={onResetProvider} variant="ghost">
                 {editingProviderId ? t('settings.newPreset') : t('settings.resetForm')}
               </Button>
+              <Button
+                disabled={isLoadingProviders || isSavingProvider || isTestingProvider}
+                onClick={onTestProvider}
+                variant="secondary"
+              >
+                {isTestingProvider
+                  ? t('settings.testingConnection')
+                  : t('settings.testConnection')}
+              </Button>
               <Button onClick={onClose} variant="secondary">
                 {t('common.close')}
               </Button>
@@ -2265,17 +2511,169 @@ function SettingsPanel({
   )
 }
 
+function ConfirmationDialog({
+  confirmation,
+  onClose,
+}: {
+  confirmation: ConfirmationState | null
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  if (!confirmation) {
+    return null
+  }
+
+  const currentConfirmation = confirmation
+
+  async function handleConfirm() {
+    setIsSubmitting(true)
+    try {
+      await currentConfirmation.onConfirm()
+      onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
+      <div className="w-full max-w-md rounded-[1.75rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">
+          {currentConfirmation.title}
+        </h3>
+        {currentConfirmation.description ? (
+          <p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)]">
+            {currentConfirmation.description}
+          </p>
+        ) : null}
+        <div className="mt-6 flex justify-end gap-3">
+          <Button onClick={onClose} variant="secondary">
+            {t('common.cancel')}
+          </Button>
+          <Button
+            disabled={isSubmitting}
+            onClick={() => void handleConfirm()}
+            variant={currentConfirmation.variant === 'danger' ? 'danger' : 'primary'}
+          >
+            {isSubmitting ? t('common.saving') : currentConfirmation.confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PromptDialog({
+  promptState,
+  onClose,
+}: {
+  promptState: PromptState | null
+  onClose: () => void
+}) {
+  const { t } = useI18n()
+  const [value, setValue] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    setValue(promptState?.initialValue ?? '')
+  }, [promptState])
+
+  if (!promptState) {
+    return null
+  }
+
+  const currentPrompt = promptState
+
+  async function handleSubmit() {
+    setIsSubmitting(true)
+    try {
+      await currentPrompt.onSubmit(value)
+      onClose()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4">
+      <div className="w-full max-w-md rounded-[1.75rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]">
+        <h3 className="text-lg font-semibold text-[var(--foreground)]">
+          {currentPrompt.title}
+        </h3>
+        <div className="mt-4">
+          <Input
+            autoFocus
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </div>
+        <div className="mt-6 flex justify-end gap-3">
+          <Button onClick={onClose} variant="secondary">
+            {t('common.cancel')}
+          </Button>
+          <Button disabled={isSubmitting} onClick={() => void handleSubmit()}>
+            {isSubmitting ? t('common.saving') : currentPrompt.confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ToastViewport({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastState[]
+  onDismiss: (toastId: number) => void
+}) {
+  if (toasts.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-3">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={cn(
+            'pointer-events-auto rounded-2xl border px-4 py-3 shadow-[var(--shadow-md)] backdrop-blur',
+            toast.variant === 'success' &&
+              'border-[var(--brand)]/15 bg-[var(--brand)]/8 text-[var(--foreground)]',
+            toast.variant === 'error' &&
+              'border-[var(--danger)]/15 bg-[var(--danger)]/8 text-[var(--foreground)]',
+            toast.variant === 'info' &&
+              'border-[var(--line)] bg-white/95 text-[var(--foreground)]',
+          )}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm leading-6">{toast.message}</p>
+            <button
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-black/5"
+              onClick={() => onDismiss(toast.id)}
+              type="button"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EmptyState({
   hasConversations,
+  hasLastConversation,
   onContinueLast,
 }: {
   hasConversations: boolean
+  hasLastConversation: boolean
   onContinueLast: () => void
 }) {
   const { t } = useI18n()
-  const hasLastConversation = Boolean(
-    localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY),
-  )
 
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl items-center justify-center">
@@ -2364,30 +2762,7 @@ function MessageBubble({
         {isFailed ? <span className="text-[var(--danger)]">{t('message.failed')}</span> : null}
         {isCancelled ? <span className="text-[var(--danger)]">{t('message.stopped')}</span> : null}
       </div>
-      <div className="markdown mt-2 text-[var(--foreground)]">
-        <ReactMarkdown
-          components={{
-            code(props) {
-              const { children, className, ...rest } = props
-              const code = String(children).replace(/\n$/, '')
-              const isInline = !className
-
-              if (isInline) {
-                return (
-                  <code className={className} {...rest}>
-                    {children}
-                  </code>
-                )
-              }
-
-              return <CodeBlock code={code} language={className} />
-            },
-          }}
-          remarkPlugins={[remarkGfm]}
-        >
-          {message.content || t('message.thinking')}
-        </ReactMarkdown>
-      </div>
+      <MarkdownContent content={message.content} />
 
       {canRetry || canRegenerate ? (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -2404,37 +2779,6 @@ function MessageBubble({
         </div>
       ) : null}
     </article>
-  )
-}
-
-function CodeBlock({
-  code,
-  language,
-}: {
-  code: string
-  language?: string
-}) {
-  const { t } = useI18n()
-  const [copied, setCopied] = useState(false)
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(code)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1200)
-  }
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-black/6 bg-[#1e1e1c]">
-      <div className="flex items-center justify-between border-b border-white/6 px-4 py-2 text-xs text-white/70">
-        <span>{language?.replace('language-', '') || t('message.code')}</span>
-        <Button className="px-2 py-1 text-xs" onClick={() => void handleCopy()} variant="ghost">
-          {copied ? t('message.copied') : t('message.copy')}
-        </Button>
-      </div>
-      <pre className="m-0 overflow-x-auto p-4">
-        <code>{code}</code>
-      </pre>
-    </div>
   )
 }
 
@@ -2485,6 +2829,23 @@ function dedupeConversations(conversations: Conversation[]) {
   return Array.from(unique.values())
 }
 
+function syncConversationList(
+  conversations: Conversation[],
+  conversation: Conversation,
+  showArchived: boolean,
+  search: string,
+) {
+  const filtered = conversations.filter((item) => item.id !== conversation.id)
+  if (
+    conversation.isArchived !== showArchived ||
+    (search &&
+      !conversation.title.toLowerCase().includes(search.toLowerCase()))
+  ) {
+    return sortConversations(filtered)
+  }
+  return sortConversations([conversation, ...filtered])
+}
+
 function sortConversations(conversations: Conversation[]) {
   return [...conversations].sort((left, right) => {
     if (left.isPinned !== right.isPinned) {
@@ -2511,14 +2872,6 @@ function cleanupComposerImages(images: ComposerImage[]) {
   }
 }
 
-function dedupeComposerImages(images: ComposerImage[]) {
-  const unique = new Map<string, ComposerImage>()
-  for (const image of images) {
-    unique.set(image.id, image)
-  }
-  return Array.from(unique.values())
-}
-
 function createComposerImagesFromAttachments(attachments: Attachment[]) {
   return attachments.map((attachment) => ({
     id: attachment.id,
@@ -2526,7 +2879,7 @@ function createComposerImagesFromAttachments(attachments: Attachment[]) {
     mimeType: attachment.mimeType,
     size: attachment.size,
     previewUrl: attachment.url,
-    sourceUrl: attachment.url,
+    attachment,
     revokeOnCleanup: false,
   }))
 }
@@ -2535,33 +2888,16 @@ async function buildAttachmentPayload(
   images: ComposerImage[],
   t: I18nContextValue['t'],
 ) {
-  const payloads = await Promise.all(
-    images.map(async (image) => ({
-      id: image.id,
-      name: image.name,
-      mimeType: image.mimeType,
-      size: image.size,
-      url: image.sourceUrl ?? (await readFileAsDataURL(image.file, t)),
-    })),
-  )
+  return images.map((image) => {
+    if (!image.attachment) {
+      throw new Error(
+        image.name
+          ? t('error.uploadImage', { name: image.name })
+          : t('error.uploadImageGeneric'),
+      )
+    }
 
-  return payloads
-}
-
-async function readFileAsDataURL(
-  file: File | undefined,
-  t: I18nContextValue['t'],
-) {
-  if (!file) {
-    throw new Error(t('error.readSelectedImage'))
-  }
-
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onerror = () =>
-      reject(new Error(t('error.readImageNamed', { name: file.name })))
-    reader.onload = () => resolve(String(reader.result))
-    reader.readAsDataURL(file)
+    return image.attachment
   })
 }
 
@@ -2650,6 +2986,22 @@ function createProviderForm(
   }
 }
 
+function resolveProviderEditorState(
+  providerState: ProviderState,
+  preferredPresetId: number | null,
+) {
+  const preferredPreset =
+    providerState.presets.find((preset) => preset.id === preferredPresetId) ?? null
+  const activePreset =
+    providerState.presets.find((preset) => preset.isActive) ?? null
+  const nextPreset = preferredPreset ?? activePreset
+
+  return {
+    editingProviderId: nextPreset?.id ?? null,
+    providerForm: createProviderForm(providerState.fallback, nextPreset),
+  }
+}
+
 function describeProviderSource(
   providerState: ProviderState | null,
   activePreset: ProviderPreset | null,
@@ -2690,6 +3042,65 @@ function readDesktopSidebarCollapsedPreference() {
   } catch {
     return false
   }
+}
+
+function readLastConversationId() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const rawValue = window.localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY)
+  const conversationId = Number(rawValue)
+  return Number.isInteger(conversationId) && conversationId > 0
+    ? conversationId
+    : null
+}
+
+function writeLastConversationId(conversationId: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(
+    LAST_CONVERSATION_STORAGE_KEY,
+    String(conversationId),
+  )
+}
+
+function clearLastConversationId(conversationId?: number) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const storedConversationId = readLastConversationId()
+  if (
+    typeof conversationId === 'number' &&
+    storedConversationId != null &&
+    storedConversationId !== conversationId
+  ) {
+    return
+  }
+
+  window.localStorage.removeItem(LAST_CONVERSATION_STORAGE_KEY)
+}
+
+function resolveRestorableConversationId(
+  conversations: Conversation[],
+  lastConversationId: number | null,
+  showArchived: boolean,
+  search: string,
+) {
+  if (showArchived || search !== '' || lastConversationId == null) {
+    return null
+  }
+
+  return conversations.some((conversation) => conversation.id === lastConversationId)
+    ? lastConversationId
+    : null
+}
+
+function isConversationNotFoundError(error: unknown) {
+  return error instanceof ApiError && error.status === 404
 }
 
 function getConversationMonogram(title: string) {

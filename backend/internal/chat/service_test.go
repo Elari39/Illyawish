@@ -52,6 +52,35 @@ func (f *fakeProviderResolver) ResolveForUser(uint) (*provider.ResolvedProvider,
 	return f.resolved, nil
 }
 
+type fakeAttachmentStore struct {
+	normalized []models.Attachment
+	cleaned    []models.Attachment
+}
+
+func (f *fakeAttachmentStore) ValidateForUser(_ uint, attachments []models.Attachment) ([]models.Attachment, error) {
+	if f.normalized != nil {
+		return f.normalized, nil
+	}
+	return attachments, nil
+}
+
+func (f *fakeAttachmentStore) BuildModelAttachments(attachments []models.Attachment) ([]llm.Attachment, error) {
+	result := make([]llm.Attachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		result = append(result, llm.Attachment{
+			Name:     attachment.Name,
+			MIMEType: attachment.MIMEType,
+			URL:      attachment.URL,
+		})
+	}
+	return result, nil
+}
+
+func (f *fakeAttachmentStore) CleanupUnreferenced(attachments []models.Attachment) error {
+	f.cleaned = append(f.cleaned, attachments...)
+	return nil
+}
+
 func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 
@@ -66,7 +95,7 @@ func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
 				DefaultModel: "provider-model",
 			},
 		},
-	})
+	}, &fakeAttachmentStore{})
 
 	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
 		Content: "hello",
@@ -97,7 +126,7 @@ func TestStreamAssistantReplyReturnsNoProviderError(t *testing.T) {
 
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
 		err: provider.ErrNoProviderConfigured,
-	})
+	}, &fakeAttachmentStore{})
 
 	err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
 		Content: "hello",
@@ -113,7 +142,7 @@ func TestStreamAssistantReplyReturnsNoProviderError(t *testing.T) {
 }
 
 func TestResolveSettingsUsesConversationAndProviderModelPriority(t *testing.T) {
-	service := NewService(nil, &fakeChatModel{}, &fakeProviderResolver{})
+	service := NewService(nil, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
 
 	baseConversation := &models.Conversation{
 		SystemPrompt: "",
@@ -164,7 +193,7 @@ func TestStreamAssistantReplyUsesResolvedProviderDefaults(t *testing.T) {
 				DefaultModel: "preset-model",
 			},
 		},
-	})
+	}, &fakeAttachmentStore{})
 
 	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
 		Content: "hello",
