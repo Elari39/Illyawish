@@ -1,0 +1,12 @@
+data
+backend/data
+bin
+tmp
+*.db
+*.db-*
+*.log
+*.out
+*.test
+coverage.out
+.env
+.env.*

@@ -16,7 +16,7 @@ const (
 	defaultSettingsEncryptionKey = "change-me-settings-encryption-key"
 	defaultFrontendOrigin        = "http://localhost:10170"
 	defaultAppEnv                = "development"
-	defaultUploadDir             = "./backend/data/uploads"
+	defaultUploadDir             = "./data/uploads"
 )
 
 type Config struct {

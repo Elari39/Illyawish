@@ -48,7 +48,7 @@ type Service struct {
 func NewService(db *gorm.DB, cfg *config.Config) (*Service, error) {
 	uploadDir := strings.TrimSpace(cfg.UploadDir)
 	if uploadDir == "" {
-		uploadDir = "./backend/data/uploads"
+		uploadDir = "./data/uploads"
 	}
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create upload dir: %w", err)

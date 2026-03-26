@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"backend/internal/attachment"
 	"backend/internal/auth"
@@ -82,6 +83,7 @@ func New() (*App, error) {
 		HttpOnly: true,
 		MaxAge:   60 * 60 * 24 * 7,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   useSecureCookies(cfg.FrontendOrigin),
 	})
 	router.Use(sessions.Sessions("aichat_session", store))
 
@@ -140,4 +142,11 @@ func limitRequestBody(limit int64) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func useSecureCookies(frontendOrigin string) bool {
+	return strings.HasPrefix(
+		strings.ToLower(strings.TrimSpace(frontendOrigin)),
+		"https://",
+	)
 }
