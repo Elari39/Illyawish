@@ -23,6 +23,10 @@ Open `http://localhost:10170`.
 
 The Docker stack publishes only the frontend on host port `10170`. The backend listens on `5721` inside Docker and is reached through Nginx at `/api`.
 
+Guide:
+
+- 中文文档: [`docs/local-docker-run.zh-CN.md`](docs/local-docker-run.zh-CN.md)
+
 Useful commands:
 
 ```bash

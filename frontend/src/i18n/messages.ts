@@ -18,11 +18,11 @@ const enUSMessages = {
   'app.loading': 'Loading...',
   'app.loadingWorkspace': 'Loading your workspace...',
 
-  'login.workspaceBadge': 'AI Chat Workspace',
+  'login.workspaceBadge': 'Illyawish',
   'login.heroTitle':
-    'A calm Claude-style chat surface, now wired to your own Go backend.',
+    'Illyawish opens a small moonlit workshop where the Nasuverse and Prisma Illya leave their spell circles glowing in your browser.',
   'login.heroDescription':
-    'This MVP ships with persistent conversations, markdown-aware answers, streaming responses, and a lightweight session-based sign-in flow backed by SQLite.',
+    'Sign in like you are sealing a mystic contract. Behind the magic crest, a Go backend, SQLite memory, and streaming replies keep each conversation ready for its next incantation.',
   'login.featureStreamingTitle': 'Streaming',
   'login.featureStreamingDescription':
     'Assistant tokens arrive incrementally, so the UI feels alive instead of blocked.',
@@ -217,10 +217,10 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'app.loading': '加载中...',
     'app.loadingWorkspace': '正在加载你的工作区...',
 
-    'login.workspaceBadge': 'AI 聊天工作区',
-    'login.heroTitle': '一个沉静的 Claude 风格聊天界面，现在已经接入你自己的 Go 后端。',
+    'login.workspaceBadge': 'Illyawish',
+    'login.heroTitle': 'Illyawish 是一间通往型月世界的魔术工房，把《魔法少女伊莉雅》的星辉和圣杯夜色接进你的浏览器。',
     'login.heroDescription':
-      '这个 MVP 已经具备持久化会话、Markdown 感知回复、流式输出，以及基于 SQLite 的轻量会话登录流程。',
+      '在这里登录，就像签下一纸魔术契约。礼装般的界面背后，由 Go 后端、SQLite 记忆与流式回复维系整座工房，让每次对话都像从冬木外传里召唤而来。',
     'login.featureStreamingTitle': '流式输出',
     'login.featureStreamingDescription':
       '助手回复会逐步到达，让界面始终保持流动感，而不是一直等待。',
@@ -401,11 +401,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'app.loading': '読み込み中...',
     'app.loadingWorkspace': 'ワークスペースを読み込んでいます...',
 
-    'login.workspaceBadge': 'AI チャットワークスペース',
+    'login.workspaceBadge': 'Illyawish',
     'login.heroTitle':
-      '落ち着いた Claude 風のチャット画面を、あなた自身の Go バックエンドに接続しました。',
+      'Illyawish は、TYPE-MOON の月夜と『Fate/kaleid liner プリズマ☆イリヤ』のきらめきを呼び込む小さな魔術工房です。',
     'login.heroDescription':
-      'この MVP には、会話の永続化、Markdown 対応の回答、ストリーミング応答、そして SQLite を使った軽量なセッションベースのログインフローが含まれています。',
+      'ログインは契約の詠唱、会話は礼装に刻まれる記録。Go バックエンドと SQLite の記憶、そしてストリーミング応答が、次の一節まで魔法をつなぎとめます。',
     'login.featureStreamingTitle': 'ストリーミング',
     'login.featureStreamingDescription':
       'アシスタントのトークンが少しずつ届くので、UI が止まらず生きているように感じられます。',
