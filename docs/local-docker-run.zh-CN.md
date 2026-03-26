@@ -171,7 +171,109 @@ docker compose restart backend
 docker compose restart frontend
 ```
 
-## 7. 可选配置
+## 7. 如何停掉旧版本并启动新版本
+
+如果你本地已经跑着一个旧版本，后面又修改了代码，或者 `git pull` 了新版本，推荐按下面顺序更新：
+
+### 方式 A：推荐方式
+
+适合绝大多数情况。
+
+1. 进入项目根目录：
+
+```bash
+cd Illyawish
+```
+
+2. 停掉当前正在运行的旧版本容器：
+
+```bash
+docker compose down
+```
+
+3. 如果你需要先获取新代码，执行：
+
+```bash
+git pull
+```
+
+4. 重新构建并启动新版本：
+
+```bash
+docker compose up -d --build
+```
+
+5. 检查状态：
+
+```bash
+docker compose ps
+curl http://127.0.0.1:10170/api/health
+```
+
+这一套流程的作用是：
+
+- 先停止旧版本容器
+- 使用当前工作区代码重新构建镜像
+- 启动新版本容器
+- 保留项目根目录 `data/` 里的历史数据
+
+### 方式 B：不停机直接重建
+
+如果你不想手动先执行 `down`，也可以直接：
+
+```bash
+docker compose up -d --build
+```
+
+Compose 会自动按当前代码重建需要更新的服务。
+
+不过如果你想明确地“先停旧版，再起新版”，或者你怀疑旧容器状态不干净，更推荐使用上面的方式 A。
+
+### 什么时候需要重新构建
+
+以下情况建议使用：
+
+```bash
+docker compose up -d --build
+```
+
+- 改了前端或后端代码
+- 改了 Dockerfile
+- 改了 Nginx 配置
+- 切换了 Git 分支
+- 刚执行过 `git pull`
+
+如果你只是修改了 `data/app.json` 这类运行配置，通常只需要：
+
+```bash
+docker compose restart backend
+```
+
+### 如何确认已经不是旧版本
+
+更新完成后，可以通过下面方式确认新版本已经运行：
+
+```bash
+docker compose ps
+docker compose logs -f
+curl http://127.0.0.1:10170/api/health
+```
+
+如果首页和接口都正常，说明当前正在跑的是重新构建后的容器。
+
+### 数据会不会丢
+
+正常不会。
+
+因为这个项目的数据在项目根目录 `data/` 中：
+
+- `data/app.json`
+- `data/aichat.db`
+- `data/uploads/`
+
+只要你没有手动删除 `data/`，执行 `docker compose down` 再 `docker compose up -d --build` 不会清空聊天记录和上传文件。
+
+## 8. 可选配置
 
 如果你想配置服务器级别的 OpenAI 兼容 fallback，可以先启动一次项目，再编辑：
 
@@ -211,7 +313,7 @@ data/app.json
 docker compose restart backend
 ```
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### 1. 端口 `10170` 被占用
 
@@ -288,7 +390,7 @@ data/
 
 所以本地使用时，不需要手动访问 `http://localhost:5721`
 
-## 9. 目录与数据说明
+## 10. 目录与数据说明
 
 本地 Docker 运行时，重要目录和文件如下：
 

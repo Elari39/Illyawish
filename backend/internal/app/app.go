@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"backend/internal/attachment"
 	"backend/internal/auth"
@@ -20,6 +25,7 @@ import (
 type App struct {
 	config *config.Config
 	router *gin.Engine
+	server *http.Server
 }
 
 const (
@@ -27,6 +33,11 @@ const (
 	mediumJSONBodyLimit = 128 * 1024
 	chatJSONBodyLimit   = 256 * 1024
 	uploadBodyLimit     = 8 * 1024 * 1024
+	readHeaderTimeout   = 5 * time.Second
+	readTimeout         = 15 * time.Second
+	writeTimeout        = 30 * time.Second
+	idleTimeout         = 60 * time.Second
+	shutdownTimeout     = 10 * time.Second
 )
 
 func New() (*App, error) {
@@ -117,14 +128,55 @@ func New() (*App, error) {
 		api.DELETE("/conversations/:id", chatHandler.DeleteConversation)
 	}
 
+	server := &http.Server{
+		Addr:              fmt.Sprintf(":%s", cfg.ServerPort),
+		Handler:           router,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+
 	return &App{
 		config: cfg,
 		router: router,
+		server: server,
 	}, nil
 }
 
 func (a *App) Run() error {
-	return a.router.Run(fmt.Sprintf(":%s", a.config.ServerPort))
+	shutdownSignals, stop := signal.NotifyContext(
+		context.Background(),
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		serverErrCh <- a.server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	case <-shutdownSignals.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+
+		if err := a.server.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("shutdown server: %w", err)
+		}
+
+		err := <-serverErrCh
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+		return nil
+	}
 }
 
 func limitRequestBody(limit int64) gin.HandlerFunc {

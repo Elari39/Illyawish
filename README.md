@@ -112,5 +112,7 @@ The frontend uses relative `/api` requests, and Vite proxies them to `http://loc
 ## Verification
 
 - Backend: `cd backend && GOCACHE=/tmp/go-build go test ./...`
-- Frontend: `cd frontend && pnpm build`
+- Frontend lint: `cd frontend && pnpm lint`
+- Frontend tests: `cd frontend && pnpm test:run`
+- Frontend build: `cd frontend && pnpm build`
 - Docker config: `docker compose config`
