@@ -351,6 +351,37 @@ func (h *Handler) RegenerateMessage(c *gin.Context) {
 	})
 }
 
+func (h *Handler) RegenerateMessageByID(c *gin.Context) {
+	user := auth.CurrentUser(c)
+	conversationID, err := conversationIDParam(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		return
+	}
+	messageID, err := messageIDParam(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		return
+	}
+
+	var req regenerateRequest
+	if err := bindOptionalJSON(c, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid regenerate payload"})
+		return
+	}
+
+	h.streamAction(c, func(writeEvent func(StreamEvent) error) error {
+		return h.service.RegenerateAssistantMessage(
+			c.Request.Context(),
+			user.ID,
+			conversationID,
+			messageID,
+			req.Options,
+			writeEvent,
+		)
+	})
+}
+
 func (h *Handler) EditMessage(c *gin.Context) {
 	user := auth.CurrentUser(c)
 	conversationID, err := conversationIDParam(c)
@@ -556,7 +587,8 @@ func handleChatError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "conversation or message not found"})
 	case errors.Is(err, ErrConversationBusy),
 		errors.Is(err, ErrNoActiveGeneration),
-		errors.Is(err, ErrInvalidAssistantAction),
+		errors.Is(err, ErrInvalidRetryAction),
+		errors.Is(err, ErrInvalidRegenerateAction),
 		errors.Is(err, ErrInvalidUserEdit):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, provider.ErrNoProviderConfigured):
@@ -574,7 +606,8 @@ func errorMessage(err error) string {
 	}
 	if isRequestError(err) || errors.Is(err, ErrConversationBusy) ||
 		errors.Is(err, ErrNoActiveGeneration) ||
-		errors.Is(err, ErrInvalidAssistantAction) ||
+		errors.Is(err, ErrInvalidRetryAction) ||
+		errors.Is(err, ErrInvalidRegenerateAction) ||
 		errors.Is(err, ErrInvalidUserEdit) ||
 		errors.Is(err, provider.ErrNoProviderConfigured) ||
 		errors.Is(err, gorm.ErrRecordNotFound) {

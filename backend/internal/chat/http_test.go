@@ -195,6 +195,28 @@ func TestImportConversationReturnsCreatedConversation(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "\"title\":\"Imported chat\"") {
 		t.Fatalf("expected imported conversation body, got %s", recorder.Body.String())
 	}
+	if !strings.Contains(recorder.Body.String(), "\"model\":\"gpt-4.1-mini\"") {
+		t.Fatalf("expected imported conversation settings in body, got %s", recorder.Body.String())
+	}
+}
+
+func TestRegenerateMessageByIDRejectsInvalidMessageID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations/1/messages/bad/regenerate", nil)
+	ctx.Params = gin.Params{
+		{Key: "id", Value: "1"},
+		{Key: "messageId", Value: "bad"},
+	}
+	ctx.Set("current_user", &models.User{ID: 1})
+
+	NewHandler(nil).RegenerateMessageByID(ctx)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
 }
 
 func TestGetChatSettingsReturnsGlobalPrompt(t *testing.T) {

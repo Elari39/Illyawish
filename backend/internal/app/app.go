@@ -123,6 +123,7 @@ func New() (*App, error) {
 		api.GET("/conversations/:id/messages", chatHandler.ListMessages)
 		api.POST("/conversations/:id/messages", limitRequestBody(chatJSONBodyLimit), chatHandler.StreamMessage)
 		api.POST("/conversations/:id/messages/regenerate", limitRequestBody(chatJSONBodyLimit), chatHandler.RegenerateMessage)
+		api.POST("/conversations/:id/messages/:messageId/regenerate", limitRequestBody(chatJSONBodyLimit), chatHandler.RegenerateMessageByID)
 		api.POST("/conversations/:id/messages/:messageId/retry", limitRequestBody(chatJSONBodyLimit), chatHandler.RetryMessage)
 		api.PATCH("/conversations/:id/messages/:messageId", limitRequestBody(chatJSONBodyLimit), chatHandler.EditMessage)
 		api.POST("/conversations/:id/cancel", chatHandler.CancelGeneration)

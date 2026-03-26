@@ -215,12 +215,13 @@ export const chatApi = {
   },
   async regenerateMessage(
     conversationId: number,
+    messageId: number,
     settings: ConversationSettings | null,
     onEvent: (event: StreamEvent) => void | Promise<void>,
     signal?: AbortSignal,
   ) {
     await streamChatRequest(
-      `/api/conversations/${conversationId}/messages/regenerate`,
+      `/api/conversations/${conversationId}/messages/${messageId}/regenerate`,
       settings ? { options: settings } : undefined,
       onEvent,
       'POST',

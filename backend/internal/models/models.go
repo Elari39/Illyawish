@@ -49,18 +49,19 @@ type User struct {
 }
 
 type Conversation struct {
-	ID           uint   `gorm:"primaryKey"`
-	UserID       uint   `gorm:"not null;index:idx_conversations_user_view,priority:1"`
-	Title        string `gorm:"size:255;not null;default:New chat"`
-	IsPinned     bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
-	IsArchived   bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:2"`
-	SystemPrompt string `gorm:"type:text;not null;default:''"`
-	Model        string `gorm:"size:128;not null;default:''"`
-	Temperature  *float32
-	MaxTokens    *int
-	CreatedAt    time.Time
-	UpdatedAt    time.Time `gorm:"index:idx_conversations_user_view,priority:4"`
-	Messages     []Message
+	ID                 uint   `gorm:"primaryKey"`
+	UserID             uint   `gorm:"not null;index:idx_conversations_user_view,priority:1"`
+	Title              string `gorm:"size:255;not null;default:New chat"`
+	IsPinned           bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
+	IsArchived         bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:2"`
+	SystemPrompt       string `gorm:"type:text;not null;default:''"`
+	Model              string `gorm:"size:128;not null;default:''"`
+	Temperature        *float32
+	MaxTokens          *int
+	ContextWindowTurns *int
+	CreatedAt          time.Time
+	UpdatedAt          time.Time `gorm:"index:idx_conversations_user_view,priority:4"`
+	Messages           []Message
 }
 
 type Message struct {

@@ -66,6 +66,9 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasColumn(&models.User{}, "default_context_window_turns") {
 		t.Fatal("expected users.default_context_window_turns column to exist")
 	}
+	if !db.Migrator().HasColumn(&models.Conversation{}, "context_window_turns") {
+		t.Fatal("expected conversations.context_window_turns column to exist")
+	}
 }
 
 func TestProviderActiveIndexAllowsOnlyOneActivePresetPerUser(t *testing.T) {

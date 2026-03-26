@@ -22,11 +22,12 @@ const (
 )
 
 var (
-	defaultTemperature        = float32(1)
-	ErrConversationBusy       = errors.New("conversation is already generating a reply")
-	ErrNoActiveGeneration     = errors.New("no active generation for this conversation")
-	ErrInvalidAssistantAction = errors.New("assistant message cannot be retried or regenerated")
-	ErrInvalidUserEdit        = errors.New("only the latest user message can be edited")
+	defaultTemperature         = float32(1)
+	ErrConversationBusy        = errors.New("conversation is already generating a reply")
+	ErrNoActiveGeneration      = errors.New("no active generation for this conversation")
+	ErrInvalidRetryAction      = errors.New("assistant message cannot be retried")
+	ErrInvalidRegenerateAction = errors.New("assistant message cannot be regenerated")
+	ErrInvalidUserEdit         = errors.New("only the latest user message can be edited")
 )
 
 type requestError struct {
@@ -220,17 +221,9 @@ func (s *Service) resolveSettings(
 	override *ConversationSettings,
 	defaultModel string,
 ) (ConversationSettings, error) {
-	chatSettings, err := s.GetChatSettings(userID)
+	settings, err := s.effectiveConversationSettings(userID, conversation)
 	if err != nil {
 		return ConversationSettings{}, err
-	}
-
-	settings := ConversationSettings{
-		SystemPrompt:       strings.TrimSpace(conversation.SystemPrompt),
-		Model:              strings.TrimSpace(chatSettings.Model),
-		Temperature:        cloneFloat32(chatSettings.Temperature),
-		MaxTokens:          cloneInt(chatSettings.MaxTokens),
-		ContextWindowTurns: cloneInt(chatSettings.ContextWindowTurns),
 	}
 
 	if override != nil {
@@ -239,6 +232,18 @@ func (s *Service) resolveSettings(
 			return ConversationSettings{}, err
 		}
 		settings.SystemPrompt = normalizedOverride.SystemPrompt
+		if normalizedOverride.Model != "" {
+			settings.Model = normalizedOverride.Model
+		}
+		if normalizedOverride.Temperature != nil {
+			settings.Temperature = cloneFloat32(normalizedOverride.Temperature)
+		}
+		if normalizedOverride.MaxTokens != nil {
+			settings.MaxTokens = cloneInt(normalizedOverride.MaxTokens)
+		}
+		if normalizedOverride.ContextWindowTurns != nil {
+			settings.ContextWindowTurns = cloneInt(normalizedOverride.ContextWindowTurns)
+		}
 	}
 
 	if settings.Model == "" {
@@ -266,12 +271,39 @@ func (s *Service) resolveSystemPrompt(userID uint, sessionPrompt string) (string
 }
 
 func sanitizeConversationSettings(settings *ConversationSettings) (ConversationSettings, error) {
-	normalized := ConversationSettings{}
 	if settings == nil {
-		return normalized, nil
+		return ConversationSettings{}, nil
+	}
+	normalized := ConversationSettings{
+		SystemPrompt: strings.TrimSpace(settings.SystemPrompt),
+		Model:        strings.TrimSpace(settings.Model),
 	}
 
-	normalized.SystemPrompt = strings.TrimSpace(settings.SystemPrompt)
+	if settings.Temperature != nil {
+		if *settings.Temperature < 0 || *settings.Temperature > 2 {
+			return ConversationSettings{}, requestError{message: "temperature must be between 0 and 2"}
+		}
+		normalized.Temperature = ptrFloat32(*settings.Temperature)
+	}
+
+	if settings.MaxTokens != nil {
+		if *settings.MaxTokens < 0 {
+			return ConversationSettings{}, requestError{message: "max tokens must be greater than or equal to 0"}
+		}
+		if *settings.MaxTokens > 0 {
+			normalized.MaxTokens = ptrInt(*settings.MaxTokens)
+		}
+	}
+
+	if settings.ContextWindowTurns != nil {
+		if *settings.ContextWindowTurns < 0 {
+			return ConversationSettings{}, requestError{message: "context window turns must be greater than or equal to 0"}
+		}
+		if *settings.ContextWindowTurns > 0 {
+			normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
+		}
+	}
+
 	return normalized, nil
 }
 
@@ -309,7 +341,12 @@ func sanitizeChatSettings(settings ChatSettings) (ChatSettings, error) {
 	return normalized, nil
 }
 
-func (s *Service) prepareAssistantReplay(conversationID uint, assistantMessageID uint) (*models.Message, []models.Message, error) {
+func (s *Service) prepareAssistantReplay(
+	conversationID uint,
+	assistantMessageID uint,
+	invalidAction error,
+	allowedStatuses ...string,
+) (*models.Message, []models.Message, error) {
 	var (
 		assistantMessage models.Message
 		cleanupMessages  []models.Message
@@ -320,11 +357,14 @@ func (s *Service) prepareAssistantReplay(conversationID uint, assistantMessageID
 			return err
 		}
 		if message.Role != models.RoleAssistant {
-			return ErrInvalidAssistantAction
+			return invalidAction
+		}
+		if len(allowedStatuses) > 0 && !containsStatus(allowedStatuses, message.Status) {
+			return invalidAction
 		}
 
 		if _, err := previousUserMessage(tx, conversationID, message.ID); err != nil {
-			return ErrInvalidAssistantAction
+			return invalidAction
 		}
 
 		var trailingMessages []models.Message
@@ -578,10 +618,10 @@ func (s *Service) effectiveConversationSettings(
 
 	return ConversationSettings{
 		SystemPrompt:       strings.TrimSpace(conversation.SystemPrompt),
-		Model:              strings.TrimSpace(chatSettings.Model),
-		Temperature:        cloneFloat32(chatSettings.Temperature),
-		MaxTokens:          cloneInt(chatSettings.MaxTokens),
-		ContextWindowTurns: cloneInt(chatSettings.ContextWindowTurns),
+		Model:              firstNonEmptyString(strings.TrimSpace(conversation.Model), strings.TrimSpace(chatSettings.Model)),
+		Temperature:        firstNonNilFloat32(conversation.Temperature, chatSettings.Temperature),
+		MaxTokens:          firstNonNilInt(conversation.MaxTokens, chatSettings.MaxTokens),
+		ContextWindowTurns: firstNonNilInt(conversation.ContextWindowTurns, chatSettings.ContextWindowTurns),
 	}, nil
 }
 
@@ -755,6 +795,42 @@ func ptrFloat32(value float32) *float32 {
 
 func ptrInt(value int) *int {
 	return &value
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonNilFloat32(values ...*float32) *float32 {
+	for _, value := range values {
+		if value != nil {
+			return cloneFloat32(value)
+		}
+	}
+	return nil
+}
+
+func firstNonNilInt(values ...*int) *int {
+	for _, value := range values {
+		if value != nil {
+			return cloneInt(value)
+		}
+	}
+	return nil
+}
+
+func containsStatus(statuses []string, candidate string) bool {
+	for _, status := range statuses {
+		if status == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func maxInt(left int, right int) int {

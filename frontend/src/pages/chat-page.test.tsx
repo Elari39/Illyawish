@@ -511,8 +511,8 @@ describe('ChatPage conversation navigation', () => {
       messages: useReplaySnapshot ? replayedMessages : initialMessages,
     }))
 
-    const retryMessageMock = vi
-      .spyOn(chatApi, 'retryMessage')
+    const regenerateMessageMock = vi
+      .spyOn(chatApi, 'regenerateMessage')
       .mockImplementation(async (conversationId, messageId, _settings, onEvent) => {
         useReplaySnapshot = true
         await onEvent({
@@ -531,7 +531,7 @@ describe('ChatPage conversation navigation', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Regenerate' })[0]!)
 
     await waitFor(() => {
-      expect(retryMessageMock).toHaveBeenCalledWith(
+      expect(regenerateMessageMock).toHaveBeenCalledWith(
         7,
         72,
         expect.anything(),
@@ -544,6 +544,46 @@ describe('ChatPage conversation navigation', () => {
     })
     expect(screen.queryByText('Second question')).not.toBeInTheDocument()
     expect(screen.queryByText('Second answer')).not.toBeInTheDocument()
+  })
+
+  it('resets mobile conversation actions after closing and reopening the sidebar', async () => {
+    const firstConversation = createConversation(1, 'First chat')
+    const secondConversation = createConversation(2, 'Second chat')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [firstConversation, secondConversation],
+      total: 2,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation: firstConversation,
+      messages: [createMessage(11, 1, 'assistant', 'First answer')],
+    })
+
+    renderChatPage(['/chat/1'])
+
+    await waitFor(() => {
+      expect(screen.getByText('First answer')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open conversation sidebar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for First chat' }))
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close conversation sidebar' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open conversation sidebar' }))
+
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'More actions for First chat',
+      }),
+    ).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('saves the global prompt and new-chat session prompt draft before the first message', async () => {

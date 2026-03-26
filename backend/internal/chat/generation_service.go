@@ -130,7 +130,66 @@ func (s *Service) RetryAssistantMessage(
 	}
 	defer cleanup()
 
-	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(conversation.ID, assistantMessageID)
+	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(
+		conversation.ID,
+		assistantMessageID,
+		ErrInvalidRetryAction,
+		models.MessageStatusFailed,
+		models.MessageStatusCancelled,
+	)
+	if err != nil {
+		return err
+	}
+	if err := s.cleanupAttachments(cleanupMessages); err != nil {
+		return err
+	}
+
+	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, systemPrompt, settings.ContextWindowTurns)
+	if err != nil {
+		return err
+	}
+
+	return s.streamIntoAssistantMessage(ctx, assistantMessage, resolvedProvider.Config, history, settings, emit)
+}
+
+func (s *Service) RegenerateAssistantMessage(
+	ctx context.Context,
+	userID uint,
+	conversationID uint,
+	assistantMessageID uint,
+	options *ConversationSettings,
+	emit func(StreamEvent) error,
+) error {
+	conversation, err := s.GetConversation(userID, conversationID)
+	if err != nil {
+		return err
+	}
+
+	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	if err != nil {
+		return err
+	}
+	settings, err := s.resolveSettings(userID, conversation, options, resolvedProvider.Config.DefaultModel)
+	if err != nil {
+		return err
+	}
+	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
+	if err != nil {
+		return err
+	}
+
+	ctx, cleanup, err := s.registerActiveStream(ctx, conversation.ID)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(
+		conversation.ID,
+		assistantMessageID,
+		ErrInvalidRegenerateAction,
+		models.MessageStatusCompleted,
+	)
 	if err != nil {
 		return err
 	}
@@ -162,11 +221,8 @@ func (s *Service) RegenerateLastAssistantReply(
 	if err != nil {
 		return err
 	}
-	if latestMessage.Role != models.RoleAssistant {
-		return ErrInvalidAssistantAction
-	}
 
-	return s.RetryAssistantMessage(ctx, userID, conversationID, latestMessage.ID, options, emit)
+	return s.RegenerateAssistantMessage(ctx, userID, conversationID, latestMessage.ID, options, emit)
 }
 
 func (s *Service) EditUserMessageAndRegenerate(

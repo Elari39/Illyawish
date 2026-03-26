@@ -85,11 +85,24 @@ func (s *Service) ImportConversation(
 	conversation := &models.Conversation{}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var settings ConversationSettings
+		if input.Settings != nil {
+			var err error
+			settings, err = sanitizeConversationSettings(input.Settings)
+			if err != nil {
+				return err
+			}
+		}
+
 		conversation = &models.Conversation{
-			UserID:       userID,
-			Title:        title,
-			SystemPrompt: "",
-			UpdatedAt:    importedAt,
+			UserID:             userID,
+			Title:              title,
+			SystemPrompt:       settings.SystemPrompt,
+			Model:              settings.Model,
+			Temperature:        cloneFloat32(settings.Temperature),
+			MaxTokens:          cloneInt(settings.MaxTokens),
+			ContextWindowTurns: cloneInt(settings.ContextWindowTurns),
+			UpdatedAt:          importedAt,
 		}
 
 		if err := tx.Create(conversation).Error; err != nil {
@@ -179,6 +192,10 @@ func (s *Service) UpdateConversation(
 			return nil, err
 		}
 		updates["system_prompt"] = settings.SystemPrompt
+		updates["model"] = settings.Model
+		updates["temperature"] = settings.Temperature
+		updates["max_tokens"] = settings.MaxTokens
+		updates["context_window_turns"] = settings.ContextWindowTurns
 	}
 
 	if err := s.db.Model(conversation).Updates(updates).Error; err != nil {

@@ -663,7 +663,11 @@ export function useChatSession({
   }
 
   async function handleRetryAssistant(message: Message) {
-    if (message.role !== 'assistant' || isSending) {
+    if (
+      message.role !== 'assistant' ||
+      (message.status !== 'failed' && message.status !== 'cancelled') ||
+      isSending
+    ) {
       return
     }
 
@@ -757,7 +761,7 @@ export function useChatSession({
           ),
       )
 
-      await chatApi.retryMessage(
+      await chatApi.regenerateMessage(
         message.conversationId,
         message.id,
         settingsDraft,

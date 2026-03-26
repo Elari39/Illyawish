@@ -212,4 +212,25 @@ describe('SidebarContent mobile actions', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
+
+  it('closes the expanded mobile actions after selecting a conversation', () => {
+    const { conversations, handlers } = renderSidebarContent()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: conversations[0]!.title,
+      }),
+    )
+
+    expect(handlers.onSelectConversation).toHaveBeenCalledWith(conversations[0]!.id)
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
 })

@@ -372,10 +372,17 @@ func TestResolveSettingsUsesUserDefaultsAndConversationPromptPriority(t *testing
 	}
 
 	settings, err = service.resolveSettings(user.ID, &models.Conversation{
-		SystemPrompt: "Conversation prompt",
+		SystemPrompt:       "Conversation prompt",
+		Model:              "conversation-model",
+		Temperature:        ptrFloat32(0.4),
+		MaxTokens:          ptrInt(768),
+		ContextWindowTurns: ptrInt(2),
 	}, &ConversationSettings{
-		SystemPrompt: "Override prompt",
-		Model:        "ignored-model",
+		SystemPrompt:       "Override prompt",
+		Model:              "override-model",
+		Temperature:        ptrFloat32(0.5),
+		MaxTokens:          ptrInt(1536),
+		ContextWindowTurns: ptrInt(8),
 	}, "provider-model")
 	if err != nil {
 		t.Fatalf("resolveSettings() error = %v", err)
@@ -383,12 +390,21 @@ func TestResolveSettingsUsesUserDefaultsAndConversationPromptPriority(t *testing
 	if settings.SystemPrompt != "Override prompt" {
 		t.Fatalf("expected override prompt to win, got %q", settings.SystemPrompt)
 	}
-	if settings.Model != "user-model" {
-		t.Fatalf("expected model override to be ignored in favor of user default, got %q", settings.Model)
+	if settings.Model != "override-model" {
+		t.Fatalf("expected override model to win, got %q", settings.Model)
+	}
+	if settings.Temperature == nil || *settings.Temperature != 0.5 {
+		t.Fatalf("expected override temperature, got %#v", settings.Temperature)
+	}
+	if settings.MaxTokens == nil || *settings.MaxTokens != 1536 {
+		t.Fatalf("expected override max tokens, got %#v", settings.MaxTokens)
+	}
+	if settings.ContextWindowTurns == nil || *settings.ContextWindowTurns != 8 {
+		t.Fatalf("expected override context window, got %#v", settings.ContextWindowTurns)
 	}
 }
 
-func TestUpdateConversationIgnoresConversationLevelModelSettings(t *testing.T) {
+func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
 
@@ -398,7 +414,7 @@ func TestUpdateConversationIgnoresConversationLevelModelSettings(t *testing.T) {
 	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
 		Settings: &ConversationSettings{
 			SystemPrompt:       "Conversation prompt",
-			Model:              "ignored-model",
+			Model:              "custom-model",
 			Temperature:        &temperature,
 			MaxTokens:          &maxTokens,
 			ContextWindowTurns: &contextWindowTurns,
@@ -411,19 +427,34 @@ func TestUpdateConversationIgnoresConversationLevelModelSettings(t *testing.T) {
 	if updatedConversation.SystemPrompt != "Conversation prompt" {
 		t.Fatalf("expected system prompt to update, got %q", updatedConversation.SystemPrompt)
 	}
+	if updatedConversation.Model != "custom-model" {
+		t.Fatalf("expected model to update, got %q", updatedConversation.Model)
+	}
+	if updatedConversation.Temperature == nil || *updatedConversation.Temperature != temperature {
+		t.Fatalf("expected temperature to update, got %#v", updatedConversation.Temperature)
+	}
+	if updatedConversation.MaxTokens == nil || *updatedConversation.MaxTokens != maxTokens {
+		t.Fatalf("expected max tokens to update, got %#v", updatedConversation.MaxTokens)
+	}
+	if updatedConversation.ContextWindowTurns == nil || *updatedConversation.ContextWindowTurns != contextWindowTurns {
+		t.Fatalf("expected context window to update, got %#v", updatedConversation.ContextWindowTurns)
+	}
 
 	var stored models.Conversation
 	if err := db.First(&stored, conversation.ID).Error; err != nil {
 		t.Fatalf("load conversation: %v", err)
 	}
-	if stored.Model != "" {
-		t.Fatalf("expected model to remain empty, got %q", stored.Model)
+	if stored.Model != "custom-model" {
+		t.Fatalf("expected model to persist, got %q", stored.Model)
 	}
-	if stored.Temperature != nil {
-		t.Fatalf("expected temperature to remain nil, got %#v", stored.Temperature)
+	if stored.Temperature == nil || *stored.Temperature != temperature {
+		t.Fatalf("expected temperature to persist, got %#v", stored.Temperature)
 	}
-	if stored.MaxTokens != nil {
-		t.Fatalf("expected max tokens to remain nil, got %#v", stored.MaxTokens)
+	if stored.MaxTokens == nil || *stored.MaxTokens != maxTokens {
+		t.Fatalf("expected max tokens to persist, got %#v", stored.MaxTokens)
+	}
+	if stored.ContextWindowTurns == nil || *stored.ContextWindowTurns != contextWindowTurns {
+		t.Fatalf("expected context window to persist, got %#v", stored.ContextWindowTurns)
 	}
 }
 
@@ -677,6 +708,9 @@ func TestImportConversationCreatesConversationAndMessages(t *testing.T) {
 	if importedConversation.Title != "Imported notes" {
 		t.Fatalf("expected imported title, got %q", importedConversation.Title)
 	}
+	if importedConversation.Model != "gpt-4.1-mini" {
+		t.Fatalf("expected imported model, got %q", importedConversation.Model)
+	}
 	messages, err := service.ListMessages(user.ID, importedConversation.ID)
 	if err != nil {
 		t.Fatalf("ListMessages() error = %v", err)
@@ -753,7 +787,7 @@ func TestImportConversationValidatesInput(t *testing.T) {
 	}
 }
 
-func TestRetryAssistantMessageReplaysHistoricalAssistant(t *testing.T) {
+func TestRegenerateAssistantMessageReplaysHistoricalAssistant(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	model := &fakeChatModel{
 		chunks: []string{"rewritten answer"},
@@ -808,7 +842,7 @@ func TestRetryAssistantMessageReplaysHistoricalAssistant(t *testing.T) {
 	mustCreateMessageRecord(t, db, &userTwo)
 	mustCreateMessageRecord(t, db, &assistantTwo)
 
-	if err := service.RetryAssistantMessage(
+	if err := service.RegenerateAssistantMessage(
 		context.Background(),
 		user.ID,
 		conversation.ID,
@@ -818,7 +852,7 @@ func TestRetryAssistantMessageReplaysHistoricalAssistant(t *testing.T) {
 			return nil
 		},
 	); err != nil {
-		t.Fatalf("RetryAssistantMessage() error = %v", err)
+		t.Fatalf("RegenerateAssistantMessage() error = %v", err)
 	}
 
 	var messages []models.Message
@@ -851,7 +885,7 @@ func TestRetryAssistantMessageReplaysHistoricalAssistant(t *testing.T) {
 	}
 }
 
-func TestRetryAssistantMessageRejectsAssistantWithoutPreviousUser(t *testing.T) {
+func TestRegenerateAssistantMessageRejectsAssistantWithoutPreviousUser(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
 		resolved: &provider.ResolvedProvider{
@@ -871,7 +905,7 @@ func TestRetryAssistantMessageRejectsAssistantWithoutPreviousUser(t *testing.T) 
 	}
 	mustCreateMessageRecord(t, db, &assistantOnly)
 
-	err := service.RetryAssistantMessage(
+	err := service.RegenerateAssistantMessage(
 		context.Background(),
 		user.ID,
 		conversation.ID,
@@ -881,8 +915,49 @@ func TestRetryAssistantMessageRejectsAssistantWithoutPreviousUser(t *testing.T) 
 			return nil
 		},
 	)
-	if !errors.Is(err, ErrInvalidAssistantAction) {
-		t.Fatalf("expected ErrInvalidAssistantAction, got %v", err)
+	if !errors.Is(err, ErrInvalidRegenerateAction) {
+		t.Fatalf("expected ErrInvalidRegenerateAction, got %v", err)
+	}
+}
+
+func TestRetryAssistantMessageRejectsCompletedAssistant(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://preset.example.com/v1",
+				APIKey:       "preset-key",
+				DefaultModel: "preset-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	mustCreateMessageRecord(t, db, &models.Message{
+		ConversationID: conversation.ID,
+		Role:           models.RoleUser,
+		Content:        "Question one",
+		Status:         models.MessageStatusCompleted,
+	})
+	assistant := models.Message{
+		ConversationID: conversation.ID,
+		Role:           models.RoleAssistant,
+		Content:        "Completed reply",
+		Status:         models.MessageStatusCompleted,
+	}
+	mustCreateMessageRecord(t, db, &assistant)
+
+	err := service.RetryAssistantMessage(
+		context.Background(),
+		user.ID,
+		conversation.ID,
+		assistant.ID,
+		nil,
+		func(StreamEvent) error {
+			return nil
+		},
+	)
+	if !errors.Is(err, ErrInvalidRetryAction) {
+		t.Fatalf("expected ErrInvalidRetryAction, got %v", err)
 	}
 }
 
