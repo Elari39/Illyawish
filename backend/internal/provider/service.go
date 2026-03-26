@@ -44,6 +44,7 @@ func IsRequestError(err error) bool {
 type FallbackState struct {
 	Available    bool
 	BaseURL      string
+	Models       []string
 	DefaultModel string
 }
 
@@ -58,6 +59,7 @@ type CreatePresetInput struct {
 	Name         string
 	BaseURL      string
 	APIKey       string
+	Models       []string
 	DefaultModel string
 }
 
@@ -65,6 +67,7 @@ type UpdatePresetInput struct {
 	Name         *string
 	BaseURL      *string
 	APIKey       *string
+	Models       *[]string
 	DefaultModel *string
 }
 
@@ -145,20 +148,27 @@ func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, erro
 		return CreatePresetInput{}, requestError{message: "provider API key is required"}
 	}
 
-	defaultModel := strings.TrimSpace(input.DefaultModel)
-	if defaultModel == "" {
-		return CreatePresetInput{}, requestError{message: "provider model is required"}
+	models, defaultModel, err := normalizeProviderModels(
+		input.Models,
+		input.DefaultModel,
+	)
+	if err != nil {
+		return CreatePresetInput{}, err
 	}
 
 	return CreatePresetInput{
 		Name:         name,
 		BaseURL:      baseURL,
 		APIKey:       apiKey,
+		Models:       models,
 		DefaultModel: defaultModel,
 	}, nil
 }
 
-func sanitizeUpdatePresetInput(input UpdatePresetInput) (UpdatePresetInput, error) {
+func sanitizeUpdatePresetInput(
+	input UpdatePresetInput,
+	current *models.LLMProviderPreset,
+) (UpdatePresetInput, error) {
 	var normalized UpdatePresetInput
 
 	if input.Name != nil {
@@ -185,15 +195,101 @@ func sanitizeUpdatePresetInput(input UpdatePresetInput) (UpdatePresetInput, erro
 		normalized.APIKey = &apiKey
 	}
 
-	if input.DefaultModel != nil {
-		defaultModel := strings.TrimSpace(*input.DefaultModel)
-		if defaultModel == "" {
-			return UpdatePresetInput{}, requestError{message: "provider model is required"}
+	if input.Models != nil || input.DefaultModel != nil {
+		nextModels := currentProviderModels(current)
+		if input.Models != nil {
+			nextModels = *input.Models
 		}
+
+		nextDefaultModel := current.DefaultModel
+		if input.DefaultModel != nil {
+			nextDefaultModel = *input.DefaultModel
+		}
+
+		models, defaultModel, err := normalizeProviderModels(
+			nextModels,
+			nextDefaultModel,
+		)
+		if err != nil {
+			return UpdatePresetInput{}, err
+		}
+
+		normalized.Models = &models
 		normalized.DefaultModel = &defaultModel
 	}
 
 	return normalized, nil
+}
+
+func normalizeProviderModels(
+	models []string,
+	defaultModel string,
+) ([]string, string, error) {
+	normalizedDefaultModel := strings.TrimSpace(defaultModel)
+	if normalizedDefaultModel == "" {
+		return nil, "", requestError{message: "provider model is required"}
+	}
+
+	normalizedModels := uniqueModels(models)
+	if !containsModel(normalizedModels, normalizedDefaultModel) {
+		normalizedModels = append([]string{normalizedDefaultModel}, normalizedModels...)
+	}
+	if len(normalizedModels) == 0 {
+		normalizedModels = []string{normalizedDefaultModel}
+	}
+
+	return normalizedModels, normalizedDefaultModel, nil
+}
+
+func uniqueModels(models []string) []string {
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(models))
+
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	return normalized
+}
+
+func containsModel(models []string, target string) bool {
+	normalizedTarget := strings.TrimSpace(target)
+	if normalizedTarget == "" {
+		return false
+	}
+
+	for _, model := range models {
+		if strings.TrimSpace(model) == normalizedTarget {
+			return true
+		}
+	}
+
+	return false
+}
+
+func currentProviderModels(preset *models.LLMProviderPreset) []string {
+	models := uniqueModels(preset.Models)
+	defaultModel := strings.TrimSpace(preset.DefaultModel)
+
+	if defaultModel == "" {
+		return models
+	}
+	if len(models) == 0 {
+		return []string{defaultModel}
+	}
+	if containsModel(models, defaultModel) {
+		return models
+	}
+
+	return append([]string{defaultModel}, models...)
 }
 
 func normalizeBaseURL(value string) string {

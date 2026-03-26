@@ -11,7 +11,7 @@ interface SidebarContentProps {
   collapsed: boolean
   currentConversationId: number | null
   conversations: Conversation[]
-  total: number
+  hasMoreConversations: boolean
   searchValue: string
   showArchived: boolean
   isLoading: boolean
@@ -33,7 +33,7 @@ export function SidebarContent({
   collapsed,
   currentConversationId,
   conversations,
-  total,
+  hasMoreConversations,
   searchValue,
   showArchived,
   isLoading,
@@ -72,13 +72,14 @@ export function SidebarContent({
               collapsed ? 'pointer-events-none w-0 overflow-hidden opacity-0' : 'opacity-100',
             )}
           >
-            Claude
+            {t('app.name')}
           </span>
           <button
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
             onClick={onCreateChat}
             title={t('sidebar.newChat')}
             type="button"
+            aria-label={t('sidebar.newChat')}
           >
             <MessageSquarePlus className="h-4 w-4" />
           </button>
@@ -190,7 +191,7 @@ export function SidebarContent({
                   </button>
 
                   {!collapsed ? (
-                    <div className="mt-2 flex flex-wrap gap-1 opacity-0 transition group-hover:opacity-100">
+                    <div className="mt-2 flex flex-wrap gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
                       <Button
                         className="px-2 py-1 text-xs"
                         onClick={() => onTogglePinned(conversation)}
@@ -216,6 +217,9 @@ export function SidebarContent({
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--danger)]"
                         onClick={() => onDeleteConversation(conversation.id)}
                         type="button"
+                        aria-label={t('sidebar.deleteConversation', {
+                          title: conversation.title,
+                        })}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -227,7 +231,7 @@ export function SidebarContent({
           )}
         </div>
 
-        {!collapsed && conversations.length < total ? (
+        {!collapsed && !isLoading && hasMoreConversations ? (
           <div className="px-2 pt-3">
             <Button
               className="w-full"
@@ -255,6 +259,7 @@ export function SidebarContent({
               onClick={onLogout}
               title={t('sidebar.signOut')}
               type="button"
+              aria-label={t('sidebar.signOut')}
             >
               <LogOut className="h-4 w-4" />
             </button>
@@ -272,6 +277,7 @@ export function SidebarContent({
               onClick={onLogout}
               title={t('sidebar.signOut')}
               type="button"
+              aria-label={t('sidebar.signOut')}
             >
               <LogOut className="h-4 w-4" />
             </button>

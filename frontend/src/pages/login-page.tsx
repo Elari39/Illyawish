@@ -10,7 +10,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { LanguageSwitcher } from '../i18n/language-switcher'
 import { useI18n } from '../i18n/use-i18n'
-import { authApi, chatApi, isNetworkError } from '../lib/api'
+import { authApi, isNetworkError } from '../lib/api'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -75,12 +75,6 @@ export function LoginPage() {
 
       if (redirectTo) {
         navigate(redirectTo, { replace: true })
-        return
-      }
-
-      const conversations = await chatApi.listConversations()
-      if (conversations.length > 0) {
-        navigate(`/chat/${conversations[0].id}`, { replace: true })
         return
       }
 

@@ -10,6 +10,8 @@ import type {
 } from '../../types/chat'
 import type {
   ComposerImage,
+  ProviderEditorMode,
+  ProviderFormErrors,
   ProviderFormState,
 } from './types'
 import {
@@ -17,6 +19,17 @@ import {
   LAST_CONVERSATION_STORAGE_KEY,
   OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
 } from './types'
+
+interface ConversationFilter {
+  showArchived: boolean
+  search: string
+}
+
+interface ConversationMutationResult {
+  conversations: Conversation[]
+  totalDelta: number
+  loadedDelta: number
+}
 
 export function appendToStreamingMessage(messages: Message[], content: string) {
   const nextMessages = [...messages]
@@ -84,6 +97,62 @@ export function syncConversationList(
     return sortConversations(filtered)
   }
   return sortConversations([conversation, ...filtered])
+}
+
+export function matchesConversationFilters(
+  conversation: Conversation,
+  { showArchived, search }: ConversationFilter,
+) {
+  return (
+    conversation.isArchived === showArchived &&
+    (!search ||
+      conversation.title.toLowerCase().includes(search.trim().toLowerCase()))
+  )
+}
+
+export function applyConversationSync(
+  conversations: Conversation[],
+  conversation: Conversation,
+  filter: ConversationFilter,
+  options: {
+    countAsNew?: boolean
+  } = {},
+): ConversationMutationResult {
+  const previousConversations = conversations.filter(
+    (item) => item.id !== conversation.id,
+  )
+  const wasVisible = previousConversations.length !== conversations.length
+  const isVisible = matchesConversationFilters(conversation, filter)
+
+  if (!isVisible) {
+    return {
+      conversations: sortConversations(previousConversations),
+      totalDelta: wasVisible ? -1 : 0,
+      loadedDelta: wasVisible ? -1 : 0,
+    }
+  }
+
+  return {
+    conversations: sortConversations([conversation, ...previousConversations]),
+    totalDelta: !wasVisible && options.countAsNew ? 1 : 0,
+    loadedDelta: 0,
+  }
+}
+
+export function applyConversationRemoval(
+  conversations: Conversation[],
+  conversationId: number,
+): ConversationMutationResult {
+  const nextConversations = conversations.filter(
+    (conversation) => conversation.id !== conversationId,
+  )
+  const removed = nextConversations.length !== conversations.length
+
+  return {
+    conversations: nextConversations,
+    totalDelta: removed ? -1 : 0,
+    loadedDelta: removed ? -1 : 0,
+  }
 }
 
 export function sortConversations(conversations: Conversation[]) {
@@ -217,30 +286,71 @@ export function createProviderForm(
       name: preset.name,
       baseURL: preset.baseURL,
       apiKey: '',
+      models: resolveProviderModelDraft(preset.models, preset.defaultModel),
       defaultModel: preset.defaultModel,
+      errors: createProviderFormErrors(),
     }
   }
+
+  const fallbackModels = resolveProviderModelDraft(
+    fallback?.models ?? [],
+    fallback?.defaultModel ?? '',
+  )
+  const fallbackDefaultModel = resolveDefaultModelValue(
+    fallbackModels,
+    fallback?.defaultModel ?? '',
+  )
 
   return {
     name: '',
     baseURL: fallback?.baseURL || OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
     apiKey: '',
-    defaultModel: fallback?.defaultModel || '',
+    models: fallbackModels.length > 0 ? fallbackModels : [''],
+    defaultModel: fallbackDefaultModel,
+    errors: createProviderFormErrors(),
+  }
+}
+
+export function createProviderFormErrors(): ProviderFormErrors {
+  return {
+    modelItems: [],
   }
 }
 
 export function resolveProviderEditorState(
   providerState: ProviderState,
-  preferredPresetId: number | null,
+  preferredMode: ProviderEditorMode,
 ) {
-  const preferredPreset =
-    providerState.presets.find((preset) => preset.id === preferredPresetId) ?? null
   const activePreset =
     providerState.presets.find((preset) => preset.isActive) ?? null
-  const nextPreset = preferredPreset ?? activePreset
+
+  if (preferredMode.type === 'new') {
+    return {
+      editingProviderId: null,
+      providerEditorMode: preferredMode,
+      providerForm: createProviderForm(providerState.fallback),
+    }
+  }
+
+  if (preferredMode.type === 'edit') {
+    const preferredPreset =
+      providerState.presets.find(
+        (preset) => preset.id === preferredMode.providerId,
+      ) ?? null
+    if (preferredPreset) {
+      return {
+        editingProviderId: preferredPreset.id,
+        providerEditorMode: preferredMode,
+        providerForm: createProviderForm(providerState.fallback, preferredPreset),
+      }
+    }
+  }
+
+  const nextPreset = activePreset
 
   return {
     editingProviderId: nextPreset?.id ?? null,
+    providerEditorMode: { type: 'auto' } as const,
     providerForm: createProviderForm(providerState.fallback, nextPreset),
   }
 }
@@ -270,6 +380,132 @@ export function describeProviderSource(
   }
 
   return t('provider.notConfigured')
+}
+
+export function normalizeModelEntries(models: string[]) {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+
+  for (const model of models) {
+    const trimmed = model.trim()
+    if (!trimmed || seen.has(trimmed)) {
+      continue
+    }
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+
+  return normalized
+}
+
+export function resolveDefaultModelValue(
+  models: string[],
+  defaultModel: string,
+) {
+  const normalizedModels = normalizeModelEntries(models)
+  const trimmedDefaultModel = defaultModel.trim()
+
+  if (normalizedModels.length === 0) {
+    return ''
+  }
+
+  if (!trimmedDefaultModel) {
+    return normalizedModels[0] ?? ''
+  }
+  if (normalizedModels.includes(trimmedDefaultModel)) {
+    return trimmedDefaultModel
+  }
+  return normalizedModels[0] ?? trimmedDefaultModel
+}
+
+export function resolveProviderModelDraft(
+  models: string[],
+  defaultModel: string,
+) {
+  const normalizedModels = normalizeModelEntries(models)
+  const trimmedDefaultModel = defaultModel.trim()
+
+  if (!trimmedDefaultModel) {
+    return normalizedModels.length > 0 ? normalizedModels : ['']
+  }
+  if (normalizedModels.includes(trimmedDefaultModel)) {
+    return normalizedModels
+  }
+  return [trimmedDefaultModel, ...normalizedModels]
+}
+
+export function resolveChatModelOptions(
+  providerState: ProviderState | null,
+  currentModel: string,
+) {
+  const activePreset =
+    providerState?.presets.find((preset) => preset.isActive) ?? null
+  const sourceModels = activePreset?.models ?? providerState?.fallback.models ?? []
+  const normalizedModels = normalizeModelEntries(sourceModels)
+  const trimmedCurrentModel = currentModel.trim()
+
+  if (
+    trimmedCurrentModel &&
+    !normalizedModels.includes(trimmedCurrentModel)
+  ) {
+    return [trimmedCurrentModel, ...normalizedModels]
+  }
+
+  return normalizedModels
+}
+
+export function hasProviderFormErrors(errors: ProviderFormErrors) {
+  return Boolean(
+    errors.name ||
+      errors.baseURL ||
+      errors.apiKey ||
+      errors.models ||
+      errors.defaultModel ||
+      errors.modelItems.some((message) => Boolean(message)),
+  )
+}
+
+export function validateProviderForm(
+  form: ProviderFormState,
+  options: {
+    requireAPIKey: boolean
+    t: I18nContextValue['t']
+  },
+) {
+  const errors = createProviderFormErrors()
+  const { requireAPIKey, t } = options
+
+  if (!form.name.trim()) {
+    errors.name = t('settings.validationPresetNameRequired')
+  }
+  if (!form.baseURL.trim()) {
+    errors.baseURL = t('settings.validationBaseUrlRequired')
+  }
+  if (requireAPIKey && !form.apiKey.trim()) {
+    errors.apiKey = t('settings.validationApiKeyRequired')
+  }
+
+  errors.modelItems = form.models.map((model) =>
+    model.trim() ? '' : t('settings.validationModelRequired'),
+  )
+
+  const normalizedModels = normalizeModelEntries(form.models)
+  const defaultModel = form.defaultModel.trim()
+
+  if (normalizedModels.length === 0) {
+    errors.models = t('settings.validationModelListRequired')
+  }
+  if (!defaultModel) {
+    errors.defaultModel = t('settings.validationDefaultModelRequired')
+  } else if (!normalizedModels.includes(defaultModel)) {
+    errors.defaultModel = t('settings.validationDefaultModelInvalid')
+  }
+
+  return {
+    defaultModel,
+    errors,
+    normalizedModels,
+  }
 }
 
 export function readDesktopSidebarCollapsedPreference() {

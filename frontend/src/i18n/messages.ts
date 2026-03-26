@@ -6,6 +6,7 @@ export type TranslationValues = Record<
 >
 
 const enUSMessages = {
+  'app.name': 'Illyawish',
   'common.language': 'Language',
   'common.loading': 'Loading...',
   'common.cancel': 'Cancel',
@@ -31,7 +32,7 @@ const enUSMessages = {
     'Conversation history stays in SQLite and comes back after refresh.',
   'login.featureFocusedTitle': 'Focused',
   'login.featureFocusedDescription':
-    'A quiet Claude-inspired interface built for reading and long-form prompts.',
+    'A quiet Illyawish workspace built for reading and long-form prompts.',
   'login.signIn': 'Sign in',
   'login.continueAs': 'Continue as {{name}}',
   'login.prefilledDescription':
@@ -57,12 +58,17 @@ const enUSMessages = {
   'chat.settings': 'Settings',
   'chat.regenerate': 'Regenerate',
   'chat.stop': 'Stop',
+  'chat.openSidebar': 'Open conversation sidebar',
+  'chat.closeSidebar': 'Close conversation sidebar',
+  'chat.sidebarNavigation': 'Conversation sidebar',
   'chat.loadingConversation': 'Loading conversation...',
   'chat.editingBanner':
     'Editing your latest message. Sending will regenerate the reply.',
   'chat.updateMessagePlaceholder': 'Update your message...',
-  'chat.messagePlaceholder': 'Message Claude...',
+  'chat.messagePlaceholder': 'Message Illyawish...',
   'chat.attachImage': 'Attach image',
+  'chat.removeImage': 'Remove image {{name}}',
+  'chat.sendMessage': 'Send message',
   'chat.shortcutHint': 'Enter to send, Ctrl+Enter for a new line',
   'chat.exportDefaultTitle': 'conversation',
 
@@ -78,6 +84,7 @@ const enUSMessages = {
   'sidebar.rename': 'Rename',
   'sidebar.restore': 'Restore',
   'sidebar.archive': 'Archive',
+  'sidebar.deleteConversation': 'Delete conversation {{title}}',
   'sidebar.signOut': 'Sign out',
 
   'settings.title': 'Settings',
@@ -89,6 +96,7 @@ const enUSMessages = {
   'settings.providerTab': 'AI Provider',
   'settings.model': 'Model',
   'settings.modelPlaceholder': 'Use provider default model if left blank',
+  'settings.modelDefaultOption': 'Use provider default model',
   'settings.systemPrompt': 'System prompt',
   'settings.temperature': 'Temperature',
   'settings.maxTokens': 'Max tokens',
@@ -113,7 +121,13 @@ const enUSMessages = {
     'Save a model, base URL, and API key for any OpenAI-compatible service.',
   'settings.presetName': 'Preset name',
   'settings.presetNamePlaceholder': 'My OpenAI-compatible provider',
+  'settings.modelList': 'Available models',
+  'settings.modelListDescription':
+    'Add one or more models for this provider, then choose which one is the default.',
+  'settings.addModel': 'Add model',
+  'settings.removeModel': 'Remove model',
   'settings.defaultModelLabel': 'Default model',
+  'settings.defaultModelEmpty': 'Add a model first',
   'settings.baseUrl': 'Base URL',
   'settings.apiKey': 'API key',
   'settings.apiKeyPlaceholderEdit': 'Leave blank to keep the current key',
@@ -128,6 +142,14 @@ const enUSMessages = {
   'settings.createPreset': 'Create preset',
   'settings.testConnection': 'Test connection',
   'settings.testingConnection': 'Testing...',
+  'settings.validationPresetNameRequired': 'Enter a preset name',
+  'settings.validationBaseUrlRequired': 'Enter a base URL',
+  'settings.validationApiKeyRequired': 'Enter an API key',
+  'settings.validationModelRequired': 'Enter a model name',
+  'settings.validationModelListRequired': 'Add at least one model',
+  'settings.validationDefaultModelRequired': 'Choose a default model',
+  'settings.validationDefaultModelInvalid':
+    'The default model must be one of the available models',
 
   'empty.title': 'How can I help you today?',
   'empty.withConversations':
@@ -205,6 +227,7 @@ type TranslationTable = Record<TranslationKey, string>
 export const messages: Record<AppLocale, TranslationTable> = {
   'en-US': enUSMessages,
   'zh-CN': {
+    'app.name': 'Illyawish',
     'common.language': '语言',
     'common.loading': '加载中...',
     'common.cancel': '取消',
@@ -229,7 +252,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '会话历史会保存在 SQLite 中，刷新页面后也能回来。',
     'login.featureFocusedTitle': '专注阅读',
     'login.featureFocusedDescription':
-      '一个安静、偏 Claude 风格的界面，适合阅读和长文本提问。',
+      '一个安静、适合阅读和长文本提问的 Illyawish 工作区。',
     'login.signIn': '登录',
     'login.continueAs': '以 {{name}} 身份继续',
     'login.prefilledDescription': '使用你的工作区账号继续登录。',
@@ -254,11 +277,16 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'chat.settings': '设置',
     'chat.regenerate': '重新生成',
     'chat.stop': '停止',
+    'chat.openSidebar': '打开会话侧边栏',
+    'chat.closeSidebar': '关闭会话侧边栏',
+    'chat.sidebarNavigation': '会话侧边栏',
     'chat.loadingConversation': '正在加载会话...',
     'chat.editingBanner': '正在编辑你的最新一条消息。发送后会重新生成回复。',
     'chat.updateMessagePlaceholder': '更新你的消息...',
-    'chat.messagePlaceholder': '向 Claude 发送消息...',
+    'chat.messagePlaceholder': '向 Illyawish 发送消息...',
     'chat.attachImage': '添加图片',
+    'chat.removeImage': '移除图片 {{name}}',
+    'chat.sendMessage': '发送消息',
     'chat.shortcutHint': 'Enter 发送，Ctrl+Enter 换行',
     'chat.exportDefaultTitle': 'conversation',
 
@@ -274,6 +302,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'sidebar.rename': '重命名',
     'sidebar.restore': '恢复',
     'sidebar.archive': '归档',
+    'sidebar.deleteConversation': '删除会话 {{title}}',
     'sidebar.signOut': '退出登录',
 
     'settings.title': '设置',
@@ -285,6 +314,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.providerTab': 'AI 提供商',
     'settings.model': '模型',
     'settings.modelPlaceholder': '留空则使用提供商默认模型',
+    'settings.modelDefaultOption': '使用提供商默认模型',
     'settings.systemPrompt': '系统提示词',
     'settings.temperature': '温度',
     'settings.maxTokens': '最大 Token',
@@ -309,7 +339,12 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '为任意 OpenAI 兼容服务保存模型、Base URL 和 API Key。',
     'settings.presetName': '预设名称',
     'settings.presetNamePlaceholder': '我的 OpenAI 兼容提供商',
+    'settings.modelList': '可用模型',
+    'settings.modelListDescription': '可以为这个提供商添加多个模型，并选择其中一个作为默认模型。',
+    'settings.addModel': '添加模型',
+    'settings.removeModel': '移除模型',
     'settings.defaultModelLabel': '默认模型',
+    'settings.defaultModelEmpty': '请先添加模型',
     'settings.baseUrl': 'Base URL',
     'settings.apiKey': 'API Key',
     'settings.apiKeyPlaceholderEdit': '留空则保留当前密钥',
@@ -323,6 +358,13 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.createPreset': '创建预设',
     'settings.testConnection': '测试连接',
     'settings.testingConnection': '测试中...',
+    'settings.validationPresetNameRequired': '请输入预设名称',
+    'settings.validationBaseUrlRequired': '请输入 Base URL',
+    'settings.validationApiKeyRequired': '请输入 API Key',
+    'settings.validationModelRequired': '请输入模型名称',
+    'settings.validationModelListRequired': '请至少添加一个模型',
+    'settings.validationDefaultModelRequired': '请选择默认模型',
+    'settings.validationDefaultModelInvalid': '默认模型必须属于可用模型列表',
 
     'empty.title': '今天想让我帮你做点什么？',
     'empty.withConversations': '从侧边栏选择一个会话，或者直接在下方开始一段全新的聊天。',
@@ -389,6 +431,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'markdown.assistant': '助手',
   },
   'ja-JP': {
+    'app.name': 'Illyawish',
     'common.language': '言語',
     'common.loading': '読み込み中...',
     'common.cancel': 'キャンセル',
@@ -414,7 +457,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '会話履歴は SQLite に保存され、リロード後もそのまま戻ってきます。',
     'login.featureFocusedTitle': '集中できる設計',
     'login.featureFocusedDescription':
-      '読みやすさと長文プロンプト向けに整えた、静かな Claude 風インターフェースです。',
+      '読みやすさと長文プロンプト向けに整えた、静かな Illyawish ワークスペースです。',
     'login.signIn': 'サインイン',
     'login.continueAs': '{{name}} として続行',
     'login.prefilledDescription':
@@ -440,12 +483,17 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'chat.settings': '設定',
     'chat.regenerate': '再生成',
     'chat.stop': '停止',
+    'chat.openSidebar': '会話サイドバーを開く',
+    'chat.closeSidebar': '会話サイドバーを閉じる',
+    'chat.sidebarNavigation': '会話サイドバー',
     'chat.loadingConversation': '会話を読み込み中...',
     'chat.editingBanner':
       '最新メッセージを編集中です。送信すると返信が再生成されます。',
     'chat.updateMessagePlaceholder': 'メッセージを更新...',
-    'chat.messagePlaceholder': 'Claude にメッセージを送る...',
+    'chat.messagePlaceholder': 'Illyawish にメッセージを送る...',
     'chat.attachImage': '画像を添付',
+    'chat.removeImage': '画像 {{name}} を削除',
+    'chat.sendMessage': 'メッセージを送信',
     'chat.shortcutHint': 'Enter で送信、Ctrl+Enter で改行',
     'chat.exportDefaultTitle': 'conversation',
 
@@ -461,6 +509,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'sidebar.rename': '名前を変更',
     'sidebar.restore': '復元',
     'sidebar.archive': 'アーカイブ',
+    'sidebar.deleteConversation': '会話 {{title}} を削除',
     'sidebar.signOut': 'サインアウト',
 
     'settings.title': '設定',
@@ -472,6 +521,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.providerTab': 'AI プロバイダー',
     'settings.model': 'モデル',
     'settings.modelPlaceholder': '空欄の場合はプロバイダー既定のモデルを使用',
+    'settings.modelDefaultOption': 'プロバイダー既定のモデルを使う',
     'settings.systemPrompt': 'システムプロンプト',
     'settings.temperature': 'Temperature',
     'settings.maxTokens': '最大トークン数',
@@ -496,7 +546,13 @@ export const messages: Record<AppLocale, TranslationTable> = {
       '任意の OpenAI 互換サービス用に、モデル、Base URL、API キーを保存できます。',
     'settings.presetName': 'プリセット名',
     'settings.presetNamePlaceholder': '私の OpenAI 互換プロバイダー',
+    'settings.modelList': '利用可能なモデル',
+    'settings.modelListDescription':
+      'このプロバイダーで使えるモデルを 1 つ以上追加し、その中から既定のモデルを選びます。',
+    'settings.addModel': 'モデルを追加',
+    'settings.removeModel': 'モデルを削除',
     'settings.defaultModelLabel': '既定のモデル',
+    'settings.defaultModelEmpty': '先にモデルを追加してください',
     'settings.baseUrl': 'Base URL',
     'settings.apiKey': 'API キー',
     'settings.apiKeyPlaceholderEdit': '空欄のままなら現在のキーを維持',
@@ -510,6 +566,14 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.createPreset': 'プリセットを作成',
     'settings.testConnection': '接続をテスト',
     'settings.testingConnection': 'テスト中...',
+    'settings.validationPresetNameRequired': 'プリセット名を入力してください',
+    'settings.validationBaseUrlRequired': 'Base URL を入力してください',
+    'settings.validationApiKeyRequired': 'API キーを入力してください',
+    'settings.validationModelRequired': 'モデル名を入力してください',
+    'settings.validationModelListRequired': '少なくとも 1 つのモデルを追加してください',
+    'settings.validationDefaultModelRequired': '既定のモデルを選択してください',
+    'settings.validationDefaultModelInvalid':
+      '既定のモデルは利用可能なモデル一覧に含まれている必要があります',
 
     'empty.title': '今日は何を手伝おうか？',
     'empty.withConversations':

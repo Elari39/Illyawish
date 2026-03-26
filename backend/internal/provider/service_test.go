@@ -32,6 +32,7 @@ func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 		Name:         "OpenAI",
 		BaseURL:      "https://api.openai.com/v1",
 		APIKey:       "sk-test-123456",
+		Models:       []string{"gpt-4.1-mini", "gpt-4.1"},
 		DefaultModel: "gpt-4.1-mini",
 	})
 	if err != nil {
@@ -70,6 +71,7 @@ func TestUpdatePresetRetainsAPIKeyWhenNotProvided(t *testing.T) {
 		Name:         "Preset A",
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "original-key",
+		Models:       []string{"model-a"},
 		DefaultModel: "model-a",
 	})
 	if err != nil {
@@ -80,6 +82,7 @@ func TestUpdatePresetRetainsAPIKeyWhenNotProvided(t *testing.T) {
 	newModel := "model-b"
 	updated, err := service.UpdatePreset(1, preset.ID, UpdatePresetInput{
 		Name:         &newName,
+		Models:       &[]string{"model-a", "model-b"},
 		DefaultModel: &newModel,
 	})
 	if err != nil {
@@ -111,6 +114,7 @@ func TestOnlyOnePresetRemainsActive(t *testing.T) {
 		Name:         "First",
 		BaseURL:      "https://one.example.com/v1",
 		APIKey:       "key-one",
+		Models:       []string{"model-one"},
 		DefaultModel: "model-one",
 	})
 	if err != nil {
@@ -121,6 +125,7 @@ func TestOnlyOnePresetRemainsActive(t *testing.T) {
 		Name:         "Second",
 		BaseURL:      "https://two.example.com/v1",
 		APIKey:       "key-two",
+		Models:       []string{"model-two"},
 		DefaultModel: "model-two",
 	})
 	if err != nil {
@@ -219,6 +224,7 @@ func TestSettingsEncryptionKeyOverridesSessionSecret(t *testing.T) {
 		Name:         "Encrypted",
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "override-key",
+		Models:       []string{"model-a"},
 		DefaultModel: "model-a",
 	})
 	if err != nil {
@@ -249,6 +255,7 @@ func TestTestPresetUsesStoredAPIKeyWhenEditing(t *testing.T) {
 		Name:         "Preset A",
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "stored-key",
+		Models:       []string{"model-a"},
 		DefaultModel: "model-a",
 	})
 	if err != nil {
@@ -289,6 +296,30 @@ func TestTestPresetRejectsInvalidBaseURL(t *testing.T) {
 	}
 	if !IsRequestError(err) {
 		t.Fatalf("expected request error, got %v", err)
+	}
+}
+
+func TestCreatePresetIncludesDefaultModelInStoredModels(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "OpenAI",
+		BaseURL:      "https://api.openai.com/v1",
+		APIKey:       "sk-test",
+		Models:       []string{"gpt-4.1"},
+		DefaultModel: "gpt-4.1-mini",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	if len(preset.Models) != 2 {
+		t.Fatalf("expected normalized models to include default model, got %#v", preset.Models)
+	}
+	if preset.Models[0] != "gpt-4.1-mini" {
+		t.Fatalf("expected default model to be inserted first, got %#v", preset.Models)
 	}
 }
 

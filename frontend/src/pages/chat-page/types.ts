@@ -23,12 +23,28 @@ export interface ComposerImage {
 
 export type SettingsTab = 'chat' | 'provider'
 
+export interface ProviderFormErrors {
+  name?: string
+  baseURL?: string
+  apiKey?: string
+  models?: string
+  modelItems: string[]
+  defaultModel?: string
+}
+
 export interface ProviderFormState {
   name: string
   baseURL: string
   apiKey: string
+  models: string[]
   defaultModel: string
+  errors: ProviderFormErrors
 }
+
+export type ProviderEditorMode =
+  | { type: 'auto' }
+  | { type: 'new' }
+  | { type: 'edit'; providerId: number }
 
 export type ToastVariant = 'success' | 'error' | 'info'
 

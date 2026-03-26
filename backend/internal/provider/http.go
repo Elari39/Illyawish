@@ -19,20 +19,22 @@ type Handler struct {
 }
 
 type ProviderPresetDTO struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
-	BaseURL      string `json:"baseURL"`
-	APIKeyHint   string `json:"apiKeyHint"`
-	DefaultModel string `json:"defaultModel"`
-	IsActive     bool   `json:"isActive"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	ID           uint     `json:"id"`
+	Name         string   `json:"name"`
+	BaseURL      string   `json:"baseURL"`
+	APIKeyHint   string   `json:"apiKeyHint"`
+	Models       []string `json:"models"`
+	DefaultModel string   `json:"defaultModel"`
+	IsActive     bool     `json:"isActive"`
+	CreatedAt    string   `json:"createdAt"`
+	UpdatedAt    string   `json:"updatedAt"`
 }
 
 type ProviderFallbackDTO struct {
-	Available    bool   `json:"available"`
-	BaseURL      string `json:"baseURL"`
-	DefaultModel string `json:"defaultModel"`
+	Available    bool     `json:"available"`
+	BaseURL      string   `json:"baseURL"`
+	Models       []string `json:"models"`
+	DefaultModel string   `json:"defaultModel"`
 }
 
 type ProviderStateDTO struct {
@@ -43,17 +45,19 @@ type ProviderStateDTO struct {
 }
 
 type createProviderRequest struct {
-	Name         string `json:"name"`
-	BaseURL      string `json:"baseURL"`
-	APIKey       string `json:"apiKey"`
-	DefaultModel string `json:"defaultModel"`
+	Name         string   `json:"name"`
+	BaseURL      string   `json:"baseURL"`
+	APIKey       string   `json:"apiKey"`
+	Models       []string `json:"models"`
+	DefaultModel string   `json:"defaultModel"`
 }
 
 type updateProviderRequest struct {
-	Name         *string `json:"name"`
-	BaseURL      *string `json:"baseURL"`
-	APIKey       *string `json:"apiKey"`
-	DefaultModel *string `json:"defaultModel"`
+	Name         *string   `json:"name"`
+	BaseURL      *string   `json:"baseURL"`
+	APIKey       *string   `json:"apiKey"`
+	Models       *[]string `json:"models"`
+	DefaultModel *string   `json:"defaultModel"`
 }
 
 type testProviderRequest struct {
@@ -91,6 +95,7 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 		Name:         req.Name,
 		BaseURL:      req.BaseURL,
 		APIKey:       req.APIKey,
+		Models:       req.Models,
 		DefaultModel: req.DefaultModel,
 	}); err != nil {
 		handleProviderError(c, err)
@@ -118,6 +123,7 @@ func (h *Handler) UpdateProvider(c *gin.Context) {
 		Name:         req.Name,
 		BaseURL:      req.BaseURL,
 		APIKey:       req.APIKey,
+		Models:       req.Models,
 		DefaultModel: req.DefaultModel,
 	}); err != nil {
 		handleProviderError(c, err)
@@ -219,6 +225,7 @@ func toProviderStateDTO(state *State) ProviderStateDTO {
 		Fallback: ProviderFallbackDTO{
 			Available:    state.Fallback.Available,
 			BaseURL:      state.Fallback.BaseURL,
+			Models:       state.Fallback.Models,
 			DefaultModel: state.Fallback.DefaultModel,
 		},
 	}
@@ -230,6 +237,7 @@ func toProviderPresetDTO(preset *models.LLMProviderPreset) ProviderPresetDTO {
 		Name:         preset.Name,
 		BaseURL:      preset.BaseURL,
 		APIKeyHint:   preset.APIKeyHint,
+		Models:       currentProviderModels(preset),
 		DefaultModel: preset.DefaultModel,
 		IsActive:     preset.IsActive,
 		CreatedAt:    preset.CreatedAt.Format(timeFormat),

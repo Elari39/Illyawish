@@ -7,6 +7,7 @@ import { MessageBubble } from './message-bubble'
 
 interface MessageListProps {
   activeConversationId: number | null
+  hasConversationShell: boolean
   isLoadingMessages: boolean
   messages: Message[]
   latestUserMessage: Message | null
@@ -24,6 +25,7 @@ interface MessageListProps {
 
 export function MessageList({
   activeConversationId,
+  hasConversationShell,
   isLoadingMessages,
   messages,
   latestUserMessage,
@@ -45,7 +47,8 @@ export function MessageList({
       className="flex-1 overflow-y-auto px-4 py-8 md:px-8 md:py-10"
       ref={viewportRef}
     >
-      {activeConversationId && isLoadingMessages ? (
+      {(activeConversationId && isLoadingMessages) ||
+      (activeConversationId && !hasConversationShell && messages.length === 0) ? (
         <div className="px-2 py-8 text-sm text-[var(--muted-foreground)]">
           {t('chat.loadingConversation')}
         </div>

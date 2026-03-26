@@ -3,7 +3,11 @@ import type { I18nContextValue } from '../../i18n/context'
 import {
   appendToStreamingMessage,
   buildConversationMarkdown,
+  createProviderFormErrors,
+  resolveChatModelOptions,
+  resolveProviderModelDraft,
   upsertMessage,
+  validateProviderForm,
 } from './utils'
 
 const t: I18nContextValue['t'] = (key, values) =>
@@ -107,5 +111,66 @@ describe('chat page utils', () => {
     expect(markdown).toContain('## User')
     expect(markdown).toContain('## Assistant')
     expect(markdown).toContain('Here is the summary.')
+  })
+
+  it('builds chat model options from the active provider', () => {
+    const options = resolveChatModelOptions(
+      {
+        activePresetId: 1,
+        currentSource: 'preset',
+        fallback: {
+          available: true,
+          baseURL: 'https://fallback.example.com/v1',
+          models: ['fallback-model'],
+          defaultModel: 'fallback-model',
+        },
+        presets: [
+          {
+            id: 1,
+            name: 'OpenAI',
+            baseURL: 'https://api.openai.com/v1',
+            apiKeyHint: 'sk-1...2345',
+            models: ['gpt-4.1-mini', 'gpt-4.1'],
+            defaultModel: 'gpt-4.1-mini',
+            isActive: true,
+            createdAt: '2026-03-26T00:00:00Z',
+            updatedAt: '2026-03-26T00:00:00Z',
+          },
+        ],
+      },
+      '',
+    )
+
+    expect(options).toEqual(['gpt-4.1-mini', 'gpt-4.1'])
+  })
+
+  it('keeps the default model in the provider draft when models are missing it', () => {
+    const models = resolveProviderModelDraft(['gpt-4.1'], 'gpt-4.1-mini')
+
+    expect(models).toEqual(['gpt-4.1-mini', 'gpt-4.1'])
+  })
+
+  it('validates required provider fields for a new preset', () => {
+    const validation = validateProviderForm(
+      {
+        name: '',
+        baseURL: '',
+        apiKey: '',
+        models: [''],
+        defaultModel: '',
+        errors: createProviderFormErrors(),
+      },
+      {
+        requireAPIKey: true,
+        t,
+      },
+    )
+
+    expect(validation.errors.name).toBeTruthy()
+    expect(validation.errors.baseURL).toBeTruthy()
+    expect(validation.errors.apiKey).toBeTruthy()
+    expect(validation.errors.models).toBeTruthy()
+    expect(validation.errors.defaultModel).toBeTruthy()
+    expect(validation.errors.modelItems[0]).toBeTruthy()
   })
 })

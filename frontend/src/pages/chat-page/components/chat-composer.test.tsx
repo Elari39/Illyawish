@@ -30,7 +30,7 @@ describe('ChatComposer', () => {
       </TestProviders>,
     )
 
-    const textarea = screen.getByPlaceholderText('Message Claude...')
+    const textarea = screen.getByPlaceholderText('Message Illyawish...')
     const file = new File(['image-bytes'], 'paste.png', { type: 'image/png' })
 
     fireEvent.paste(textarea, {

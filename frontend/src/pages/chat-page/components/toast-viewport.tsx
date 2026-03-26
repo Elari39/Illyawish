@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 
+import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import type { ToastState } from '../types'
 
@@ -12,12 +13,19 @@ export function ToastViewport({
   toasts,
   onDismiss,
 }: ToastViewportProps) {
+  const { t } = useI18n()
+
   if (toasts.length === 0) {
     return null
   }
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-3">
+    <div
+      aria-atomic="false"
+      aria-live="polite"
+      className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-3"
+      role="region"
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -30,10 +38,12 @@ export function ToastViewport({
             toast.variant === 'info' &&
               'border-[var(--line)] bg-white/95 text-[var(--foreground)]',
           )}
+          role={toast.variant === 'error' ? 'alert' : 'status'}
         >
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm leading-6">{toast.message}</p>
             <button
+              aria-label={t('common.close')}
               className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-black/5"
               onClick={() => onDismiss(toast.id)}
               type="button"

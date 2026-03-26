@@ -26,7 +26,7 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/ai/providers",
-		bytes.NewBufferString(`{"name":"OpenAI","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","defaultModel":"gpt-4.1-mini"}`),
+		bytes.NewBufferString(`{"name":"OpenAI","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","models":["gpt-4.1-mini","gpt-4.1"],"defaultModel":"gpt-4.1-mini"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Set("current_user", &models.User{ID: 1})
@@ -51,6 +51,7 @@ func TestUpdateProviderUpdatesPresetAndReturnsState(t *testing.T) {
 		Name:         "OpenAI",
 		BaseURL:      "https://api.openai.com/v1",
 		APIKey:       "sk-test",
+		Models:       []string{"gpt-4.1-mini"},
 		DefaultModel: "gpt-4.1-mini",
 	})
 	if err != nil {
@@ -62,7 +63,7 @@ func TestUpdateProviderUpdatesPresetAndReturnsState(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPatch,
 		"/api/ai/providers/1",
-		bytes.NewBufferString(`{"name":"OpenAI 2","defaultModel":"gpt-4.1"}`),
+		bytes.NewBufferString(`{"name":"OpenAI 2","models":["gpt-4.1","gpt-4.1-mini"],"defaultModel":"gpt-4.1"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Params = gin.Params{{Key: "id", Value: "1"}}
@@ -111,6 +112,7 @@ func TestDeleteProviderRemovesPresetAndReturnsUpdatedState(t *testing.T) {
 		Name:         "OpenAI",
 		BaseURL:      "https://api.openai.com/v1",
 		APIKey:       "sk-test",
+		Models:       []string{"gpt-4.1-mini"},
 		DefaultModel: "gpt-4.1-mini",
 	})
 	if err != nil {

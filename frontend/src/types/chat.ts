@@ -22,6 +22,7 @@ export interface ProviderPreset {
   name: string
   baseURL: string
   apiKeyHint: string
+  models: string[]
   defaultModel: string
   isActive: boolean
   createdAt: string
@@ -31,6 +32,7 @@ export interface ProviderPreset {
 export interface ProviderFallbackState {
   available: boolean
   baseURL: string
+  models: string[]
   defaultModel: string
 }
 
@@ -97,6 +99,7 @@ export interface CreateProviderPayload {
   name: string
   baseURL: string
   apiKey: string
+  models: string[]
   defaultModel: string
 }
 
@@ -104,6 +107,7 @@ export interface UpdateProviderPayload {
   name?: string
   baseURL?: string
   apiKey?: string
+  models?: string[]
   defaultModel?: string
 }
 

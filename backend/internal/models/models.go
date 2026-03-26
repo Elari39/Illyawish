@@ -69,14 +69,15 @@ type Message struct {
 }
 
 type LLMProviderPreset struct {
-	ID              uint   `gorm:"primaryKey"`
-	UserID          uint   `gorm:"index;not null"`
-	Name            string `gorm:"size:120;not null"`
-	BaseURL         string `gorm:"size:512;not null"`
-	EncryptedAPIKey string `gorm:"type:text;not null"`
-	APIKeyHint      string `gorm:"size:64;not null"`
-	DefaultModel    string `gorm:"size:128;not null"`
-	IsActive        bool   `gorm:"index;not null;default:false"`
+	ID              uint     `gorm:"primaryKey"`
+	UserID          uint     `gorm:"index;not null"`
+	Name            string   `gorm:"size:120;not null"`
+	BaseURL         string   `gorm:"size:512;not null"`
+	EncryptedAPIKey string   `gorm:"type:text;not null"`
+	APIKeyHint      string   `gorm:"size:64;not null"`
+	Models          []string `gorm:"serializer:json"`
+	DefaultModel    string   `gorm:"size:128;not null"`
+	IsActive        bool     `gorm:"index;not null;default:false"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

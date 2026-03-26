@@ -10,6 +10,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type providerPresetUpdates struct {
+	Name            *string   `gorm:"column:name"`
+	BaseURL         *string   `gorm:"column:base_url"`
+	EncryptedAPIKey *string   `gorm:"column:encrypted_api_key"`
+	APIKeyHint      *string   `gorm:"column:api_key_hint"`
+	Models          []string  `gorm:"column:models;serializer:json"`
+	DefaultModel    *string   `gorm:"column:default_model"`
+	UpdatedAt       time.Time `gorm:"column:updated_at"`
+}
+
 func (s *Service) ListState(userID uint) (*State, error) {
 	var presets []models.LLMProviderPreset
 	if err := s.db.
@@ -60,6 +70,7 @@ func (s *Service) CreatePreset(userID uint, input CreatePresetInput) (*models.LL
 		BaseURL:         normalized.BaseURL,
 		EncryptedAPIKey: encryptedAPIKey,
 		APIKeyHint:      apiKeyHint(normalized.APIKey),
+		Models:          normalized.Models,
 		DefaultModel:    normalized.DefaultModel,
 		IsActive:        true,
 	}
@@ -89,34 +100,44 @@ func (s *Service) UpdatePreset(userID uint, presetID uint, input UpdatePresetInp
 		return nil, err
 	}
 
-	normalized, err := sanitizeUpdatePresetInput(input)
+	normalized, err := sanitizeUpdatePresetInput(input, preset)
 	if err != nil {
 		return nil, err
 	}
 
-	updates := map[string]any{
-		"updated_at": time.Now(),
+	updates := providerPresetUpdates{
+		UpdatedAt: time.Now(),
 	}
+	hasUpdates := false
 
 	if normalized.Name != nil {
-		updates["name"] = *normalized.Name
+		updates.Name = normalized.Name
+		hasUpdates = true
 	}
 	if normalized.BaseURL != nil {
-		updates["base_url"] = *normalized.BaseURL
+		updates.BaseURL = normalized.BaseURL
+		hasUpdates = true
+	}
+	if normalized.Models != nil {
+		updates.Models = *normalized.Models
+		hasUpdates = true
 	}
 	if normalized.DefaultModel != nil {
-		updates["default_model"] = *normalized.DefaultModel
+		updates.DefaultModel = normalized.DefaultModel
+		hasUpdates = true
 	}
 	if normalized.APIKey != nil {
 		encryptedAPIKey, err := s.crypter.Encrypt(*normalized.APIKey)
 		if err != nil {
 			return nil, fmt.Errorf("encrypt provider API key: %w", err)
 		}
-		updates["encrypted_api_key"] = encryptedAPIKey
-		updates["api_key_hint"] = apiKeyHint(*normalized.APIKey)
+		apiKeyHint := apiKeyHint(*normalized.APIKey)
+		updates.EncryptedAPIKey = &encryptedAPIKey
+		updates.APIKeyHint = &apiKeyHint
+		hasUpdates = true
 	}
 
-	if len(updates) > 1 {
+	if hasUpdates {
 		if err := s.db.Model(preset).Updates(updates).Error; err != nil {
 			return nil, fmt.Errorf("update provider preset: %w", err)
 		}

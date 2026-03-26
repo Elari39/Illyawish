@@ -3,6 +3,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"backend/internal/llm"
 	"backend/internal/models"
@@ -74,9 +75,15 @@ func (s *Service) activePreset(userID uint) (*models.LLMProviderPreset, error) {
 }
 
 func (s *Service) fallbackState() FallbackState {
+	fallbackModels := []string{}
+	if strings.TrimSpace(s.fallback.DefaultModel) != "" {
+		fallbackModels = []string{s.fallback.DefaultModel}
+	}
+
 	return FallbackState{
 		Available:    isCompleteProviderConfig(s.fallback),
 		BaseURL:      s.fallback.BaseURL,
+		Models:       fallbackModels,
 		DefaultModel: s.fallback.DefaultModel,
 	}
 }

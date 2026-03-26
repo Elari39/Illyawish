@@ -1,10 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '../../../i18n/use-i18n'
 import { providerApi } from '../../../lib/api'
 import type { ProviderPreset, ProviderState } from '../../../types/chat'
-import type { ProviderFormState } from '../types'
-import { createProviderForm, resolveProviderEditorState } from '../utils'
+import type { ProviderEditorMode, ProviderFormState } from '../types'
+import {
+  createProviderForm,
+  hasProviderFormErrors,
+  normalizeModelEntries,
+  resolveProviderEditorState,
+  validateProviderForm,
+} from '../utils'
 
 interface UseProviderSettingsOptions {
   isSettingsOpen: boolean
@@ -23,18 +29,60 @@ export function useProviderSettings({
     createProviderForm(),
   )
   const [editingProviderId, setEditingProviderId] = useState<number | null>(null)
+  const [providerEditorMode, setProviderEditorMode] = useState<ProviderEditorMode>({
+    type: 'auto',
+  })
   const [isLoadingProviders, setIsLoadingProviders] = useState(false)
   const [isSavingProvider, setIsSavingProvider] = useState(false)
   const [isTestingProvider, setIsTestingProvider] = useState(false)
-  const editingProviderIdRef = useRef<number | null>(null)
+  const providerStateRef = useRef<ProviderState | null>(null)
+  const setChatErrorRef = useRef(setChatError)
+  const tRef = useRef(t)
+  const providerEditorModeRef = useRef<ProviderEditorMode>({
+    type: 'auto',
+  })
 
   useEffect(() => {
-    editingProviderIdRef.current = editingProviderId
-  }, [editingProviderId])
+    providerStateRef.current = providerState
+  }, [providerState])
+
+  useEffect(() => {
+    setChatErrorRef.current = setChatError
+  }, [setChatError])
+
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
+
+  useEffect(() => {
+    providerEditorModeRef.current = providerEditorMode
+  }, [providerEditorMode])
+
+  const applyResolvedProviderEditor = useCallback((
+    nextProviderEditor: ReturnType<typeof resolveProviderEditorState>,
+  ) => {
+    providerEditorModeRef.current = nextProviderEditor.providerEditorMode
+    setProviderEditorMode(nextProviderEditor.providerEditorMode)
+    setEditingProviderId(nextProviderEditor.editingProviderId)
+    setProviderForm(nextProviderEditor.providerForm)
+  }, [])
 
   useEffect(() => {
     if (!isSettingsOpen) {
       return
+    }
+
+    const nextProviderEditorMode: ProviderEditorMode = { type: 'auto' }
+    providerEditorModeRef.current = nextProviderEditorMode
+    setProviderEditorMode(nextProviderEditorMode)
+
+    if (providerStateRef.current) {
+      applyResolvedProviderEditor(
+        resolveProviderEditorState(
+          providerStateRef.current,
+          nextProviderEditorMode,
+        ),
+      )
     }
 
     let cancelled = false
@@ -46,21 +94,19 @@ export function useProviderSettings({
         if (cancelled) {
           return
         }
-        const nextProviderEditor = resolveProviderEditorState(
-          nextState,
-          editingProviderIdRef.current,
-        )
+        providerStateRef.current = nextState
         setProviderState(nextState)
-        setEditingProviderId(nextProviderEditor.editingProviderId)
-        setProviderForm(nextProviderEditor.providerForm)
+        applyResolvedProviderEditor(
+          resolveProviderEditorState(nextState, providerEditorModeRef.current),
+        )
       } catch (error) {
         if (cancelled) {
           return
         }
-        setChatError(
+        setChatErrorRef.current(
           error instanceof Error
             ? error.message
-            : t('error.loadProviders'),
+            : tRef.current('error.loadProviders'),
         )
       } finally {
         if (!cancelled) {
@@ -74,29 +120,65 @@ export function useProviderSettings({
     return () => {
       cancelled = true
     }
-  }, [isSettingsOpen, setChatError, t])
+  }, [applyResolvedProviderEditor, isSettingsOpen])
 
   function applyProviderState(
     nextState: ProviderState,
-    preferredPresetId: number | null = editingProviderIdRef.current,
+    preferredMode: ProviderEditorMode = providerEditorModeRef.current,
   ) {
-    const nextProviderEditor = resolveProviderEditorState(
-      nextState,
-      preferredPresetId,
-    )
+    providerStateRef.current = nextState
     setProviderState(nextState)
-    setEditingProviderId(nextProviderEditor.editingProviderId)
-    setProviderForm(nextProviderEditor.providerForm)
+    applyResolvedProviderEditor(
+      resolveProviderEditorState(nextState, preferredMode),
+    )
   }
 
   function handleStartNewProvider() {
+    const nextProviderEditorMode: ProviderEditorMode = { type: 'new' }
+    providerEditorModeRef.current = nextProviderEditorMode
+    setProviderEditorMode(nextProviderEditorMode)
     setEditingProviderId(null)
     setProviderForm(createProviderForm(providerState?.fallback))
   }
 
   function handleEditProvider(preset: ProviderPreset) {
+    const nextProviderEditorMode: ProviderEditorMode = {
+      type: 'edit',
+      providerId: preset.id,
+    }
+    providerEditorModeRef.current = nextProviderEditorMode
+    setProviderEditorMode(nextProviderEditorMode)
     setEditingProviderId(preset.id)
     setProviderForm(createProviderForm(providerState?.fallback, preset))
+  }
+
+  function handleProviderFieldChange(
+    field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
+    value: string,
+  ) {
+    setProviderForm((previous) => ({
+      ...previous,
+      [field]: value,
+      errors: {
+        ...previous.errors,
+        [field]: undefined,
+      },
+    }))
+  }
+
+  function handleProviderModelsChange(
+    value: Pick<ProviderFormState, 'models' | 'defaultModel'>,
+  ) {
+    setProviderForm((previous) => ({
+      ...previous,
+      ...value,
+      errors: {
+        ...previous.errors,
+        models: undefined,
+        modelItems: [],
+        defaultModel: undefined,
+      },
+    }))
   }
 
   async function handleSaveProvider() {
@@ -104,11 +186,25 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
-      const nextState = editingProviderId
-        ? await providerApi.update(editingProviderId, {
+      const validation = validateProviderForm(providerForm, {
+        requireAPIKey: providerEditorMode.type !== 'edit',
+        t,
+      })
+      if (hasProviderFormErrors(validation.errors)) {
+        setProviderForm((previous) => ({
+          ...previous,
+          errors: validation.errors,
+        }))
+        return
+      }
+
+      const models = normalizeModelEntries(providerForm.models)
+      const nextState = providerEditorMode.type === 'edit'
+        ? await providerApi.update(providerEditorMode.providerId, {
             name: providerForm.name,
             baseURL: providerForm.baseURL,
-            defaultModel: providerForm.defaultModel,
+            models,
+            defaultModel: validation.defaultModel,
             ...(providerForm.apiKey.trim()
               ? { apiKey: providerForm.apiKey }
               : {}),
@@ -117,12 +213,25 @@ export function useProviderSettings({
             name: providerForm.name,
             baseURL: providerForm.baseURL,
             apiKey: providerForm.apiKey,
-            defaultModel: providerForm.defaultModel,
+            models,
+            defaultModel: validation.defaultModel,
           })
 
-      applyProviderState(nextState, editingProviderId ?? nextState.activePresetId)
+      const nextProviderEditorMode =
+        providerEditorMode.type === 'edit'
+          ? providerEditorMode
+          : nextState.activePresetId != null
+            ? {
+                type: 'edit' as const,
+                providerId: nextState.activePresetId,
+              }
+            : { type: 'auto' as const }
+
+      applyProviderState(nextState, nextProviderEditorMode)
       showToast(
-        editingProviderId ? t('settings.savePreset') : t('settings.createPreset'),
+        providerEditorMode.type === 'edit'
+          ? t('settings.savePreset')
+          : t('settings.createPreset'),
         'success',
       )
     } catch (error) {
@@ -141,11 +250,25 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
+      const validation = validateProviderForm(providerForm, {
+        requireAPIKey: providerEditorMode.type !== 'edit',
+        t,
+      })
+      if (hasProviderFormErrors(validation.errors)) {
+        setProviderForm((previous) => ({
+          ...previous,
+          errors: validation.errors,
+        }))
+        return
+      }
+
       const result = await providerApi.test({
-        ...(editingProviderId ? { providerId: editingProviderId } : {}),
+        ...(providerEditorMode.type === 'edit'
+          ? { providerId: providerEditorMode.providerId }
+          : {}),
         baseURL: providerForm.baseURL,
         ...(providerForm.apiKey.trim() ? { apiKey: providerForm.apiKey } : {}),
-        defaultModel: providerForm.defaultModel,
+        defaultModel: validation.defaultModel,
       })
       showToast(result.message, 'success')
     } catch (error) {
@@ -166,7 +289,10 @@ export function useProviderSettings({
 
     try {
       const nextState = await providerApi.activate(providerId)
-      applyProviderState(nextState, providerId)
+      applyProviderState(nextState, {
+        type: 'edit',
+        providerId,
+      })
       showToast(t('settings.setActive'), 'success')
     } catch (error) {
       setChatError(
@@ -187,7 +313,9 @@ export function useProviderSettings({
       const nextState = await providerApi.delete(preset.id)
       applyProviderState(
         nextState,
-        editingProviderId === preset.id ? null : editingProviderId,
+        editingProviderId === preset.id
+          ? { type: 'auto' }
+          : providerEditorModeRef.current,
       )
       showToast(t('common.delete'), 'success')
     } catch (error) {
@@ -208,7 +336,8 @@ export function useProviderSettings({
     isLoadingProviders,
     isSavingProvider,
     isTestingProvider,
-    setProviderForm,
+    handleProviderFieldChange,
+    handleProviderModelsChange,
     handleActivateProvider,
     handleDeleteProvider,
     handleEditProvider,

@@ -46,6 +46,7 @@ interface UseChatSessionOptions {
   showArchived: boolean
   setChatError: (value: string | null) => void
   showToast: (message: string, variant?: ToastVariant) => void
+  insertCreatedConversation: (conversation: Conversation) => void
   syncConversationIntoList: (conversation: Conversation) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
   navigateToConversation: (conversationId: number, replace?: boolean) => void
@@ -62,6 +63,7 @@ export function useChatSession({
   showArchived,
   setChatError,
   showToast,
+  insertCreatedConversation,
   syncConversationIntoList,
   loadConversations,
   navigateToConversation,
@@ -77,10 +79,30 @@ export function useChatSession({
   const selectedImagesRef = useRef<ComposerImage[]>([])
   const streamingConversationIdRef = useRef<number | null>(null)
   const activeConversationIdRef = useRef<number | null>(null)
+  const conversationSearchRef = useRef(search)
+  const showArchivedRef = useRef(showArchived)
+  const syncConversationIntoListRef = useRef(syncConversationIntoList)
+  const navigateHomeRef = useRef(navigateHome)
+  const setSkipAutoResumeRef = useRef(setSkipAutoResume)
+  const tRef = useRef(t)
+
+  // Keep the latest list-filter and navigation state available to async work
+  // without retriggering message fetches for the same conversation.
+  conversationSearchRef.current = search
+  showArchivedRef.current = showArchived
+  syncConversationIntoListRef.current = syncConversationIntoList
+  navigateHomeRef.current = navigateHome
+  setSkipAutoResumeRef.current = setSkipAutoResume
+  tRef.current = t
 
   const [messages, setMessages] = useState<Message[]>([])
   const [composerValue, setComposerValue] = useState('')
   const [selectedImages, setSelectedImages] = useState<ComposerImage[]>([])
+  const [newChatSettings, setNewChatSettings] = useState<ConversationSettings>(
+    defaultConversationSettings,
+  )
+  const [pendingConversation, setPendingConversation] =
+    useState<Conversation | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<ConversationSettings>(
     defaultConversationSettings,
   )
@@ -105,15 +127,19 @@ export function useChatSession({
   }, [activeConversationId])
 
   useEffect(() => {
-    if (!activeConversationId) {
-      setMessages([])
-      setChatError(null)
-      setEditingMessageId(null)
-      setSettingsDraft(defaultConversationSettings)
+    if (activeConversationId) {
       return
     }
 
-    if (streamingConversationIdRef.current === activeConversationId) {
+    setMessages([])
+    setPendingConversation(null)
+    setChatError(null)
+    setEditingMessageId(null)
+    setSettingsDraft(newChatSettings)
+  }, [activeConversationId, newChatSettings, setChatError])
+
+  useEffect(() => {
+    if (!activeConversationId || streamingConversationIdRef.current === activeConversationId) {
       return
     }
 
@@ -131,8 +157,12 @@ export function useChatSession({
         }
         setMessages(response.messages)
         setSettingsDraft(response.conversation.settings)
-        syncConversationIntoList(
-          resolveConversationForList(response.conversation, showArchived, search),
+        syncConversationIntoListRef.current(
+          resolveConversationForList(
+            response.conversation,
+            showArchivedRef.current,
+            conversationSearchRef.current,
+          ),
         )
         writeLastConversationId(response.conversation.id)
       } catch (error) {
@@ -143,14 +173,14 @@ export function useChatSession({
         const message =
           error instanceof Error
             ? error.message
-            : t('error.loadMessages')
+            : tRef.current('error.loadMessages')
         setChatError(message)
         setMessages([])
         if (isConversationNotFoundError(error)) {
           clearLastConversationId(targetConversationId)
-          setSkipAutoResume(true)
+          setSkipAutoResumeRef.current(true)
           activeConversationIdRef.current = null
-          navigateHome(true)
+          navigateHomeRef.current(true)
         }
       } finally {
         if (!cancelled) {
@@ -164,16 +194,7 @@ export function useChatSession({
     return () => {
       cancelled = true
     }
-  }, [
-    activeConversationId,
-    navigateHome,
-    search,
-    setChatError,
-    setSkipAutoResume,
-    showArchived,
-    syncConversationIntoList,
-    t,
-  ])
+  }, [activeConversationId, setChatError])
 
   useEffect(() => {
     const viewport = messageViewportRef.current
@@ -199,9 +220,14 @@ export function useChatSession({
     },
     replaceMessages: boolean,
   ) {
-    syncConversationIntoList(
-      resolveConversationForList(response.conversation, showArchived, search),
+    syncConversationIntoListRef.current(
+      resolveConversationForList(
+        response.conversation,
+        showArchivedRef.current,
+        conversationSearchRef.current,
+      ),
     )
+    setPendingConversation(response.conversation)
     if (replaceMessages) {
       setMessages(response.messages)
       setSettingsDraft(response.conversation.settings)
@@ -227,10 +253,10 @@ export function useChatSession({
       if (isConversationNotFoundError(error)) {
         clearLastConversationId(conversationId)
         if (activeConversationIdRef.current === conversationId) {
-          setSkipAutoResume(true)
+          setSkipAutoResumeRef.current(true)
           activeConversationIdRef.current = null
           setMessages([])
-          navigateHome(true)
+          navigateHomeRef.current(true)
         }
       }
       return null
@@ -401,7 +427,8 @@ export function useChatSession({
         conversationId = configuredConversation.id
         streamingConversationIdRef.current = conversationId
         activeConversationIdRef.current = conversationId
-        syncConversationIntoList(configuredConversation)
+        setPendingConversation(configuredConversation)
+        insertCreatedConversation(configuredConversation)
         navigateToConversation(conversationId)
       } else {
         streamingConversationIdRef.current = conversationId
@@ -721,6 +748,7 @@ export function useChatSession({
 
   async function handleSaveSettings(onSaved: () => void) {
     if (!activeConversationId) {
+      setNewChatSettings(settingsDraft)
       onSaved()
       return
     }
@@ -735,6 +763,7 @@ export function useChatSession({
         },
       )
       syncConversationIntoList(updatedConversation)
+      setPendingConversation(updatedConversation)
       setSettingsDraft(updatedConversation.settings)
       onSaved()
     } catch (error) {
@@ -745,18 +774,19 @@ export function useChatSession({
   }
 
   function handleExportConversation() {
-    if (!currentConversation || messages.length === 0) {
+    const exportConversation = currentConversation ?? pendingConversation
+    if (!exportConversation || messages.length === 0) {
       return
     }
 
     const markdown = buildConversationMarkdown(
-      currentConversation,
+      exportConversation,
       messages,
       locale,
       t,
     )
     downloadTextFile(
-      `${slugify(currentConversation.title || t('chat.exportDefaultTitle'))}.md`,
+      `${slugify(exportConversation.title || t('chat.exportDefaultTitle'))}.md`,
       markdown,
     )
   }
@@ -766,9 +796,22 @@ export function useChatSession({
     setEditingMessageId(null)
     setChatError(null)
     setMessages([])
+    setPendingConversation(null)
     setComposerValue('')
     clearSelectedImages()
-    setSettingsDraft(defaultConversationSettings)
+    setSettingsDraft(newChatSettings)
+  }
+
+  function syncSettingsDraft() {
+    if (currentConversation) {
+      setSettingsDraft(currentConversation.settings)
+      return
+    }
+    setSettingsDraft(newChatSettings)
+  }
+
+  function resetSettingsDraft() {
+    syncSettingsDraft()
   }
 
   return {
@@ -780,6 +823,7 @@ export function useChatSession({
     composerValue,
     selectedImages,
     settingsDraft,
+    pendingConversation,
     editingMessageId,
     isLoadingMessages,
     isSending,
@@ -789,6 +833,8 @@ export function useChatSession({
     canSubmitComposer,
     setComposerValue,
     setSettingsDraft,
+    resetSettingsDraft,
+    syncSettingsDraft,
     handleExportConversation,
     handleFilesSelected: uploadSelectedImages,
     handleRegenerateAssistant,

@@ -1,6 +1,7 @@
 import {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useState,
 } from 'react'
@@ -27,7 +28,6 @@ import { useConversationList } from './chat-page/hooks/use-conversation-list'
 import { useProviderSettings } from './chat-page/hooks/use-provider-settings'
 import {
   DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
-  defaultConversationSettings,
   type ConfirmationState,
   type PromptState,
   type SettingsTab,
@@ -60,6 +60,12 @@ export function ChatPage() {
   const activeConversationId = params.conversationId
     ? Number(params.conversationId)
     : null
+  const navigateToConversation = useCallback((conversationId: number, replace = false) => {
+    navigate(`/chat/${conversationId}`, { replace })
+  }, [navigate])
+  const navigateHome = useCallback((replace = false) => {
+    navigate('/chat', { replace })
+  }, [navigate])
 
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(
@@ -76,9 +82,7 @@ export function ChatPage() {
   const conversationList = useConversationList({
     activeConversationId,
     onError: setChatError,
-    navigateToConversation: (conversationId, replace = false) => {
-      navigate(`/chat/${conversationId}`, { replace })
-    },
+    navigateToConversation,
   })
 
   const currentConversation =
@@ -92,14 +96,11 @@ export function ChatPage() {
     showArchived: conversationList.showArchived,
     setChatError,
     showToast,
+    insertCreatedConversation: conversationList.insertCreatedConversation,
     syncConversationIntoList: conversationList.syncConversationIntoList,
     loadConversations: conversationList.loadConversations,
-    navigateToConversation: (conversationId, replace = false) => {
-      navigate(`/chat/${conversationId}`, { replace })
-    },
-    navigateHome: (replace = false) => {
-      navigate('/chat', { replace })
-    },
+    navigateToConversation,
+    navigateHome,
     setSkipAutoResume: conversationList.setSkipAutoResume,
     t,
     locale,
@@ -110,6 +111,8 @@ export function ChatPage() {
     setChatError,
     showToast,
   })
+  const displayConversation =
+    currentConversation ?? chatSession.pendingConversation
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -128,6 +131,7 @@ export function ChatPage() {
 
   function handleOpenSettings() {
     setActiveSettingsTab('chat')
+    chatSession.syncSettingsDraft()
     setIsSettingsOpen(true)
   }
 
@@ -139,7 +143,7 @@ export function ChatPage() {
     setSidebarOpen(false)
     conversationList.setShowArchived(false)
     chatSession.resetForNewChat()
-    navigate('/chat')
+    navigateHome()
   }
 
   function handleDeleteConversation(conversationId: number) {
@@ -152,12 +156,11 @@ export function ChatPage() {
         try {
           await chatApi.deleteConversation(conversationId)
           conversationList.removeConversationFromList(conversationId)
-          conversationList.setConversationTotal((previous) => Math.max(previous - 1, 0))
           clearLastConversationId(conversationId)
           if (activeConversationId === conversationId) {
             conversationList.setSkipAutoResume(true)
             chatSession.resetForNewChat()
-            navigate('/chat', { replace: true })
+            navigateHome(true)
           }
           showToast(t('common.delete'), 'success')
         } catch (error) {
@@ -220,17 +223,13 @@ export function ChatPage() {
         isArchived: nextArchived,
       })
 
-      if (nextArchived === conversationList.showArchived) {
-        conversationList.syncConversationIntoList(updatedConversation)
-      } else {
-        conversationList.removeConversationFromList(conversation.id)
-      }
+      conversationList.syncConversationIntoList(updatedConversation)
 
       if (activeConversationId === conversation.id && nextArchived !== conversationList.showArchived) {
         clearLastConversationId(conversation.id)
         conversationList.setSkipAutoResume(true)
         chatSession.resetForNewChat()
-        navigate('/chat', { replace: true })
+        navigateHome(true)
       }
 
       showToast(
@@ -283,7 +282,7 @@ export function ChatPage() {
         onClose={() => setSidebarOpen(false)}
         currentConversationId={activeConversationId}
         conversations={conversationList.conversations}
-        total={conversationList.conversationTotal}
+        hasMoreConversations={conversationList.hasMoreConversations}
         searchValue={conversationList.conversationSearch}
         showArchived={conversationList.showArchived}
         isLoading={conversationList.isLoadingConversations}
@@ -292,7 +291,7 @@ export function ChatPage() {
         onToggleArchived={conversationList.setShowArchived}
         onLoadMore={() => void conversationList.loadConversations({ append: true })}
         onSelectConversation={(conversationId) => {
-          navigate(`/chat/${conversationId}`)
+          navigateToConversation(conversationId)
           setSidebarOpen(false)
         }}
         onRenameConversation={handleRenameConversation}
@@ -314,7 +313,7 @@ export function ChatPage() {
           collapsed={isDesktopSidebarCollapsed}
           currentConversationId={activeConversationId}
           conversations={conversationList.conversations}
-          total={conversationList.conversationTotal}
+          hasMoreConversations={conversationList.hasMoreConversations}
           searchValue={conversationList.conversationSearch}
           showArchived={conversationList.showArchived}
           isLoading={conversationList.isLoadingConversations}
@@ -322,7 +321,7 @@ export function ChatPage() {
           onSearchChange={conversationList.setConversationSearch}
           onToggleArchived={conversationList.setShowArchived}
           onLoadMore={() => void conversationList.loadConversations({ append: true })}
-          onSelectConversation={(conversationId) => navigate(`/chat/${conversationId}`)}
+          onSelectConversation={navigateToConversation}
           onRenameConversation={handleRenameConversation}
           onTogglePinned={handleTogglePinned}
           onToggleArchivedConversation={handleToggleArchived}
@@ -339,6 +338,7 @@ export function ChatPage() {
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-black/5 md:hidden"
             onClick={() => setSidebarOpen(true)}
             type="button"
+            aria-label={t('chat.openSidebar')}
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -370,11 +370,12 @@ export function ChatPage() {
 
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-medium text-[var(--foreground)]">
-              {currentConversation?.title ?? t('chat.newConversation')}
+              {displayConversation?.title
+                ?? (activeConversationId ? t('chat.loadingConversation') : t('chat.newConversation'))}
             </h1>
-            {currentConversation ? (
+            {displayConversation ? (
               <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
-                {currentConversation.settings.model || t('chat.defaultModel')}
+                {displayConversation.settings.model || t('chat.defaultModel')}
               </p>
             ) : null}
           </div>
@@ -425,12 +426,13 @@ export function ChatPage() {
           latestAssistantMessage={chatSession.latestAssistantMessage}
           isSending={chatSession.isSending}
           editingMessageId={chatSession.editingMessageId}
+          hasConversationShell={displayConversation != null}
           conversations={conversationList.conversations}
           restorableConversationId={conversationList.restorableConversationId}
           viewportRef={chatSession.messageViewportRef}
           onContinueLast={() => {
             if (conversationList.restorableConversationId) {
-              navigate(`/chat/${conversationList.restorableConversationId}`)
+              navigateToConversation(conversationList.restorableConversationId)
             }
           }}
           onEditMessage={chatSession.startEditingMessage}
@@ -469,8 +471,10 @@ export function ChatPage() {
           onClose={() => setIsSettingsOpen(false)}
           onDeleteProvider={handleDeleteProvider}
           onEditProvider={providerSettings.handleEditProvider}
+          onProviderFieldChange={providerSettings.handleProviderFieldChange}
+          onProviderModelsChange={providerSettings.handleProviderModelsChange}
           onProviderTabChange={setActiveSettingsTab}
-          onReset={() => chatSession.setSettingsDraft(defaultConversationSettings)}
+          onReset={chatSession.resetSettingsDraft}
           onResetProvider={providerSettings.handleStartNewProvider}
           onSave={() => void handleSaveSettings()}
           onSaveProvider={() => void providerSettings.handleSaveProvider()}
@@ -478,7 +482,6 @@ export function ChatPage() {
           onTestProvider={() => void providerSettings.handleTestProvider()}
           providerForm={providerSettings.providerForm}
           providerState={providerSettings.providerState}
-          setProviderForm={providerSettings.setProviderForm}
           settings={chatSession.settingsDraft}
           setSettings={chatSession.setSettingsDraft}
         />

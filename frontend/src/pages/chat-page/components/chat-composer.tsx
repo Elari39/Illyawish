@@ -127,6 +127,7 @@ export function ChatComposer({
                   disabled={image.isUploading}
                   onClick={() => onRemoveImage(image.id)}
                   type="button"
+                  aria-label={t('chat.removeImage', { name: image.name })}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -195,6 +196,7 @@ export function ChatComposer({
               onClick={handleOpenImagePicker}
               type="button"
               title={t('chat.attachImage')}
+              aria-label={t('chat.attachImage')}
             >
               <Paperclip className="h-4 w-4" />
             </button>
@@ -207,6 +209,7 @@ export function ChatComposer({
               className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-white transition hover:bg-[var(--brand-strong)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmitComposer}
               type="submit"
+              aria-label={t('chat.sendMessage')}
             >
               <SendHorizonal className="h-4 w-4" />
             </button>
