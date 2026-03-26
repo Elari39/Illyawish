@@ -64,7 +64,7 @@ func TestListMessagesReturnsNotFoundForMissingConversation(t *testing.T) {
 	}
 }
 
-func TestCancelGenerationReturnsConflictWithoutActiveStream(t *testing.T) {
+func TestCancelGenerationReturnsOKWithoutActiveStream(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, conversation := newChatTestContext(t)
@@ -91,11 +91,11 @@ func TestCancelGenerationReturnsConflictWithoutActiveStream(t *testing.T) {
 
 	NewHandler(service).CancelGeneration(ctx)
 
-	if recorder.Code != http.StatusConflict {
-		t.Fatalf("expected status %d, got %d", http.StatusConflict, recorder.Code)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), ErrNoActiveGeneration.Error()) {
-		t.Fatalf("expected no active generation error, got %s", recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), "\"ok\":true") {
+		t.Fatalf("expected ok response body, got %s", recorder.Body.String())
 	}
 
 	_ = conversation
@@ -195,7 +195,86 @@ func TestImportConversationReturnsCreatedConversation(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "\"title\":\"Imported chat\"") {
 		t.Fatalf("expected imported conversation body, got %s", recorder.Body.String())
 	}
+}
+
+func TestGetChatSettingsReturnsGlobalPrompt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	temperature := float32(0.8)
+	maxTokens := 1024
+	contextWindowTurns := 4
+	if err := db.Model(&models.User{}).
+		Where("id = ?", user.ID).
+		Updates(map[string]any{
+			"global_prompt":                "Use global prompt",
+			"default_model":                "gpt-4.1-mini",
+			"default_temperature":          &temperature,
+			"default_max_tokens":           &maxTokens,
+			"default_context_window_turns": &contextWindowTurns,
+		}).Error; err != nil {
+		t.Fatalf("update chat settings: %v", err)
+	}
+
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/chat/settings", nil)
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).GetChatSettings(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "\"globalPrompt\":\"Use global prompt\"") {
+		t.Fatalf("expected global prompt in response, got %s", recorder.Body.String())
+	}
 	if !strings.Contains(recorder.Body.String(), "\"model\":\"gpt-4.1-mini\"") {
-		t.Fatalf("expected imported model in response, got %s", recorder.Body.String())
+		t.Fatalf("expected model in response, got %s", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "\"contextWindowTurns\":4") {
+		t.Fatalf("expected context window in response, got %s", recorder.Body.String())
+	}
+}
+
+func TestUpdateChatSettingsPersistsGlobalPrompt(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	payload := bytes.NewReader([]byte(`{"globalPrompt":"Use global prompt","model":"gpt-4.1-mini","temperature":0.6,"maxTokens":2048,"contextWindowTurns":8}`))
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/chat/settings", payload)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).UpdateChatSettings(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	settings, err := service.GetChatSettings(user.ID)
+	if err != nil {
+		t.Fatalf("GetChatSettings() error = %v", err)
+	}
+	if settings.GlobalPrompt != "Use global prompt" {
+		t.Fatalf("expected global prompt to be persisted, got %q", settings.GlobalPrompt)
+	}
+	if settings.Model != "gpt-4.1-mini" {
+		t.Fatalf("expected model to be persisted, got %q", settings.Model)
+	}
+	if settings.Temperature == nil || *settings.Temperature != float32(0.6) {
+		t.Fatalf("expected temperature to be persisted, got %#v", settings.Temperature)
+	}
+	if settings.MaxTokens == nil || *settings.MaxTokens != 2048 {
+		t.Fatalf("expected max tokens to be persisted, got %#v", settings.MaxTokens)
+	}
+	if settings.ContextWindowTurns == nil || *settings.ContextWindowTurns != 8 {
+		t.Fatalf("expected context window to be persisted, got %#v", settings.ContextWindowTurns)
 	}
 }

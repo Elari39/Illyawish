@@ -20,10 +20,12 @@ describe('ChatComposer', () => {
           editingMessageId={null}
           hasPendingUploads={false}
           canSubmitComposer={false}
+          isSending={false}
           chatError={null}
           composerIsComposingRef={{ current: false }}
           onComposerChange={vi.fn()}
           onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
           onSubmit={vi.fn()}
           onFilesSelected={onFilesSelected}
           onRemoveAttachment={vi.fn()}
@@ -56,10 +58,12 @@ describe('ChatComposer', () => {
           editingMessageId={null}
           hasPendingUploads={false}
           canSubmitComposer={false}
+          isSending={false}
           chatError={null}
           composerIsComposingRef={{ current: false }}
           onComposerChange={vi.fn()}
           onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
           onSubmit={vi.fn()}
           onFilesSelected={onFilesSelected}
           onRemoveAttachment={vi.fn()}
@@ -110,10 +114,12 @@ describe('ChatComposer', () => {
           editingMessageId={null}
           hasPendingUploads={false}
           canSubmitComposer={false}
+          isSending={false}
           chatError={null}
           composerIsComposingRef={{ current: false }}
           onComposerChange={vi.fn()}
           onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
           onSubmit={vi.fn()}
           onFilesSelected={vi.fn()}
           onRemoveAttachment={vi.fn()}
@@ -130,5 +136,38 @@ describe('ChatComposer', () => {
       'accept',
       ATTACHMENT_INPUT_ACCEPT,
     )
+  })
+
+  it('switches the primary action into a stop button while sending', () => {
+    const onStopGeneration = vi.fn()
+
+    render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue="hello"
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer={false}
+          isSending
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={onStopGeneration}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Send message' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    expect(onStopGeneration).toHaveBeenCalledTimes(1)
   })
 })

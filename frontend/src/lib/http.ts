@@ -25,6 +25,10 @@ export class ApiNetworkError extends Error {
   }
 }
 
+export function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 export async function fetchOrThrow(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -32,6 +36,9 @@ export async function fetchOrThrow(
   try {
     return await fetch(input, init)
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
     throw new ApiNetworkError('Unable to reach the backend service.', error)
   }
 }

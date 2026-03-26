@@ -12,6 +12,7 @@ import { LanguageSwitcher } from '../../../i18n/language-switcher'
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import type {
+  ChatSettings,
   Conversation,
   ConversationSettings,
   ProviderPreset,
@@ -26,6 +27,7 @@ import { TransferSettingsTab } from './transfer-settings-tab'
 interface SettingsPanelProps {
   activeTab: SettingsTab
   editingProviderId: number | null
+  chatSettings: ChatSettings
   isLoadingProviders: boolean
   isImporting: boolean
   isOpen: boolean
@@ -38,6 +40,7 @@ interface SettingsPanelProps {
   settings: ConversationSettings
   providerForm: ProviderFormState
   providerState: ProviderState | null
+  setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   onClose: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
@@ -66,6 +69,7 @@ interface SettingsPanelProps {
 export function SettingsPanel({
   activeTab,
   editingProviderId,
+  chatSettings,
   isLoadingProviders,
   isImporting,
   isOpen,
@@ -78,6 +82,7 @@ export function SettingsPanel({
   settings,
   providerForm,
   providerState,
+  setChatSettings,
   setSettings,
   onClose,
   onDeleteProvider,
@@ -96,19 +101,31 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
   const { t } = useI18n()
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  const wasOpenRef = useRef(false)
   const titleId = useId()
   const descriptionId = useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
+  useEffect(() => {
+    if (isOpen && !wasOpenRef.current) {
+      closeButtonRef.current?.focus()
+    }
+
+    wasOpenRef.current = isOpen
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) {
       return
     }
 
-    closeButtonRef.current?.focus()
-
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
       }
     }
 
@@ -116,13 +133,13 @@ export function SettingsPanel({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, onClose])
+  }, [isOpen])
 
   if (!isOpen) {
     return null
   }
 
-  const modelOptions = resolveChatModelOptions(providerState, settings.model)
+  const modelOptions = resolveChatModelOptions(providerState, chatSettings.model)
   const descriptionKey =
     activeTab === 'chat'
       ? 'settings.chatDescription'
@@ -221,8 +238,10 @@ export function SettingsPanel({
 
         {activeTab === 'chat' ? (
           <ChatSettingsTab
+            chatSettings={chatSettings}
             modelOptions={modelOptions}
             settings={settings}
+            setChatSettings={setChatSettings}
             setSettings={setSettings}
           />
         ) : activeTab === 'provider' ? (

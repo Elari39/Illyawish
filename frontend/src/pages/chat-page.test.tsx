@@ -8,13 +8,32 @@ import { APP_LOCALE_STORAGE_KEY } from '../i18n/config'
 import { chatApi } from '../lib/api'
 import { LAST_CONVERSATION_STORAGE_KEY } from './chat-page/types'
 import { ChatPage } from './chat-page'
-import type { Conversation, ConversationSettings, Message } from '../types/chat'
+import type {
+  ChatSettings,
+  Conversation,
+  ConversationSettings,
+  Message,
+} from '../types/chat'
 
 const defaultSettings: ConversationSettings = {
-  systemPrompt: 'You are a helpful assistant.',
+  systemPrompt: '',
   model: '',
   temperature: 1,
   maxTokens: null,
+  contextWindowTurns: null,
+}
+
+function createChatSettings(
+  overrides: Partial<ChatSettings> = {},
+): ChatSettings {
+  return {
+    globalPrompt: '',
+    model: '',
+    temperature: 1,
+    maxTokens: null,
+    contextWindowTurns: null,
+    ...overrides,
+  }
 }
 
 const authValue: AuthContextValue = {
@@ -50,6 +69,7 @@ function createMessage(
   conversationId: number,
   role: Message['role'],
   content: string,
+  overrides: Partial<Message> = {},
 ): Message {
   return {
     id,
@@ -59,6 +79,7 @@ function createMessage(
     attachments: [],
     status: 'completed',
     createdAt: '2026-03-26T09:08:00Z',
+    ...overrides,
   }
 }
 
@@ -99,6 +120,9 @@ describe('ChatPage conversation navigation', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
       value: vi.fn(),
+    })
+    vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
+      ...createChatSettings(),
     })
   })
 
@@ -300,6 +324,33 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
   })
 
+  it('keeps generation controls out of the header and on each assistant reply', async () => {
+    const conversation = createConversation(9, 'Generation controls')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [
+        createMessage(91, 9, 'user', 'Hello'),
+        createMessage(92, 9, 'assistant', 'Reply one'),
+        createMessage(93, 9, 'assistant', 'Reply two'),
+      ],
+    })
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Reply two')).toBeInTheDocument()
+    })
+
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Regenerate' })).toHaveLength(2)
+  })
+
   it('uses the narrower desktop and mobile history sidebar widths', async () => {
     vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
       conversations: [],
@@ -320,5 +371,330 @@ describe('ChatPage conversation navigation', () => {
     expect(mobileSidebar?.className).toContain('w-[84vw]')
     expect(mobileSidebar?.className).toContain('max-w-[300px]')
     expect(mobileSidebar?.className).not.toContain('max-w-[320px]')
+  })
+
+  it('stops the real active conversation after switching away and restores the composer', async () => {
+    const firstConversation = createConversation(1, 'First chat')
+    const secondConversation = createConversation(2, 'Second chat', {
+      updatedAt: '2026-03-26T10:08:00Z',
+    })
+    const firstMessages = [
+      createMessage(11, 1, 'user', 'Earlier question'),
+      createMessage(12, 1, 'assistant', 'Earlier answer'),
+    ]
+    const stoppedMessages = [
+      ...firstMessages,
+      createMessage(13, 1, 'user', 'Please keep going'),
+      createMessage(14, 1, 'assistant', 'Stopped on server', {
+        status: 'cancelled',
+      }),
+    ]
+    const secondMessages = [
+      createMessage(21, 2, 'assistant', 'Second conversation'),
+    ]
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [secondConversation, firstConversation],
+      total: 2,
+    })
+
+    let firstConversationStopped = false
+    vi.spyOn(chatApi, 'getConversationMessages').mockImplementation(async (conversationId: number) => {
+      if (conversationId === 1) {
+        return {
+          conversation: firstConversation,
+          messages: firstConversationStopped ? stoppedMessages : firstMessages,
+        }
+      }
+
+      return {
+        conversation: secondConversation,
+        messages: secondMessages,
+      }
+    })
+
+    vi.spyOn(chatApi, 'streamMessage').mockImplementation(async (_conversationId, _payload, _onEvent, signal) => {
+      await new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'))
+        }, { once: true })
+      })
+    })
+
+    const cancelGenerationMock = vi
+      .spyOn(chatApi, 'cancelGeneration')
+      .mockImplementation(async (conversationId: number) => {
+        firstConversationStopped = true
+        expect(conversationId).toBe(1)
+      })
+
+    renderChatPage(['/chat/1'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Earlier answer')).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByPlaceholderText('Message Illyawish...')
+    fireEvent.change(textarea, { target: { value: 'Please keep going' } })
+
+    const form = textarea.closest('form')
+    if (!form) {
+      throw new Error('Composer form not found')
+    }
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+    })
+
+    const secondConversationButton = (await screen.findAllByRole('button', { name: 'Second chat' })).at(-1)
+    if (!secondConversationButton) {
+      throw new Error('Second conversation button not found')
+    }
+
+    fireEvent.click(secondConversationButton)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat/2')
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Second conversation')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+
+    await waitFor(() => {
+      expect(cancelGenerationMock).toHaveBeenCalledWith(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
+
+    const firstConversationButton = (await screen.findAllByRole('button', { name: 'First chat' })).at(-1)
+    if (!firstConversationButton) {
+      throw new Error('First conversation button not found')
+    }
+
+    fireEvent.click(firstConversationButton)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat/1')
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Stopped on server')).toBeInTheDocument()
+    })
+  })
+
+  it('replays a historical assistant reply from its own regenerate button', async () => {
+    const conversation = createConversation(7, 'History replay')
+    const initialMessages = [
+      createMessage(71, 7, 'user', 'First question'),
+      createMessage(72, 7, 'assistant', 'First answer'),
+      createMessage(73, 7, 'user', 'Second question'),
+      createMessage(74, 7, 'assistant', 'Second answer'),
+    ]
+    const replayedMessages = [
+      createMessage(71, 7, 'user', 'First question'),
+      createMessage(72, 7, 'assistant', 'Rewritten first answer'),
+    ]
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+
+    let useReplaySnapshot = false
+    vi.spyOn(chatApi, 'getConversationMessages').mockImplementation(async () => ({
+      conversation,
+      messages: useReplaySnapshot ? replayedMessages : initialMessages,
+    }))
+
+    const retryMessageMock = vi
+      .spyOn(chatApi, 'retryMessage')
+      .mockImplementation(async (conversationId, messageId, _settings, onEvent) => {
+        useReplaySnapshot = true
+        await onEvent({
+          type: 'done',
+          message: createMessage(messageId, conversationId, 'assistant', 'Rewritten first answer'),
+        })
+      })
+
+    renderChatPage(['/chat/7'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Second answer')).toBeInTheDocument()
+    })
+    expect(screen.getAllByRole('button', { name: 'Regenerate' })).toHaveLength(2)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Regenerate' })[0]!)
+
+    await waitFor(() => {
+      expect(retryMessageMock).toHaveBeenCalledWith(
+        7,
+        72,
+        expect.anything(),
+        expect.any(Function),
+        expect.objectContaining({ aborted: false }),
+      )
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Rewritten first answer')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Second question')).not.toBeInTheDocument()
+    expect(screen.queryByText('Second answer')).not.toBeInTheDocument()
+  })
+
+  it('saves the global prompt and new-chat session prompt draft before the first message', async () => {
+    const createdConversation = createConversation(5, 'Fresh chat')
+
+    vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
+      ...createChatSettings({ globalPrompt: 'Existing global' }),
+    })
+    vi.spyOn(chatApi, 'listConversationsPage')
+      .mockResolvedValueOnce({
+        conversations: [],
+        total: 0,
+      })
+      .mockResolvedValue({
+        conversations: [createdConversation],
+        total: 1,
+      })
+
+    const updateChatSettingsMock = vi
+      .spyOn(chatApi, 'updateChatSettings')
+      .mockResolvedValue(
+        createChatSettings({ globalPrompt: 'Global instructions' }),
+      )
+    const createConversationMock = vi
+      .spyOn(chatApi, 'createConversation')
+      .mockResolvedValue(createdConversation)
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockImplementation(async (conversationId, payload) => ({
+        ...createdConversation,
+        id: conversationId,
+        settings: payload.settings ?? createdConversation.settings,
+      }))
+    vi.spyOn(chatApi, 'streamMessage').mockImplementation(async (conversationId, _payload, onEvent) => {
+      await onEvent({
+        type: 'done',
+        message: createMessage(52, conversationId, 'assistant', 'Hi there'),
+      })
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation: createdConversation,
+      messages: [
+        createMessage(51, 5, 'user', 'Hello from test'),
+        createMessage(52, 5, 'assistant', 'Hi there'),
+      ],
+    })
+
+    renderChatPage(['/chat'])
+
+    expect(await screen.findByPlaceholderText('Message Illyawish...')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    fireEvent.change(await screen.findByLabelText('Global prompt'), {
+      target: { value: 'Global instructions' },
+    })
+    fireEvent.change(screen.getByLabelText('Session prompt'), {
+      target: { value: 'Draft session prompt' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    await waitFor(() => {
+      expect(updateChatSettingsMock).toHaveBeenCalledWith({
+        globalPrompt: 'Global instructions',
+        model: '',
+        temperature: 1,
+        maxTokens: null,
+        contextWindowTurns: null,
+      })
+    })
+
+    const textarea = screen.getByPlaceholderText('Message Illyawish...')
+    fireEvent.change(textarea, { target: { value: 'Hello from test' } })
+
+    const form = textarea.closest('form')
+    if (!form) {
+      throw new Error('Composer form not found')
+    }
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(createConversationMock).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith(5, {
+        settings: expect.objectContaining({
+          systemPrompt: 'Draft session prompt',
+        }),
+      })
+    })
+  })
+
+  it('saves the global prompt and current conversation session prompt together', async () => {
+    const conversation = createConversation(9, 'Session settings test')
+
+    vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
+      ...createChatSettings({ globalPrompt: 'Existing global' }),
+    })
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Visible message')],
+    })
+    const updateChatSettingsMock = vi
+      .spyOn(chatApi, 'updateChatSettings')
+      .mockResolvedValue(
+        createChatSettings({ globalPrompt: 'Updated global prompt' }),
+      )
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockImplementation(async (conversationId, payload) => ({
+        ...conversation,
+        id: conversationId,
+        settings: payload.settings ?? conversation.settings,
+      }))
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    fireEvent.change(await screen.findByLabelText('Global prompt'), {
+      target: { value: 'Updated global prompt' },
+    })
+    fireEvent.change(screen.getByLabelText('Session prompt'), {
+      target: { value: 'Conversation-only prompt' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    await waitFor(() => {
+      expect(updateChatSettingsMock).toHaveBeenCalledWith({
+        globalPrompt: 'Updated global prompt',
+        model: '',
+        temperature: 1,
+        maxTokens: null,
+        contextWindowTurns: null,
+      })
+    })
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith(9, {
+        settings: expect.objectContaining({
+          systemPrompt: 'Conversation-only prompt',
+        }),
+      })
+    })
   })
 })

@@ -91,7 +91,7 @@ const enUSMessages = {
 
   'settings.title': 'Settings',
   'settings.chatDescription':
-    'These settings control the system prompt, model, and generation parameters used for the current conversation or the next new chat.',
+    'Set a global prompt for your account and an optional session prompt for the current conversation or the next new chat.',
   'settings.providerDescription':
     'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
   'settings.chatTab': 'Chat',
@@ -118,9 +118,23 @@ const enUSMessages = {
   'settings.model': 'Model',
   'settings.modelPlaceholder': 'Use provider default model if left blank',
   'settings.modelDefaultOption': 'Use provider default model',
+  'settings.globalModelSection': 'Global model settings',
+  'settings.globalModelSectionHelp':
+    'These defaults apply across conversations until you change them again.',
+  'settings.globalPrompt': 'Global prompt',
+  'settings.globalPromptPlaceholder': 'Leave blank to disable the global prompt',
+  'settings.promptSection': 'Prompt settings',
+  'settings.sessionPrompt': 'Session prompt',
+  'settings.sessionPromptHelp':
+    'Leave blank to fall back to the global prompt. A non-empty session prompt overrides the global prompt for this conversation.',
+  'settings.sessionPromptPlaceholder':
+    'Leave blank to use the global prompt for this conversation',
   'settings.systemPrompt': 'System prompt',
   'settings.temperature': 'Temperature',
-  'settings.maxTokens': 'Max tokens',
+  'settings.maxTokens': 'Max output tokens',
+  'settings.contextWindowTurns': 'Context window (recent turns)',
+  'settings.contextWindowTurnsHelp':
+    'Leave blank to keep the full conversation history. This version trims by recent turns, while the model itself may still enforce a hard limit.',
   'settings.currentSource': 'Current source',
   'settings.savedPresets': 'Saved presets',
   'settings.onePresetActive': 'One preset can be active at a time.',
@@ -151,12 +165,12 @@ const enUSMessages = {
   'settings.defaultModelEmpty': 'Add a model first',
   'settings.baseUrl': 'Base URL',
   'settings.apiKey': 'API key',
-  'settings.apiKeyPlaceholderEdit': 'Leave blank to keep the current key',
+  'settings.apiKeyPlaceholderEdit': 'Clear before saving to keep the current key',
   'settings.apiKeyPlaceholderNew': 'sk-...',
   'settings.apiKeyHelpEdit':
-    'A blank value keeps the existing encrypted API key.',
+    'Shown in full for this account. Clear it before saving to keep the existing encrypted API key.',
   'settings.apiKeyHelpNew':
-    'The key is stored encrypted on the backend and never returned in full.',
+    'Shown in full after saving for this account. The backend still stores it encrypted.',
   'settings.saveSettings': 'Save settings',
   'settings.resetForm': 'Reset form',
   'settings.savePreset': 'Save preset',
@@ -199,6 +213,7 @@ const enUSMessages = {
     'Unable to reach the backend service. Make sure the Go server is running.',
   'error.loadConversations': 'Unable to load conversations right now',
   'error.loadMessages': 'Unable to load message history right now',
+  'error.loadChatSettings': 'Unable to load chat settings right now',
   'error.loadProviders': 'Unable to load AI provider settings right now',
   'error.saveProviderSettings': 'Unable to save AI provider settings',
   'error.activateProviderPreset': 'Unable to activate AI provider preset',
@@ -332,7 +347,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
 
     'settings.title': '设置',
     'settings.chatDescription':
-      '这些设置会控制当前会话或下一个新会话所使用的 system prompt、模型和生成参数。',
+      '为你的账号设置全局提示词，并为当前会话或下一个新会话设置可选的会话提示词。',
     'settings.providerDescription':
       '管理你保存的 OpenAI 兼容提供商预设。新请求会优先使用当前激活的预设，`data/app.json` 中的服务器回退配置仍可继续使用。',
     'settings.chatTab': '聊天',
@@ -354,9 +369,21 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.model': '模型',
     'settings.modelPlaceholder': '留空则使用提供商默认模型',
     'settings.modelDefaultOption': '使用提供商默认模型',
+    'settings.globalModelSection': '全局模型设置',
+    'settings.globalModelSectionHelp': '这些默认参数会在所有对话中持续生效，直到你再次修改。',
+    'settings.globalPrompt': '全局提示词',
+    'settings.globalPromptPlaceholder': '留空则不使用全局提示词',
+    'settings.promptSection': '提示词设置',
+    'settings.sessionPrompt': '会话提示词',
+    'settings.sessionPromptHelp':
+      '留空时会回退到全局提示词。会话提示词只要非空，就会覆盖当前会话的全局提示词。',
+    'settings.sessionPromptPlaceholder': '留空则当前会话使用全局提示词',
     'settings.systemPrompt': '系统提示词',
     'settings.temperature': '温度',
-    'settings.maxTokens': '最大 Token',
+    'settings.maxTokens': '单次输出最大 Token',
+    'settings.contextWindowTurns': '上下文窗口（最近 N 轮）',
+    'settings.contextWindowTurnsHelp':
+      '留空表示不限制。这一版按最近对话轮次裁剪历史，模型本身仍可能有自己的硬性上下文上限。',
     'settings.currentSource': '当前来源',
     'settings.savedPresets': '已保存预设',
     'settings.onePresetActive': '同一时间只能激活一个预设。',
@@ -386,11 +413,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.defaultModelEmpty': '请先添加模型',
     'settings.baseUrl': 'Base URL',
     'settings.apiKey': 'API Key',
-    'settings.apiKeyPlaceholderEdit': '留空则保留当前密钥',
+    'settings.apiKeyPlaceholderEdit': '清空后保存则保留当前密钥',
     'settings.apiKeyPlaceholderNew': 'sk-...',
-    'settings.apiKeyHelpEdit': '留空时会继续保留现有的加密 API Key。',
+    'settings.apiKeyHelpEdit': '当前会完整显示给此账号。清空后再保存，会继续保留现有的加密 API Key。',
     'settings.apiKeyHelpNew':
-      '密钥会在后端加密存储，界面不会返回完整内容。',
+      '保存后会为此账号完整显示，后端仍会加密存储该密钥。',
     'settings.saveSettings': '保存设置',
     'settings.resetForm': '重置表单',
     'settings.savePreset': '保存预设',
@@ -429,6 +456,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'error.backendUnavailable': '暂时无法连接后端服务，请确认 Go 服务已经启动。',
     'error.loadConversations': '暂时无法加载会话列表',
     'error.loadMessages': '暂时无法加载消息历史',
+    'error.loadChatSettings': '暂时无法加载聊天设置',
     'error.loadProviders': '暂时无法加载 AI 提供商设置',
     'error.saveProviderSettings': '暂时无法保存 AI 提供商设置',
     'error.activateProviderPreset': '暂时无法激活 AI 提供商预设',
@@ -556,7 +584,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
 
     'settings.title': '設定',
     'settings.chatDescription':
-      'これらの設定は、現在の会話または次の新しいチャットで使う system prompt、モデル、生成パラメータを制御します。',
+      'アカウント全体のグローバルプロンプトと、現在の会話または次の新しいチャット向けの任意のセッションプロンプトを設定します。',
     'settings.providerDescription':
       '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
     'settings.chatTab': 'チャット',
@@ -583,9 +611,23 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.model': 'モデル',
     'settings.modelPlaceholder': '空欄の場合はプロバイダー既定のモデルを使用',
     'settings.modelDefaultOption': 'プロバイダー既定のモデルを使う',
+    'settings.globalModelSection': 'グローバルモデル設定',
+    'settings.globalModelSectionHelp':
+      'ここでの既定値は、再度変更するまで会話をまたいで使い続けられます。',
+    'settings.globalPrompt': 'グローバルプロンプト',
+    'settings.globalPromptPlaceholder': '空欄の場合はグローバルプロンプトを無効化',
+    'settings.promptSection': 'プロンプト設定',
+    'settings.sessionPrompt': 'セッションプロンプト',
+    'settings.sessionPromptHelp':
+      '空欄の場合はグローバルプロンプトにフォールバックします。セッションプロンプトが入っている場合は、この会話ではそちらが優先されます。',
+    'settings.sessionPromptPlaceholder':
+      '空欄の場合はこの会話でグローバルプロンプトを使います',
     'settings.systemPrompt': 'システムプロンプト',
     'settings.temperature': 'Temperature',
-    'settings.maxTokens': '最大トークン数',
+    'settings.maxTokens': '1 回の出力最大トークン数',
+    'settings.contextWindowTurns': 'コンテキストウィンドウ（直近 N ターン）',
+    'settings.contextWindowTurnsHelp':
+      '空欄なら会話履歴を制限しません。この版では直近ターン数で履歴を絞り込みますが、モデル側の上限は別途適用される場合があります。',
     'settings.currentSource': '現在のソース',
     'settings.savedPresets': '保存済みプリセット',
     'settings.onePresetActive': '同時に有効化できるプリセットは 1 つだけです。',
@@ -616,11 +658,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.defaultModelEmpty': '先にモデルを追加してください',
     'settings.baseUrl': 'Base URL',
     'settings.apiKey': 'API キー',
-    'settings.apiKeyPlaceholderEdit': '空欄のままなら現在のキーを維持',
+    'settings.apiKeyPlaceholderEdit': '保存前に消すと現在のキーを維持',
     'settings.apiKeyPlaceholderNew': 'sk-...',
-    'settings.apiKeyHelpEdit': '空欄のまま保存すると、既存の暗号化 API キーを維持します。',
+    'settings.apiKeyHelpEdit': 'このアカウントには完全な値を表示します。保存前に消すと、既存の暗号化 API キーを維持します。',
     'settings.apiKeyHelpNew':
-      'キーはバックエンドで暗号化して保存され、完全な値が返されることはありません。',
+      '保存後はこのアカウントに完全な値を表示します。バックエンドでは引き続き暗号化して保存します。',
     'settings.saveSettings': '設定を保存',
     'settings.resetForm': 'フォームをリセット',
     'settings.savePreset': 'プリセットを保存',
@@ -663,6 +705,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
       'バックエンドサービスに接続できません。Go サーバーが起動しているか確認してください。',
     'error.loadConversations': '現在会話を読み込めません',
     'error.loadMessages': '現在メッセージ履歴を読み込めません',
+    'error.loadChatSettings': '現在チャット設定を読み込めません',
     'error.loadProviders': '現在 AI プロバイダー設定を読み込めません',
     'error.saveProviderSettings': '現在 AI プロバイダー設定を保存できません',
     'error.activateProviderPreset':

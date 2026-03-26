@@ -32,7 +32,11 @@ func (s *Service) StreamAssistantReply(
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	if err != nil {
+		return err
+	}
+	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
 		return err
 	}
@@ -86,7 +90,7 @@ func (s *Service) StreamAssistantReply(
 		return err
 	}
 
-	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, settings.SystemPrompt)
+	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, systemPrompt, settings.ContextWindowTurns)
 	if err != nil {
 		return err
 	}
@@ -111,7 +115,11 @@ func (s *Service) RetryAssistantMessage(
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(conversation, options, resolvedProvider.Config.DefaultModel)
+	settings, err := s.resolveSettings(userID, conversation, options, resolvedProvider.Config.DefaultModel)
+	if err != nil {
+		return err
+	}
+	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
 		return err
 	}
@@ -122,12 +130,15 @@ func (s *Service) RetryAssistantMessage(
 	}
 	defer cleanup()
 
-	assistantMessage, err := s.prepareAssistantRetry(conversation.ID, assistantMessageID)
+	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(conversation.ID, assistantMessageID)
 	if err != nil {
 		return err
 	}
+	if err := s.cleanupAttachments(cleanupMessages); err != nil {
+		return err
+	}
 
-	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, settings.SystemPrompt)
+	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, systemPrompt, settings.ContextWindowTurns)
 	if err != nil {
 		return err
 	}
@@ -180,7 +191,11 @@ func (s *Service) EditUserMessageAndRegenerate(
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	if err != nil {
+		return err
+	}
+	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
 		return err
 	}
@@ -268,7 +283,7 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, settings.SystemPrompt)
+	history, err := s.historyForModel(conversation.ID, assistantMessage.ID, systemPrompt, settings.ContextWindowTurns)
 	if err != nil {
 		return err
 	}

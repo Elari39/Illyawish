@@ -114,6 +114,8 @@ func New() (*App, error) {
 		api.POST("/ai/providers/:id/activate", providerHandler.ActivateProvider)
 		api.DELETE("/ai/providers/:id", providerHandler.DeleteProvider)
 
+		api.GET("/chat/settings", chatHandler.GetChatSettings)
+		api.PATCH("/chat/settings", limitRequestBody(mediumJSONBodyLimit), chatHandler.UpdateChatSettings)
 		api.GET("/conversations", chatHandler.ListConversations)
 		api.POST("/conversations", chatHandler.CreateConversation)
 		api.POST("/conversations/import", limitRequestBody(chatJSONBodyLimit), chatHandler.ImportConversation)

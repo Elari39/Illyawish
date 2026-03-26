@@ -10,6 +10,7 @@ const defaultSettings: ConversationSettings = {
   model: '',
   temperature: 1,
   maxTokens: null,
+  contextWindowTurns: null,
 }
 
 function createConversation(

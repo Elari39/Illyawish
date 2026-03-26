@@ -15,12 +15,22 @@ export interface ConversationSettings {
   model: string
   temperature: number | null
   maxTokens: number | null
+  contextWindowTurns: number | null
+}
+
+export interface ChatSettings {
+  globalPrompt: string
+  model: string
+  temperature: number | null
+  maxTokens: number | null
+  contextWindowTurns: number | null
 }
 
 export interface ProviderPreset {
   id: number
   name: string
   baseURL: string
+  apiKey: string
   apiKeyHint: string
   models: string[]
   defaultModel: string

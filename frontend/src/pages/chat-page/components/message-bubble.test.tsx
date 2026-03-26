@@ -49,4 +49,63 @@ describe('MessageBubble', () => {
     expect(fileLink).toHaveAttribute('href', '/api/attachments/file-1/file')
     expect(screen.getByText('application/pdf · 2 KB')).toBeInTheDocument()
   })
+
+  it('shows regenerate for completed assistant replies and retry for stopped replies', () => {
+    const regenerateSpy = vi.fn()
+    const retrySpy = vi.fn()
+
+    const { rerender } = render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 2,
+            conversationId: 1,
+            role: 'assistant',
+            content: 'Completed answer',
+            attachments: [],
+            status: 'completed',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onEdit={vi.fn()}
+          onRegenerate={regenerateSpy}
+          onRetry={retrySpy}
+        />
+      </TestProviders>,
+    )
+
+    screen.getByRole('button', { name: 'Regenerate' }).click()
+    expect(regenerateSpy).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+
+    rerender(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry
+          isEditing={false}
+          message={{
+            id: 3,
+            conversationId: 1,
+            role: 'assistant',
+            content: 'Stopped answer',
+            attachments: [],
+            status: 'cancelled',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onEdit={vi.fn()}
+          onRegenerate={regenerateSpy}
+          onRetry={retrySpy}
+        />
+      </TestProviders>,
+    )
+
+    screen.getByRole('button', { name: 'Retry' }).click()
+    expect(retrySpy).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
+  })
 })

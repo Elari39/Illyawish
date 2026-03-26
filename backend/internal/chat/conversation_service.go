@@ -58,12 +58,10 @@ func (s *Service) ListConversations(
 }
 
 func (s *Service) CreateConversation(userID uint) (*models.Conversation, error) {
-	temperature := defaultTemperature
 	conversation := &models.Conversation{
 		UserID:       userID,
 		Title:        defaultConversationTitle,
-		SystemPrompt: defaultSystemPrompt,
-		Temperature:  &temperature,
+		SystemPrompt: "",
 	}
 	if err := s.db.Create(conversation).Error; err != nil {
 		return nil, fmt.Errorf("create conversation: %w", err)
@@ -83,22 +81,14 @@ func (s *Service) ImportConversation(
 		return nil, requestError{message: "at least one message is required"}
 	}
 
-	model := ""
-	if input.Settings != nil {
-		model = strings.TrimSpace(input.Settings.Model)
-	}
-
 	importedAt := time.Now()
-	temperature := defaultTemperature
 	conversation := &models.Conversation{}
 
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		conversation = &models.Conversation{
 			UserID:       userID,
 			Title:        title,
-			SystemPrompt: defaultSystemPrompt,
-			Model:        model,
-			Temperature:  &temperature,
+			SystemPrompt: "",
 			UpdatedAt:    importedAt,
 		}
 
@@ -184,14 +174,11 @@ func (s *Service) UpdateConversation(
 		updates["is_archived"] = *input.IsArchived
 	}
 	if input.Settings != nil {
-		settings, err := s.resolveSettings(conversation, input.Settings, "")
+		settings, err := sanitizeConversationSettings(input.Settings)
 		if err != nil {
 			return nil, err
 		}
 		updates["system_prompt"] = settings.SystemPrompt
-		updates["model"] = settings.Model
-		updates["temperature"] = settings.Temperature
-		updates["max_tokens"] = settings.MaxTokens
 	}
 
 	if err := s.db.Model(conversation).Updates(updates).Error; err != nil {
@@ -259,7 +246,7 @@ func (s *Service) CancelGeneration(userID uint, conversationID uint) error {
 	s.activeMu.Unlock()
 
 	if !exists {
-		return ErrNoActiveGeneration
+		return nil
 	}
 
 	cancel()

@@ -33,14 +33,19 @@ type StoredAttachment struct {
 }
 
 type User struct {
-	ID                 uint   `gorm:"primaryKey"`
-	Username           string `gorm:"uniqueIndex;size:64;not null"`
-	PasswordHash       string `gorm:"size:255;not null"`
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	Conversations      []Conversation
-	LLMProviderPresets []LLMProviderPreset
-	Attachments        []StoredAttachment
+	ID                        uint   `gorm:"primaryKey"`
+	Username                  string `gorm:"uniqueIndex;size:64;not null"`
+	PasswordHash              string `gorm:"size:255;not null"`
+	GlobalPrompt              string `gorm:"type:text;not null;default:''"`
+	DefaultModel              string `gorm:"size:128;not null;default:''"`
+	DefaultTemperature        *float32
+	DefaultMaxTokens          *int
+	DefaultContextWindowTurns *int
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
+	Conversations             []Conversation
+	LLMProviderPresets        []LLMProviderPreset
+	Attachments               []StoredAttachment
 }
 
 type Conversation struct {

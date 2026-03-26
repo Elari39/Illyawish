@@ -51,6 +51,21 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasIndex(&models.LLMProviderPreset{}, "idx_provider_active_per_user") {
 		t.Fatal("expected provider active-per-user index to exist")
 	}
+	if !db.Migrator().HasColumn(&models.User{}, "global_prompt") {
+		t.Fatal("expected users.global_prompt column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.User{}, "default_model") {
+		t.Fatal("expected users.default_model column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.User{}, "default_temperature") {
+		t.Fatal("expected users.default_temperature column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.User{}, "default_max_tokens") {
+		t.Fatal("expected users.default_max_tokens column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.User{}, "default_context_window_turns") {
+		t.Fatal("expected users.default_context_window_turns column to exist")
+	}
 }
 
 func TestProviderActiveIndexAllowsOnlyOneActivePresetPerUser(t *testing.T) {

@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
 import type {
+  ChatSettings,
   Conversation,
   ConversationSettings,
   ProviderPreset,
@@ -32,6 +33,7 @@ interface ChatOverlaysProps {
   activeTab: SettingsTab
   confirmation: ConfirmationState | null
   editingProviderId: number | null
+  chatSettings: ChatSettings
   isLoadingProviders: boolean
   isOpen: boolean
   isImporting: boolean
@@ -43,6 +45,7 @@ interface ChatOverlaysProps {
   providerForm: ProviderFormState
   providerState: ProviderState | null
   settings: ConversationSettings
+  setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
   toasts: ToastState[]
@@ -73,6 +76,7 @@ export function ChatOverlays({
   activeTab,
   confirmation,
   editingProviderId,
+  chatSettings,
   isLoadingProviders,
   isOpen,
   isImporting,
@@ -84,6 +88,7 @@ export function ChatOverlays({
   providerForm,
   providerState,
   settings,
+  setChatSettings,
   setSettings,
   transferConversation,
   toasts,
@@ -110,6 +115,7 @@ export function ChatOverlays({
     <Suspense fallback={null}>
       <SettingsPanel
         activeTab={activeTab}
+        chatSettings={chatSettings}
         editingProviderId={editingProviderId}
         isLoadingProviders={isLoadingProviders}
         isOpen={isOpen}
@@ -136,6 +142,7 @@ export function ChatOverlays({
         providerForm={providerForm}
         providerState={providerState}
         settings={settings}
+        setChatSettings={setChatSettings}
         setSettings={setSettings}
         transferConversation={transferConversation}
       />

@@ -11,6 +11,7 @@ import type {
   Attachment,
   BootstrapPayload,
   BootstrapStatus,
+  ChatSettings,
   CreateProviderPayload,
   ConversationSettings,
   Conversation,
@@ -92,6 +93,15 @@ export const authApi = {
 }
 
 export const chatApi = {
+  getChatSettings() {
+    return apiRequest<ChatSettings>('/api/chat/settings')
+  },
+  updateChatSettings(payload: ChatSettings) {
+    return apiRequest<ChatSettings>('/api/chat/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
   async listConversationsPage(params?: {
     search?: string
     archived?: boolean
@@ -178,11 +188,14 @@ export const chatApi = {
     conversationId: number,
     payload: SendMessagePayload,
     onEvent: (event: StreamEvent) => void | Promise<void>,
+    signal?: AbortSignal,
   ) {
     await streamChatRequest(
       `/api/conversations/${conversationId}/messages`,
       payload,
       onEvent,
+      'POST',
+      signal,
     )
   },
   async retryMessage(
@@ -190,22 +203,28 @@ export const chatApi = {
     messageId: number,
     settings: ConversationSettings | null,
     onEvent: (event: StreamEvent) => void | Promise<void>,
+    signal?: AbortSignal,
   ) {
     await streamChatRequest(
       `/api/conversations/${conversationId}/messages/${messageId}/retry`,
       settings ? { options: settings } : undefined,
       onEvent,
+      'POST',
+      signal,
     )
   },
   async regenerateMessage(
     conversationId: number,
     settings: ConversationSettings | null,
     onEvent: (event: StreamEvent) => void | Promise<void>,
+    signal?: AbortSignal,
   ) {
     await streamChatRequest(
       `/api/conversations/${conversationId}/messages/regenerate`,
       settings ? { options: settings } : undefined,
       onEvent,
+      'POST',
+      signal,
     )
   },
   async editMessage(
@@ -213,12 +232,14 @@ export const chatApi = {
     messageId: number,
     payload: SendMessagePayload,
     onEvent: (event: StreamEvent) => void | Promise<void>,
+    signal?: AbortSignal,
   ) {
     await streamChatRequest(
       `/api/conversations/${conversationId}/messages/${messageId}`,
       payload,
       onEvent,
       'PATCH',
+      signal,
     )
   },
 }
@@ -274,11 +295,13 @@ async function streamChatRequest(
   payload: unknown,
   onEvent: (event: StreamEvent) => void | Promise<void>,
   method = 'POST',
+  signal?: AbortSignal,
 ) {
   await streamSSE(
     `${API_BASE_URL}${path}`,
     {
       method,
+      signal,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',

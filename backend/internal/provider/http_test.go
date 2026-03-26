@@ -36,8 +36,19 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d", http.StatusCreated, recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), `"name":"OpenAI"`) {
+
+	var payload ProviderStateDTO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if len(payload.Presets) != 1 {
+		t.Fatalf("expected 1 preset in response, got %d", len(payload.Presets))
+	}
+	if payload.Presets[0].Name != "OpenAI" {
 		t.Fatalf("expected created preset in response, got %s", recorder.Body.String())
+	}
+	if payload.Presets[0].APIKey != "sk-test" {
+		t.Fatalf("expected decrypted API key in response, got %q", payload.Presets[0].APIKey)
 	}
 }
 
@@ -74,11 +85,75 @@ func TestUpdateProviderUpdatesPresetAndReturnsState(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), `"name":"OpenAI 2"`) {
+
+	var payload ProviderStateDTO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if len(payload.Presets) != 1 {
+		t.Fatalf("expected 1 preset in response, got %d", len(payload.Presets))
+	}
+	if payload.Presets[0].Name != "OpenAI 2" {
 		t.Fatalf("expected updated preset in response, got %s", recorder.Body.String())
+	}
+	if payload.Presets[0].APIKey != "sk-test" {
+		t.Fatalf("expected API key to remain visible, got %q", payload.Presets[0].APIKey)
 	}
 	if preset.ID != 1 {
 		t.Fatalf("expected preset id 1, got %d", preset.ID)
+	}
+}
+
+func TestListProvidersReturnsDecryptedAPIKeysForEachPreset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+	first, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "OpenAI",
+		BaseURL:      "https://api.openai.com/v1",
+		APIKey:       "sk-openai",
+		Models:       []string{"gpt-4.1-mini"},
+		DefaultModel: "gpt-4.1-mini",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(first) error = %v", err)
+	}
+	second, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Anthropic",
+		BaseURL:      "https://api.anthropic.com/v1",
+		APIKey:       "sk-anthropic",
+		Models:       []string{"claude-sonnet"},
+		DefaultModel: "claude-sonnet",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(second) error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/ai/providers", nil)
+	ctx.Set("current_user", &models.User{ID: 1})
+
+	NewHandler(service).ListProviders(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	var payload ProviderStateDTO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if len(payload.Presets) != 2 {
+		t.Fatalf("expected 2 presets in response, got %d", len(payload.Presets))
+	}
+	if payload.Presets[0].ID != second.ID || payload.Presets[0].APIKey != "sk-anthropic" {
+		t.Fatalf("expected active preset with decrypted key first, got %#v", payload.Presets[0])
+	}
+	if payload.Presets[1].ID != first.ID || payload.Presets[1].APIKey != "sk-openai" {
+		t.Fatalf("expected inactive preset with decrypted key second, got %#v", payload.Presets[1])
 	}
 }
 

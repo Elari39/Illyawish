@@ -1,7 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
-import type { Conversation, ConversationSettings, ProviderState } from '../../../types/chat'
+import type {
+  ChatSettings,
+  Conversation,
+  ConversationSettings,
+  ProviderState,
+} from '../../../types/chat'
 import { TestProviders } from '../../../test/test-providers'
 import { createProviderFormErrors } from '../utils'
 import { ConfirmationDialog } from './confirmation-dialog'
@@ -14,6 +19,15 @@ const settings: ConversationSettings = {
   model: '',
   temperature: 1,
   maxTokens: null,
+  contextWindowTurns: null,
+}
+
+const chatSettings: ChatSettings = {
+  globalPrompt: 'Use global prompt',
+  model: '',
+  temperature: 1,
+  maxTokens: null,
+  contextWindowTurns: null,
 }
 
 const conversation: Conversation = {
@@ -47,6 +61,7 @@ describe('overlay accessibility', () => {
       <TestProviders>
         <SettingsPanel
           activeTab="chat"
+          chatSettings={chatSettings}
           editingProviderId={null}
           isLoadingProviders={false}
           isImporting={false}
@@ -80,6 +95,7 @@ describe('overlay accessibility', () => {
           }}
           providerState={providerState}
           settings={settings}
+          setChatSettings={vi.fn()}
           setSettings={vi.fn()}
           transferConversation={conversation}
         />
@@ -94,6 +110,8 @@ describe('overlay accessibility', () => {
     expect(screen.getByRole('button', { name: 'AI Provider' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Global prompt')).toBeInTheDocument()
+    expect(screen.getByLabelText('Session prompt')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Import / Export' }))
     expect(onProviderTabChange).toHaveBeenCalledWith('transfer')

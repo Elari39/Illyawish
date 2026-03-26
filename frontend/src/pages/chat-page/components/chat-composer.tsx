@@ -6,7 +6,7 @@ import {
   type MutableRefObject,
   type RefObject,
 } from 'react'
-import { FileText, Paperclip, SendHorizonal, X } from 'lucide-react'
+import { FileText, Paperclip, SendHorizonal, Square, X } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { Textarea } from '../../../components/ui/textarea'
@@ -27,10 +27,12 @@ interface ChatComposerProps {
   editingMessageId: number | null
   hasPendingUploads: boolean
   canSubmitComposer: boolean
+  isSending: boolean
   chatError: string | null
   composerIsComposingRef: MutableRefObject<boolean>
   onComposerChange: (value: string) => void
   onCancelEdit: () => void
+  onStopGeneration: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onFilesSelected: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
@@ -44,10 +46,12 @@ export function ChatComposer({
   editingMessageId,
   hasPendingUploads,
   canSubmitComposer,
+  isSending,
   chatError,
   composerIsComposingRef,
   onComposerChange,
   onCancelEdit,
+  onStopGeneration,
   onSubmit,
   onFilesSelected,
   onRemoveAttachment,
@@ -234,14 +238,27 @@ export function ChatComposer({
               {hasPendingUploads ? t('common.loading') : t('chat.shortcutHint')}
             </p>
 
-            <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-white transition hover:bg-[var(--brand-strong)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!canSubmitComposer}
-              type="submit"
-              aria-label={t('chat.sendMessage')}
-            >
-              <SendHorizonal className="h-4 w-4" />
-            </button>
+            {isSending ? (
+              <button
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--danger)] text-white transition hover:opacity-90 active:scale-[0.96]"
+                onClick={onStopGeneration}
+                type="button"
+                aria-label={t('chat.stop')}
+                title={t('chat.stop')}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-white transition hover:bg-[var(--brand-strong)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canSubmitComposer}
+                type="submit"
+                aria-label={t('chat.sendMessage')}
+                title={t('chat.sendMessage')}
+              >
+                <SendHorizonal className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </form>
 

@@ -152,8 +152,8 @@ export function ProviderSettingsTab({
                     <p className="mt-3 truncate text-xs text-[var(--muted-foreground)]">
                       {preset.baseURL}
                     </p>
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      {t('settings.key')}: {preset.apiKeyHint}
+                    <p className="mt-1 break-all text-xs text-[var(--muted-foreground)]">
+                      {t('settings.key')}: {preset.apiKey}
                     </p>
                     <p className="mt-2 text-xs text-[var(--muted-foreground)]">
                       {preset.models.join(', ')}
@@ -287,7 +287,6 @@ export function ProviderSettingsTab({
                     ? t('settings.apiKeyPlaceholderEdit')
                     : t('settings.apiKeyPlaceholderNew')
                 }
-                type="password"
                 value={providerForm.apiKey}
                 onChange={(event) =>
                   onProviderFieldChange('apiKey', event.target.value)

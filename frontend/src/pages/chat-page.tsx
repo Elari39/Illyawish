@@ -347,24 +347,6 @@ export function ChatPage() {
             >
               {t('chat.settings')}
             </Button>
-            {chatSession.latestAssistantMessage && !chatSession.isSending ? (
-              <Button
-                className="px-3 py-2"
-                onClick={() => void chatSession.handleRegenerateAssistant()}
-                variant="secondary"
-              >
-                {t('chat.regenerate')}
-              </Button>
-            ) : null}
-            {chatSession.isSending ? (
-              <Button
-                className="px-3 py-2"
-                onClick={() => void chatSession.handleStopGeneration()}
-                variant="danger"
-              >
-                {t('chat.stop')}
-              </Button>
-            ) : null}
           </div>
         </header>
 
@@ -373,7 +355,6 @@ export function ChatPage() {
           isLoadingMessages={chatSession.isLoadingMessages}
           messages={chatSession.messages}
           latestUserMessage={chatSession.latestUserMessage}
-          latestAssistantMessage={chatSession.latestAssistantMessage}
           isSending={chatSession.isSending}
           editingMessageId={chatSession.editingMessageId}
           hasConversationShell={displayConversation != null}
@@ -387,7 +368,7 @@ export function ChatPage() {
           }}
           onEditMessage={chatSession.startEditingMessage}
           onRetryMessage={(message) => void chatSession.handleRetryAssistant(message)}
-          onRegenerate={() => void chatSession.handleRegenerateAssistant()}
+          onRegenerateMessage={(message) => void chatSession.handleRegenerateAssistant(message)}
         />
 
         <ChatComposer
@@ -398,10 +379,12 @@ export function ChatPage() {
           editingMessageId={chatSession.editingMessageId}
           hasPendingUploads={chatSession.hasPendingUploads}
           canSubmitComposer={chatSession.canSubmitComposer}
+          isSending={chatSession.isSending}
           chatError={chatError}
           composerIsComposingRef={chatSession.composerIsComposingRef}
           onComposerChange={chatSession.setComposerValue}
           onCancelEdit={chatSession.cancelEditingMessage}
+          onStopGeneration={() => void chatSession.handleStopGeneration()}
           onSubmit={(event) => void chatSession.handleSubmit(event)}
           onFilesSelected={(files) => void chatSession.handleFilesSelected(files)}
           onRemoveAttachment={chatSession.removeSelectedAttachment}
@@ -410,6 +393,7 @@ export function ChatPage() {
 
       <ChatOverlays
         activeTab={uiState.activeSettingsTab}
+        chatSettings={chatSession.chatSettingsDraft}
         confirmation={uiState.confirmation}
         editingProviderId={providerSettings.editingProviderId}
         isLoadingProviders={providerSettings.isLoadingProviders}
@@ -446,6 +430,7 @@ export function ChatPage() {
         providerState={providerSettings.providerState}
         transferConversation={displayConversation}
         settings={chatSession.settingsDraft}
+        setChatSettings={chatSession.setChatSettingsDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}
       />

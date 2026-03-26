@@ -11,7 +11,6 @@ interface MessageListProps {
   isLoadingMessages: boolean
   messages: Message[]
   latestUserMessage: Message | null
-  latestAssistantMessage: Message | null
   isSending: boolean
   editingMessageId: number | null
   conversations: Conversation[]
@@ -20,7 +19,7 @@ interface MessageListProps {
   onContinueLast: () => void
   onEditMessage: (message: Message) => void
   onRetryMessage: (message: Message) => void
-  onRegenerate: () => void
+  onRegenerateMessage: (message: Message) => void
 }
 
 export function MessageList({
@@ -29,7 +28,6 @@ export function MessageList({
   isLoadingMessages,
   messages,
   latestUserMessage,
-  latestAssistantMessage,
   isSending,
   editingMessageId,
   conversations,
@@ -38,7 +36,7 @@ export function MessageList({
   onContinueLast,
   onEditMessage,
   onRetryMessage,
-  onRegenerate,
+  onRegenerateMessage,
 }: MessageListProps) {
   const { t } = useI18n()
 
@@ -64,20 +62,18 @@ export function MessageList({
               }
               canRetry={
                 !isSending &&
-                latestAssistantMessage?.id === message.id &&
                 message.role === 'assistant' &&
                 (message.status === 'failed' || message.status === 'cancelled')
               }
               canRegenerate={
                 !isSending &&
-                latestAssistantMessage?.id === message.id &&
                 message.role === 'assistant' &&
                 message.status === 'completed'
               }
               isEditing={editingMessageId === message.id}
               message={message}
               onEdit={() => onEditMessage(message)}
-              onRegenerate={onRegenerate}
+              onRegenerate={() => onRegenerateMessage(message)}
               onRetry={() => onRetryMessage(message)}
             />
           ))}

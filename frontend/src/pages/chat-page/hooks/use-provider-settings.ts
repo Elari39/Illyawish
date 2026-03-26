@@ -133,6 +133,32 @@ export function useProviderSettings({
     )
   }
 
+  function findEditingPreset() {
+    if (providerEditorMode.type !== 'edit') {
+      return null
+    }
+
+    return (
+      providerStateRef.current?.presets.find(
+        (preset) => preset.id === providerEditorMode.providerId,
+      ) ?? null
+    )
+  }
+
+  function resolveSubmittedAPIKey(currentPreset: ProviderPreset | null) {
+    const trimmedAPIKey = providerForm.apiKey.trim()
+
+    if (!trimmedAPIKey) {
+      return undefined
+    }
+
+    if (currentPreset && trimmedAPIKey === currentPreset.apiKey.trim()) {
+      return undefined
+    }
+
+    return trimmedAPIKey
+  }
+
   function handleStartNewProvider() {
     const nextProviderEditorMode: ProviderEditorMode = { type: 'new' }
     providerEditorModeRef.current = nextProviderEditorMode
@@ -199,20 +225,20 @@ export function useProviderSettings({
       }
 
       const models = normalizeModelEntries(providerForm.models)
+      const currentPreset = findEditingPreset()
+      const nextAPIKey = resolveSubmittedAPIKey(currentPreset)
       const nextState = providerEditorMode.type === 'edit'
         ? await providerApi.update(providerEditorMode.providerId, {
             name: providerForm.name,
             baseURL: providerForm.baseURL,
             models,
             defaultModel: validation.defaultModel,
-            ...(providerForm.apiKey.trim()
-              ? { apiKey: providerForm.apiKey }
-              : {}),
+            ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
           })
         : await providerApi.create({
             name: providerForm.name,
             baseURL: providerForm.baseURL,
-            apiKey: providerForm.apiKey,
+            apiKey: providerForm.apiKey.trim(),
             models,
             defaultModel: validation.defaultModel,
           })
@@ -262,12 +288,14 @@ export function useProviderSettings({
         return
       }
 
+      const currentPreset = findEditingPreset()
+      const nextAPIKey = resolveSubmittedAPIKey(currentPreset)
       const result = await providerApi.test({
         ...(providerEditorMode.type === 'edit'
           ? { providerId: providerEditorMode.providerId }
           : {}),
         baseURL: providerForm.baseURL,
-        ...(providerForm.apiKey.trim() ? { apiKey: providerForm.apiKey } : {}),
+        ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
         defaultModel: validation.defaultModel,
       })
       showToast(result.message, 'success')

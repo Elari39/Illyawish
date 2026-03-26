@@ -64,7 +64,7 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 	}
 
 	var chunks []string
-	fullText, err := model.Stream(
+	result, err := model.Stream(
 		context.Background(),
 		ProviderConfig{
 			BaseURL:      "https://example.com/v1",
@@ -81,8 +81,8 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 		t.Fatalf("Stream() error = %v", err)
 	}
 
-	if fullText != "Hello World" {
-		t.Fatalf("expected full text to be %q, got %q", "Hello World", fullText)
+	if result.Content != "Hello World" {
+		t.Fatalf("expected full text to be %q, got %q", "Hello World", result.Content)
 	}
 	if len(chunks) != 2 {
 		t.Fatalf("expected 2 emitted chunks, got %d", len(chunks))
@@ -122,7 +122,7 @@ func TestEinoChatModelFallsBackToGenerateOnEOFStartError(t *testing.T) {
 	}
 
 	var chunks []string
-	fullText, err := model.Stream(context.Background(), ProviderConfig{
+	result, err := model.Stream(context.Background(), ProviderConfig{
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
@@ -133,8 +133,8 @@ func TestEinoChatModelFallsBackToGenerateOnEOFStartError(t *testing.T) {
 		t.Fatalf("expected fallback generate to succeed, got error %v", err)
 	}
 
-	if fullText != "Fallback response" {
-		t.Fatalf("expected fallback response, got %q", fullText)
+	if result.Content != "Fallback response" {
+		t.Fatalf("expected fallback response, got %q", result.Content)
 	}
 	if len(chunks) != 1 || chunks[0] != "Fallback response" {
 		t.Fatalf("expected a single fallback chunk, got %#v", chunks)
@@ -148,7 +148,7 @@ func TestEinoChatModelStreamReturnsReadErrors(t *testing.T) {
 		},
 	}
 
-	fullText, err := model.Stream(context.Background(), ProviderConfig{
+	result, err := model.Stream(context.Background(), ProviderConfig{
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
@@ -156,8 +156,8 @@ func TestEinoChatModelStreamReturnsReadErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected read error, got nil")
 	}
-	if fullText != "Hello " {
-		t.Fatalf("expected partial content to be preserved, got %q", fullText)
+	if result.Content != "Hello " {
+		t.Fatalf("expected partial content to be preserved, got %q", result.Content)
 	}
 	if err.Error() != "read model stream: stream exploded" {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,7 +181,7 @@ func TestEinoChatModelStreamStopsOnEOF(t *testing.T) {
 		},
 	}
 
-	fullText, err := model.Stream(context.Background(), ProviderConfig{
+	result, err := model.Stream(context.Background(), ProviderConfig{
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
@@ -189,8 +189,8 @@ func TestEinoChatModelStreamStopsOnEOF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected EOF to end cleanly, got error %v", err)
 	}
-	if fullText != "done" {
-		t.Fatalf("expected full text to be %q, got %q", "done", fullText)
+	if result.Content != "done" {
+		t.Fatalf("expected full text to be %q, got %q", "done", result.Content)
 	}
 }
 

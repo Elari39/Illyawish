@@ -31,10 +31,19 @@ type ConversationDTO struct {
 }
 
 type ConversationSettingsDTO struct {
-	SystemPrompt string   `json:"systemPrompt"`
-	Model        string   `json:"model"`
-	Temperature  *float32 `json:"temperature"`
-	MaxTokens    *int     `json:"maxTokens"`
+	SystemPrompt       string   `json:"systemPrompt"`
+	Model              string   `json:"model"`
+	Temperature        *float32 `json:"temperature"`
+	MaxTokens          *int     `json:"maxTokens"`
+	ContextWindowTurns *int     `json:"contextWindowTurns"`
+}
+
+type ChatSettingsDTO struct {
+	GlobalPrompt       string   `json:"globalPrompt"`
+	Model              string   `json:"model"`
+	Temperature        *float32 `json:"temperature"`
+	MaxTokens          *int     `json:"maxTokens"`
+	ContextWindowTurns *int     `json:"contextWindowTurns"`
 }
 
 type AttachmentDTO struct {
@@ -63,6 +72,35 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
+func (h *Handler) GetChatSettings(c *gin.Context) {
+	user := auth.CurrentUser(c)
+	settings, err := h.service.GetChatSettings(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get chat settings"})
+		return
+	}
+
+	c.JSON(http.StatusOK, ToChatSettingsDTO(settings))
+}
+
+func (h *Handler) UpdateChatSettings(c *gin.Context) {
+	user := auth.CurrentUser(c)
+
+	var req ChatSettings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid chat settings payload"})
+		return
+	}
+
+	settings, err := h.service.UpdateChatSettings(user.ID, req)
+	if err != nil {
+		handleChatError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, ToChatSettingsDTO(settings))
+}
+
 func (h *Handler) ListConversations(c *gin.Context) {
 	user := auth.CurrentUser(c)
 	params, err := listConversationsParams(c)
@@ -79,7 +117,12 @@ func (h *Handler) ListConversations(c *gin.Context) {
 
 	resp := make([]ConversationDTO, 0, len(result.Conversations))
 	for _, conversation := range result.Conversations {
-		resp = append(resp, ToConversationDTO(&conversation))
+		effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, &conversation)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load chat settings"})
+			return
+		}
+		resp = append(resp, ToConversationDTO(&conversation, effectiveSettings))
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -96,7 +139,13 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation)})
+	effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, conversation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load chat settings"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation, effectiveSettings)})
 }
 
 func (h *Handler) ImportConversation(c *gin.Context) {
@@ -114,7 +163,13 @@ func (h *Handler) ImportConversation(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation)})
+	effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, conversation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load chat settings"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"conversation": ToConversationDTO(conversation, effectiveSettings)})
 }
 
 func (h *Handler) UpdateConversation(c *gin.Context) {
@@ -137,7 +192,13 @@ func (h *Handler) UpdateConversation(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"conversation": ToConversationDTO(conversation)})
+	effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, conversation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load chat settings"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"conversation": ToConversationDTO(conversation, effectiveSettings)})
 }
 
 func (h *Handler) ListMessages(c *gin.Context) {
@@ -165,8 +226,14 @@ func (h *Handler) ListMessages(c *gin.Context) {
 		messageDTOs = append(messageDTOs, *ToMessageDTO(&message))
 	}
 
+	effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, conversation)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load chat settings"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"conversation": ToConversationDTO(conversation),
+		"conversation": ToConversationDTO(conversation, effectiveSettings),
 		"messages":     messageDTOs,
 	})
 }
@@ -429,20 +496,34 @@ func bindOptionalJSON(c *gin.Context, target any) error {
 	return nil
 }
 
-func ToConversationDTO(conversation *models.Conversation) ConversationDTO {
+func ToConversationDTO(
+	conversation *models.Conversation,
+	settings ConversationSettings,
+) ConversationDTO {
 	return ConversationDTO{
 		ID:         conversation.ID,
 		Title:      conversation.Title,
 		IsPinned:   conversation.IsPinned,
 		IsArchived: conversation.IsArchived,
 		Settings: ConversationSettingsDTO{
-			SystemPrompt: conversation.SystemPrompt,
-			Model:        conversation.Model,
-			Temperature:  cloneFloat32(conversation.Temperature),
-			MaxTokens:    cloneInt(conversation.MaxTokens),
+			SystemPrompt:       settings.SystemPrompt,
+			Model:              settings.Model,
+			Temperature:        cloneFloat32(settings.Temperature),
+			MaxTokens:          cloneInt(settings.MaxTokens),
+			ContextWindowTurns: cloneInt(settings.ContextWindowTurns),
 		},
 		CreatedAt: conversation.CreatedAt.Format(timeFormat),
 		UpdatedAt: conversation.UpdatedAt.Format(timeFormat),
+	}
+}
+
+func ToChatSettingsDTO(settings ChatSettings) ChatSettingsDTO {
+	return ChatSettingsDTO{
+		GlobalPrompt:       settings.GlobalPrompt,
+		Model:              settings.Model,
+		Temperature:        cloneFloat32(settings.Temperature),
+		MaxTokens:          cloneInt(settings.MaxTokens),
+		ContextWindowTurns: cloneInt(settings.ContextWindowTurns),
 	}
 }
 

@@ -70,21 +70,11 @@ describe('useProviderSettings', () => {
   })
 
   it('allows editing a preset without re-entering the api key', async () => {
-    const nextState: ProviderState = {
-      presets: [],
-      activePresetId: null,
-      currentSource: 'none',
-      fallback: {
-        available: false,
-        baseURL: '',
-        models: [],
-        defaultModel: '',
-      },
-    }
     const preset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-openai-1234',
       apiKeyHint: 'sk-1...2345',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',
@@ -92,17 +82,33 @@ describe('useProviderSettings', () => {
       createdAt: '2026-03-26T00:00:00Z',
       updatedAt: '2026-03-26T00:00:00Z',
     }
+    const nextState: ProviderState = {
+      presets: [preset],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    }
+    listProvidersMock.mockResolvedValue(nextState)
     updateProviderMock.mockResolvedValue(nextState)
 
     const { result } = renderHook(
       () =>
         useProviderSettings({
-          isSettingsOpen: false,
+          isSettingsOpen: true,
           setChatError: vi.fn(),
           showToast: vi.fn(),
         }),
       { wrapper },
     )
+
+    await waitFor(() => {
+      expect(result.current.providerState?.presets[0]?.id).toBe(7)
+    })
 
     act(() => {
       result.current.handleEditProvider(preset)
@@ -120,6 +126,69 @@ describe('useProviderSettings', () => {
     })
   })
 
+  it('keeps the created preset api key visible after saving a new preset', async () => {
+    const setChatError = vi.fn()
+    const showToast = vi.fn()
+    const createdPreset: ProviderPreset = {
+      id: 9,
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-created-9876',
+      apiKeyHint: 'sk-c...9876',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+      isActive: true,
+      createdAt: '2026-03-26T00:00:00Z',
+      updatedAt: '2026-03-26T00:00:00Z',
+    }
+    createProviderMock.mockResolvedValue({
+      presets: [createdPreset],
+      activePresetId: 9,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: false,
+          setChatError,
+          showToast,
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.handleProviderFieldChange('name', 'OpenAI')
+      result.current.handleProviderFieldChange('baseURL', 'https://api.openai.com/v1')
+      result.current.handleProviderFieldChange('apiKey', 'sk-created-9876')
+      result.current.handleProviderModelsChange({
+        models: ['gpt-4.1-mini'],
+        defaultModel: 'gpt-4.1-mini',
+      })
+    })
+
+    await act(async () => {
+      await result.current.handleSaveProvider()
+    })
+
+    expect(createProviderMock).toHaveBeenCalledWith({
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-created-9876',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+    })
+    expect(result.current.editingProviderId).toBe(9)
+    expect(result.current.providerForm.apiKey).toBe('sk-created-9876')
+    expect(result.current.providerState?.presets[0]?.apiKey).toBe('sk-created-9876')
+  })
+
   it('keeps the new preset form when the initial provider request finishes later', async () => {
     const providerState: ProviderState = {
       presets: [
@@ -127,6 +196,7 @@ describe('useProviderSettings', () => {
           id: 3,
           name: 'Existing preset',
           baseURL: 'https://api.openai.com/v1',
+          apiKey: 'sk-existing-1234',
           apiKeyHint: 'sk-1...2345',
           models: ['gpt-4.1-mini'],
           defaultModel: 'gpt-4.1-mini',
@@ -189,5 +259,127 @@ describe('useProviderSettings', () => {
       'https://fallback.example.com/v1',
     )
     expect(result.current.providerForm.defaultModel).toBe('fallback-model')
+  })
+
+  it('does not resend an unchanged api key when testing an existing preset', async () => {
+    const preset: ProviderPreset = {
+      id: 7,
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-openai-1234',
+      apiKeyHint: 'sk-1...2345',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+      isActive: true,
+      createdAt: '2026-03-26T00:00:00Z',
+      updatedAt: '2026-03-26T00:00:00Z',
+    }
+    listProvidersMock.mockResolvedValue({
+      presets: [preset],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+    testProviderMock.mockResolvedValue({
+      ok: true,
+      message: 'provider connection verified',
+      resolvedBaseURL: 'https://api.openai.com/v1',
+      resolvedModel: 'gpt-4.1-mini',
+    })
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: true,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerState?.presets[0]?.id).toBe(7)
+    })
+
+    act(() => {
+      result.current.handleEditProvider(preset)
+    })
+
+    await act(async () => {
+      await result.current.handleTestProvider()
+    })
+
+    expect(testProviderMock).toHaveBeenCalledWith({
+      providerId: 7,
+      baseURL: 'https://api.openai.com/v1',
+      defaultModel: 'gpt-4.1-mini',
+    })
+  })
+
+  it('resends a changed api key when testing an existing preset', async () => {
+    const preset: ProviderPreset = {
+      id: 7,
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-openai-1234',
+      apiKeyHint: 'sk-1...2345',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+      isActive: true,
+      createdAt: '2026-03-26T00:00:00Z',
+      updatedAt: '2026-03-26T00:00:00Z',
+    }
+    listProvidersMock.mockResolvedValue({
+      presets: [preset],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+    testProviderMock.mockResolvedValue({
+      ok: true,
+      message: 'provider connection verified',
+      resolvedBaseURL: 'https://api.openai.com/v1',
+      resolvedModel: 'gpt-4.1-mini',
+    })
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: true,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerState?.presets[0]?.id).toBe(7)
+    })
+
+    act(() => {
+      result.current.handleEditProvider(preset)
+      result.current.handleProviderFieldChange('apiKey', 'sk-updated-5678')
+    })
+
+    await act(async () => {
+      await result.current.handleTestProvider()
+    })
+
+    expect(testProviderMock).toHaveBeenCalledWith({
+      providerId: 7,
+      baseURL: 'https://api.openai.com/v1',
+      apiKey: 'sk-updated-5678',
+      defaultModel: 'gpt-4.1-mini',
+    })
   })
 })

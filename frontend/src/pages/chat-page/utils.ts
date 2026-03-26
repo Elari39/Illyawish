@@ -471,7 +471,7 @@ export function createProviderForm(
     return {
       name: preset.name,
       baseURL: preset.baseURL,
-      apiKey: '',
+      apiKey: preset.apiKey,
       models: resolveProviderModelDraft(preset.models, preset.defaultModel),
       defaultModel: preset.defaultModel,
       errors: createProviderFormErrors(),

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -22,6 +23,7 @@ type ProviderPresetDTO struct {
 	ID           uint     `json:"id"`
 	Name         string   `json:"name"`
 	BaseURL      string   `json:"baseURL"`
+	APIKey       string   `json:"apiKey"`
 	APIKeyHint   string   `json:"apiKeyHint"`
 	Models       []string `json:"models"`
 	DefaultModel string   `json:"defaultModel"`
@@ -79,7 +81,13 @@ func (h *Handler) ListProviders(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toProviderStateDTO(state))
+	dto, err := h.toProviderStateDTO(state)
+	if err != nil {
+		handleProviderError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto)
 }
 
 func (h *Handler) CreateProvider(c *gin.Context) {
@@ -200,7 +208,13 @@ func (h *Handler) renderProviderState(c *gin.Context, userID uint, status int) {
 		return
 	}
 
-	c.JSON(status, toProviderStateDTO(state))
+	dto, err := h.toProviderStateDTO(state)
+	if err != nil {
+		handleProviderError(c, err)
+		return
+	}
+
+	c.JSON(status, dto)
 }
 
 func providerIDParam(c *gin.Context) (uint, error) {
@@ -212,10 +226,14 @@ func providerIDParam(c *gin.Context) (uint, error) {
 	return uint(id), nil
 }
 
-func toProviderStateDTO(state *State) ProviderStateDTO {
+func (h *Handler) toProviderStateDTO(state *State) (ProviderStateDTO, error) {
 	presets := make([]ProviderPresetDTO, 0, len(state.Presets))
 	for _, preset := range state.Presets {
-		presets = append(presets, toProviderPresetDTO(&preset))
+		dto, err := h.toProviderPresetDTO(&preset)
+		if err != nil {
+			return ProviderStateDTO{}, err
+		}
+		presets = append(presets, dto)
 	}
 
 	return ProviderStateDTO{
@@ -228,21 +246,29 @@ func toProviderStateDTO(state *State) ProviderStateDTO {
 			Models:       state.Fallback.Models,
 			DefaultModel: state.Fallback.DefaultModel,
 		},
-	}
+	}, nil
 }
 
-func toProviderPresetDTO(preset *models.LLMProviderPreset) ProviderPresetDTO {
+func (h *Handler) toProviderPresetDTO(
+	preset *models.LLMProviderPreset,
+) (ProviderPresetDTO, error) {
+	apiKey, err := h.service.crypter.Decrypt(preset.EncryptedAPIKey)
+	if err != nil {
+		return ProviderPresetDTO{}, fmt.Errorf("decrypt provider API key: %w", err)
+	}
+
 	return ProviderPresetDTO{
 		ID:           preset.ID,
 		Name:         preset.Name,
 		BaseURL:      preset.BaseURL,
+		APIKey:       apiKey,
 		APIKeyHint:   preset.APIKeyHint,
 		Models:       currentProviderModels(preset),
 		DefaultModel: preset.DefaultModel,
 		IsActive:     preset.IsActive,
 		CreatedAt:    preset.CreatedAt.Format(timeFormat),
 		UpdatedAt:    preset.UpdatedAt.Format(timeFormat),
-	}
+	}, nil
 }
 
 func handleProviderError(c *gin.Context, err error) {

@@ -43,6 +43,11 @@ type RequestOptions struct {
 	MaxTokens   *int
 }
 
+type StreamResult struct {
+	Content      string
+	FinishReason string
+}
+
 type ChatModel interface {
 	Stream(
 		ctx context.Context,
@@ -50,7 +55,7 @@ type ChatModel interface {
 		messages []ChatMessage,
 		options RequestOptions,
 		onDelta func(string),
-	) (string, error)
+	) (StreamResult, error)
 }
 
 type EinoChatModel struct {
@@ -71,38 +76,42 @@ func (m *EinoChatModel) Stream(
 	messages []ChatMessage,
 	options RequestOptions,
 	onDelta func(string),
-) (string, error) {
+) (StreamResult, error) {
 	modelCfg, err := buildChatModelConfig(provider, options)
 	if err != nil {
-		return "", err
+		return StreamResult{}, err
 	}
 
 	chatModel, err := m.newChatModel(ctx, modelCfg)
 	if err != nil {
-		return "", fmt.Errorf("create eino chat model: %w", err)
+		return StreamResult{}, fmt.Errorf("create eino chat model: %w", err)
 	}
 
 	stream, err := chatModel.Stream(ctx, toSchemaMessages(messages), toModelOptions(options)...)
 	if err != nil {
 		if shouldFallbackToGenerate(err) {
-			fullText, fallbackErr := m.generateOnce(ctx, chatModel, messages, options, onDelta)
+			result, fallbackErr := m.generateOnce(ctx, chatModel, messages, options, onDelta)
 			if fallbackErr == nil {
-				return fullText, nil
+				return result, nil
 			}
-			return "", fmt.Errorf("start model stream: %v; fallback completion failed: %w", err, fallbackErr)
+			return StreamResult{}, fmt.Errorf("start model stream: %v; fallback completion failed: %w", err, fallbackErr)
 		}
-		return "", fmt.Errorf("start model stream: %w", err)
+		return StreamResult{}, fmt.Errorf("start model stream: %w", err)
 	}
 	defer stream.Close()
 
-	var fullText string
+	result := StreamResult{}
 	for {
 		msg, err := stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
-			return fullText, fmt.Errorf("read model stream: %w", err)
+			return result, fmt.Errorf("read model stream: %w", err)
+		}
+
+		if msg.ResponseMeta != nil && msg.ResponseMeta.FinishReason != "" {
+			result.FinishReason = msg.ResponseMeta.FinishReason
 		}
 
 		chunk := msg.Content
@@ -110,13 +119,13 @@ func (m *EinoChatModel) Stream(
 			continue
 		}
 
-		fullText += chunk
+		result.Content += chunk
 		if onDelta != nil {
 			onDelta(chunk)
 		}
 	}
 
-	return fullText, nil
+	return result, nil
 }
 
 func (m *EinoChatModel) generateOnce(
@@ -125,10 +134,10 @@ func (m *EinoChatModel) generateOnce(
 	messages []ChatMessage,
 	options RequestOptions,
 	onDelta func(string),
-) (string, error) {
+) (StreamResult, error) {
 	msg, err := chatModel.Generate(ctx, toSchemaMessages(messages), toModelOptions(options)...)
 	if err != nil {
-		return "", fmt.Errorf("generate model completion: %w", err)
+		return StreamResult{}, fmt.Errorf("generate model completion: %w", err)
 	}
 
 	fullText := extractAssistantText(msg)
@@ -136,7 +145,10 @@ func (m *EinoChatModel) generateOnce(
 		onDelta(fullText)
 	}
 
-	return fullText, nil
+	return StreamResult{
+		Content:      fullText,
+		FinishReason: extractFinishReason(msg),
+	}, nil
 }
 
 func shouldFallbackToGenerate(err error) bool {
@@ -185,6 +197,13 @@ func extractAssistantText(message *schema.Message) string {
 	}
 
 	return builder.String()
+}
+
+func extractFinishReason(message *schema.Message) string {
+	if message == nil || message.ResponseMeta == nil {
+		return ""
+	}
+	return strings.TrimSpace(message.ResponseMeta.FinishReason)
 }
 
 func buildChatModelConfig(provider ProviderConfig, options RequestOptions) (*openai.ChatModelConfig, error) {

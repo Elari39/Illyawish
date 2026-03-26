@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { chatApi } from '../../../lib/api'
+import { ApiError, isAbortError } from '../../../lib/http'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
   Attachment,
@@ -43,6 +44,19 @@ interface UseChatSessionOptions {
   t: I18nContextValue['t']
   locale: string
 }
+
+interface ActiveGenerationState {
+  id: number
+  conversationId: number
+  placeholderId: number
+  messageId: number | null
+  controller: AbortController
+  stopRequested: boolean
+  stopPromise: Promise<void> | null
+}
+
+const STOP_RECONCILE_ATTEMPTS = 12
+const STOP_RECONCILE_DELAY_MS = 150
 
 export function useChatSession({
   activeConversationId,
@@ -92,8 +106,10 @@ export function useChatSession({
     setIsSending,
   } = useChatMessagesState()
   const {
+    chatSettingsDraft,
     pendingConversation,
     settingsDraft,
+    setChatSettingsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -109,7 +125,8 @@ export function useChatSession({
   })
   const [isImporting, setIsImporting] = useState(false)
 
-  const streamingConversationIdRef = useRef<number | null>(null)
+  const activeGenerationRef = useRef<ActiveGenerationState | null>(null)
+  const nextGenerationIdRef = useRef(0)
   const activeConversationIdRef = useRef<number | null>(null)
   const conversationSearchRef = useRef(search)
   const showArchivedRef = useRef(showArchived)
@@ -148,7 +165,7 @@ export function useChatSession({
   useEffect(() => {
     if (
       !activeConversationId ||
-      streamingConversationIdRef.current === activeConversationId
+      activeGenerationRef.current?.conversationId === activeConversationId
     ) {
       return
     }
@@ -260,8 +277,127 @@ export function useChatSession({
     }
   }
 
+  function beginGeneration(
+    conversationId: number,
+    placeholderId: number,
+  ) {
+    const generation: ActiveGenerationState = {
+      id: nextGenerationIdRef.current + 1,
+      conversationId,
+      placeholderId,
+      messageId: null,
+      controller: new AbortController(),
+      stopRequested: false,
+      stopPromise: null,
+    }
+
+    nextGenerationIdRef.current = generation.id
+    activeGenerationRef.current = generation
+    setIsSending(true)
+    setChatError(null)
+    return generation
+  }
+
+  function syncGenerationMessageId(
+    placeholderId: number,
+    message: Message | undefined,
+  ) {
+    const activeGeneration = activeGenerationRef.current
+    if (
+      !activeGeneration ||
+      !message ||
+      activeGeneration.conversationId !== message.conversationId
+    ) {
+      return
+    }
+
+    if (
+      activeGeneration.placeholderId === placeholderId ||
+      activeGeneration.messageId === placeholderId ||
+      activeGeneration.messageId === message.id
+    ) {
+      activeGeneration.messageId = message.id
+    }
+  }
+
+  async function finalizeGeneration(generationId: number) {
+    if (activeGenerationRef.current?.id !== generationId) {
+      return
+    }
+
+    activeGenerationRef.current = null
+    setIsSending(false)
+  }
+
+  async function waitForConversationToSettle(
+    conversationId: number,
+    { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
+  ) {
+    let latestResponse: Awaited<ReturnType<typeof reconcileConversationState>> = null
+
+    for (let attempt = 0; attempt < STOP_RECONCILE_ATTEMPTS; attempt += 1) {
+      const response = await reconcileConversationState(conversationId, {
+        clearErrorOnSuccess,
+      })
+      if (!response) {
+        return latestResponse
+      }
+
+      latestResponse = response
+      const hasStreamingAssistant = response.messages.some(
+        (message) =>
+          message.role === 'assistant' && message.status === 'streaming',
+      )
+      if (!hasStreamingAssistant) {
+        return response
+      }
+
+      await wait(STOP_RECONCILE_DELAY_MS)
+    }
+
+    return latestResponse
+  }
+
+  function isIgnorableStopError(error: unknown) {
+    return (
+      isAbortError(error) ||
+      (error instanceof ApiError &&
+        error.status === 409 &&
+        error.message === 'no active generation for this conversation')
+    )
+  }
+
+  async function settleStoppedGeneration(generation: ActiveGenerationState) {
+    let clearErrorOnSuccess = true
+
+    try {
+      await chatApi.cancelGeneration(generation.conversationId)
+    } catch (error) {
+      if (!isIgnorableStopError(error)) {
+        clearErrorOnSuccess = false
+        setChatError(
+          error instanceof Error ? error.message : t('error.stopGeneration'),
+        )
+      }
+    }
+
+    try {
+      await waitForConversationToSettle(generation.conversationId, {
+        clearErrorOnSuccess,
+      })
+      await loadConversations()
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : t('error.stopGeneration'),
+      )
+    } finally {
+      await finalizeGeneration(generation.id)
+    }
+  }
+
   function handleStreamEvent(event: StreamEvent, placeholderId: number) {
     const eventMessage = event.message
+    syncGenerationMessageId(placeholderId, eventMessage)
 
     if (event.type === 'message_start' && eventMessage) {
       setMessages((previous) =>
@@ -278,7 +414,10 @@ export function useChatSession({
     }
 
     if ((event.type === 'done' || event.type === 'cancelled') && eventMessage) {
-      if (event.type === 'cancelled') {
+      if (
+        event.type === 'cancelled' &&
+        !activeGenerationRef.current?.stopRequested
+      ) {
         setChatError(t('error.generationStopped'))
       }
       setMessages((previous) =>
@@ -313,11 +452,12 @@ export function useChatSession({
   }
 
   async function handleSendSubmit(content: string, attachments: Attachment[]) {
-    setIsSending(true)
     setChatError(null)
+    setIsSending(true)
 
     const optimisticAssistantId = -(Date.now() + 1)
     let conversationId = activeConversationId
+    let generation: ActiveGenerationState | null = null
 
     try {
       let conversation = currentConversation
@@ -327,22 +467,26 @@ export function useChatSession({
         const configuredConversation = await chatApi.updateConversation(
           createdConversation.id,
           {
-            settings: settingsDraft,
+            settings: {
+              ...settingsDraft,
+              model: '',
+              temperature: null,
+              maxTokens: null,
+              contextWindowTurns: null,
+            },
           },
         )
         conversation = configuredConversation
         conversationId = configuredConversation.id
-        streamingConversationIdRef.current = conversationId
         activeConversationIdRef.current = conversationId
         setPendingConversation(configuredConversation)
         insertCreatedConversation(configuredConversation)
         navigateToConversation(conversationId)
-      } else {
-        streamingConversationIdRef.current = conversationId
       }
 
       const conversationSettings =
         conversation?.settings ?? settingsDraft
+      generation = beginGeneration(conversationId, optimisticAssistantId)
       const optimisticUserMessage: Message = {
         id: -Date.now(),
         conversationId,
@@ -379,11 +523,18 @@ export function useChatSession({
         async (eventData) => {
           handleStreamEvent(eventData, optimisticAssistantId)
         },
+        generation.controller.signal,
       )
 
-      await reconcileConversationState(conversationId)
-      await loadConversations()
+      if (!generation.stopRequested) {
+        await reconcileConversationState(conversationId)
+        await loadConversations()
+      }
     } catch (error) {
+      if (generation?.stopRequested && isAbortError(error)) {
+        return
+      }
+
       setChatError(
         error instanceof Error ? error.message : t('error.sendMessage'),
       )
@@ -405,8 +556,17 @@ export function useChatSession({
         })
       }
     } finally {
-      streamingConversationIdRef.current = null
-      setIsSending(false)
+      if (!generation) {
+        setIsSending(false)
+        return
+      }
+
+      if (generation.stopRequested && generation.stopPromise) {
+        await generation.stopPromise
+        return
+      }
+
+      await finalizeGeneration(generation.id)
     }
   }
 
@@ -416,10 +576,10 @@ export function useChatSession({
     content: string,
     attachments: Attachment[],
   ) {
-    setIsSending(true)
     setChatError(null)
-    streamingConversationIdRef.current = conversationId
+    setIsSending(true)
     const optimisticAssistantId = -(Date.now() + 1)
+    const generation = beginGeneration(conversationId, optimisticAssistantId)
 
     try {
       setMessages((previous) => {
@@ -462,11 +622,18 @@ export function useChatSession({
         async (eventData) => {
           handleStreamEvent(eventData, optimisticAssistantId)
         },
+        generation.controller.signal,
       )
 
-      await reconcileConversationState(conversationId)
-      await loadConversations()
+      if (!generation.stopRequested) {
+        await reconcileConversationState(conversationId)
+        await loadConversations()
+      }
     } catch (error) {
+      if (generation.stopRequested && isAbortError(error)) {
+        return
+      }
+
       setChatError(
         error instanceof Error ? error.message : t('error.updateMessage'),
       )
@@ -485,45 +652,59 @@ export function useChatSession({
         clearErrorOnSuccess: false,
       })
     } finally {
-      streamingConversationIdRef.current = null
-      setIsSending(false)
+      if (generation.stopRequested && generation.stopPromise) {
+        await generation.stopPromise
+        return
+      }
+
+      await finalizeGeneration(generation.id)
     }
   }
 
   async function handleRetryAssistant(message: Message) {
-    if (!activeConversationId || isSending) {
+    if (message.role !== 'assistant' || isSending) {
       return
     }
 
-    setIsSending(true)
     setChatError(null)
-    streamingConversationIdRef.current = activeConversationId
+    setIsSending(true)
+    const generation = beginGeneration(message.conversationId, message.id)
 
     try {
       setMessages((previous) =>
-        previous.map((item) =>
-          item.id === message.id
-            ? {
-                ...item,
-                content: '',
-                status: 'streaming',
-              }
-            : item,
-        ),
+        previous
+          .filter((item) => item.id <= message.id)
+          .map((item) =>
+            item.id === message.id
+              ? {
+                  ...item,
+                  content: '',
+                  attachments: [],
+                  status: 'streaming',
+                }
+              : item,
+          ),
       )
 
       await chatApi.retryMessage(
-        activeConversationId,
+        message.conversationId,
         message.id,
         settingsDraft,
         async (eventData) => {
           handleStreamEvent(eventData, message.id)
         },
+        generation.controller.signal,
       )
 
-      await reconcileConversationState(activeConversationId)
-      await loadConversations()
+      if (!generation.stopRequested) {
+        await reconcileConversationState(message.conversationId)
+        await loadConversations()
+      }
     } catch (error) {
+      if (generation.stopRequested && isAbortError(error)) {
+        return
+      }
+
       setChatError(
         error instanceof Error ? error.message : t('error.retryReply'),
       )
@@ -538,58 +719,73 @@ export function useChatSession({
             : item,
         ),
       )
-      await reconcileConversationState(activeConversationId, {
+      await reconcileConversationState(message.conversationId, {
         clearErrorOnSuccess: false,
       })
     } finally {
-      streamingConversationIdRef.current = null
-      setIsSending(false)
+      if (generation.stopRequested && generation.stopPromise) {
+        await generation.stopPromise
+        return
+      }
+
+      await finalizeGeneration(generation.id)
     }
   }
 
-  async function handleRegenerateAssistant() {
+  async function handleRegenerateAssistant(message: Message) {
     if (
-      !activeConversationId ||
-      !latestAssistantMessage ||
+      message.role !== 'assistant' ||
+      message.status !== 'completed' ||
       isSending
     ) {
       return
     }
 
-    setIsSending(true)
     setChatError(null)
-    streamingConversationIdRef.current = activeConversationId
+    setIsSending(true)
+    const generation = beginGeneration(message.conversationId, message.id)
 
     try {
       setMessages((previous) =>
-        previous.map((item) =>
-          item.id === latestAssistantMessage.id
-            ? {
-                ...item,
-                content: '',
-                status: 'streaming',
-              }
-            : item,
-        ),
+        previous
+          .filter((item) => item.id <= message.id)
+          .map((item) =>
+            item.id === message.id
+              ? {
+                  ...item,
+                  content: '',
+                  attachments: [],
+                  status: 'streaming',
+                }
+              : item,
+          ),
       )
 
-      await chatApi.regenerateMessage(
-        activeConversationId,
+      await chatApi.retryMessage(
+        message.conversationId,
+        message.id,
         settingsDraft,
         async (eventData) => {
-          handleStreamEvent(eventData, latestAssistantMessage.id)
+          handleStreamEvent(eventData, message.id)
         },
+        generation.controller.signal,
       )
 
-      await reconcileConversationState(activeConversationId)
-      await loadConversations()
+      if (!generation.stopRequested) {
+        await reconcileConversationState(message.conversationId)
+        await loadConversations()
+      }
     } catch (error) {
+      if (generation.stopRequested && isAbortError(error)) {
+        return
+      }
+
       setChatError(
         error instanceof Error ? error.message : t('error.regenerateReply'),
       )
       setMessages((previous) =>
         previous.map((item) =>
-          item.id === latestAssistantMessage.id
+          item.id === message.id
             ? {
                 ...item,
                 status: 'failed',
@@ -598,27 +794,33 @@ export function useChatSession({
             : item,
         ),
       )
-      await reconcileConversationState(activeConversationId, {
+      await reconcileConversationState(message.conversationId, {
         clearErrorOnSuccess: false,
       })
     } finally {
-      streamingConversationIdRef.current = null
-      setIsSending(false)
+      if (generation.stopRequested && generation.stopPromise) {
+        await generation.stopPromise
+        return
+      }
+
+      await finalizeGeneration(generation.id)
     }
   }
 
   async function handleStopGeneration() {
-    if (!activeConversationId || !isSending) {
+    const activeGeneration = activeGenerationRef.current
+    if (!activeGeneration) {
       return
     }
 
-    try {
-      await chatApi.cancelGeneration(activeConversationId)
-    } catch (error) {
-      setChatError(
-        error instanceof Error ? error.message : t('error.stopGeneration'),
-      )
+    if (activeGeneration.stopPromise) {
+      await activeGeneration.stopPromise
+      return
     }
+
+    activeGeneration.stopRequested = true
+    activeGeneration.stopPromise = settleStoppedGeneration(activeGeneration)
+    await activeGeneration.stopPromise
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -724,6 +926,7 @@ export function useChatSession({
     composerIsComposingRef,
     messages,
     composerValue,
+    chatSettingsDraft,
     selectedAttachments,
     settingsDraft,
     pendingConversation,
@@ -736,6 +939,7 @@ export function useChatSession({
     hasPendingUploads,
     canSubmitComposer,
     setComposerValue,
+    setChatSettingsDraft,
     setSettingsDraft,
     resetSettingsDraft,
     syncSettingsDraft,
@@ -771,4 +975,10 @@ function resolveConversationForList(
   }
 
   return conversation
+}
+
+function wait(durationMs: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, durationMs)
+  })
 }

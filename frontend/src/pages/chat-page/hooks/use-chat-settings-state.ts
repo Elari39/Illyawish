@@ -1,9 +1,16 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { chatApi } from '../../../lib/api'
-import type { Conversation, ConversationSettings } from '../../../types/chat'
-import { defaultConversationSettings } from '../types'
+import type {
+  ChatSettings,
+  Conversation,
+  ConversationSettings,
+} from '../../../types/chat'
+import {
+  defaultChatSettings,
+  defaultConversationSettings,
+} from '../types'
 
 interface UseChatSettingsStateOptions {
   activeConversationId: number | null
@@ -20,29 +27,76 @@ export function useChatSettingsState({
   syncConversationIntoList,
   t,
 }: UseChatSettingsStateOptions) {
-  const [newChatSettings, setNewChatSettings] = useState<ConversationSettings>(
-    defaultConversationSettings,
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(
+    defaultChatSettings,
   )
+  const [chatSettingsDraft, setChatSettingsDraft] = useState<ChatSettings>(
+    defaultChatSettings,
+  )
+  const [newChatSystemPrompt, setNewChatSystemPrompt] = useState('')
   const [pendingConversation, setPendingConversation] =
     useState<Conversation | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<ConversationSettings>(
     defaultConversationSettings,
   )
 
-  const handleSaveSettings = useCallback(async (onSaved: () => void) => {
-    if (!activeConversationId) {
-      setNewChatSettings(settingsDraft)
-      onSaved()
-      return
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadChatSettings() {
+      try {
+        const nextChatSettings = await chatApi.getChatSettings()
+        if (cancelled) {
+          return
+        }
+
+        setChatSettings(nextChatSettings)
+        setChatSettingsDraft(nextChatSettings)
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+        setChatError(
+          error instanceof Error ? error.message : t('error.loadChatSettings'),
+        )
+      }
     }
 
+    void loadChatSettings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [setChatError, t])
+
+  const handleSaveSettings = useCallback(async (onSaved: () => void) => {
     setChatError(null)
 
     try {
+      const updatedChatSettings =
+        await chatApi.updateChatSettings(chatSettingsDraft)
+      setChatSettings(updatedChatSettings)
+      setChatSettingsDraft(updatedChatSettings)
+
+      if (!activeConversationId) {
+        setNewChatSystemPrompt(settingsDraft.systemPrompt)
+        setSettingsDraft(
+          buildDraftConversationSettings(
+            updatedChatSettings,
+            settingsDraft.systemPrompt,
+          ),
+        )
+        onSaved()
+        return
+      }
+
       const updatedConversation = await chatApi.updateConversation(
         activeConversationId,
         {
-          settings: settingsDraft,
+          settings: {
+            ...defaultConversationSettings,
+            systemPrompt: settingsDraft.systemPrompt,
+          },
         },
       )
       syncConversationIntoList(updatedConversation)
@@ -56,6 +110,7 @@ export function useChatSettingsState({
     }
   }, [
     activeConversationId,
+    chatSettingsDraft,
     settingsDraft,
     setChatError,
     syncConversationIntoList,
@@ -63,12 +118,17 @@ export function useChatSettingsState({
   ])
 
   const syncSettingsDraft = useCallback(() => {
+    setChatSettingsDraft(chatSettings)
+
     if (currentConversation) {
       setSettingsDraft(currentConversation.settings)
       return
     }
-    setSettingsDraft(newChatSettings)
-  }, [currentConversation, newChatSettings])
+
+    setSettingsDraft(
+      buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
+    )
+  }, [chatSettings, currentConversation, newChatSystemPrompt])
 
   const resetSettingsDraft = useCallback(() => {
     syncSettingsDraft()
@@ -80,12 +140,16 @@ export function useChatSettingsState({
 
   const resetForNewChatSettings = useCallback(() => {
     setPendingConversation(null)
-    setSettingsDraft(newChatSettings)
-  }, [newChatSettings])
+    setSettingsDraft(
+      buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
+    )
+  }, [chatSettings, newChatSystemPrompt])
 
   return {
+    chatSettingsDraft,
     pendingConversation,
     settingsDraft,
+    setChatSettingsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -93,5 +157,18 @@ export function useChatSettingsState({
     resetPendingConversation,
     resetSettingsDraft,
     syncSettingsDraft,
+  }
+}
+
+function buildDraftConversationSettings(
+  chatSettings: ChatSettings,
+  systemPrompt: string,
+): ConversationSettings {
+  return {
+    systemPrompt,
+    model: chatSettings.model,
+    temperature: chatSettings.temperature,
+    maxTokens: chatSettings.maxTokens,
+    contextWindowTurns: chatSettings.contextWindowTurns,
   }
 }
