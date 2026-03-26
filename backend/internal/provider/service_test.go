@@ -153,7 +153,7 @@ func TestOnlyOnePresetRemainsActive(t *testing.T) {
 	}
 }
 
-func TestResolveFallsBackToEnvConfig(t *testing.T) {
+func TestResolveFallsBackToServerConfig(t *testing.T) {
 	service := newTestService(t, &config.Config{
 		OpenAIBaseURL: "https://fallback.example.com/v1",
 		OpenAIAPIKey:  "fallback-key",
@@ -166,11 +166,32 @@ func TestResolveFallsBackToEnvConfig(t *testing.T) {
 		t.Fatalf("ResolveForUser() error = %v", err)
 	}
 
-	if resolved.Source != SourceEnv {
-		t.Fatalf("expected provider source %q, got %q", SourceEnv, resolved.Source)
+	if resolved.Source != SourceFallback {
+		t.Fatalf("expected provider source %q, got %q", SourceFallback, resolved.Source)
 	}
 	if resolved.Config.DefaultModel != "fallback-model" {
 		t.Fatalf("expected fallback model, got %q", resolved.Config.DefaultModel)
+	}
+}
+
+func TestListStateMarksServerFallbackAsCurrentSource(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		OpenAIBaseURL: "https://fallback.example.com/v1",
+		OpenAIAPIKey:  "fallback-key",
+		Model:         "fallback-model",
+		SessionSecret: "session-secret",
+	})
+
+	state, err := service.ListState(1)
+	if err != nil {
+		t.Fatalf("ListState() error = %v", err)
+	}
+
+	if state.CurrentSource != SourceFallback {
+		t.Fatalf("expected current source %q, got %q", SourceFallback, state.CurrentSource)
+	}
+	if !state.Fallback.Available {
+		t.Fatal("expected fallback to be marked available")
 	}
 }
 

@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	"backend/internal/attachment"
 	"backend/internal/auth"
@@ -13,7 +12,6 @@ import (
 	"backend/internal/llm"
 	"backend/internal/provider"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -70,12 +68,6 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 	router.Use(gin.Logger(), gin.Recovery())
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.FrontendOrigin, "http://127.0.0.1:10170", "http://localhost:10170"},
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{"Content-Type", "Accept"},
-		AllowCredentials: true,
-	}))
 
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
 	store.Options(sessions.Options{
@@ -83,7 +75,7 @@ func New() (*App, error) {
 		HttpOnly: true,
 		MaxAge:   60 * 60 * 24 * 7,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   useSecureCookies(cfg.FrontendOrigin),
+		Secure:   false,
 	})
 	router.Use(sessions.Sessions("aichat_session", store))
 
@@ -142,11 +134,4 @@ func limitRequestBody(limit int64) gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-func useSecureCookies(frontendOrigin string) bool {
-	return strings.HasPrefix(
-		strings.ToLower(strings.TrimSpace(frontendOrigin)),
-		"https://",
-	)
 }

@@ -84,7 +84,7 @@ const enUSMessages = {
   'settings.chatDescription':
     'These settings control the system prompt, model, and generation parameters used for the current conversation or the next new chat.',
   'settings.providerDescription':
-    'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while .env remains a fallback.',
+    'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
   'settings.chatTab': 'Chat',
   'settings.providerTab': 'AI Provider',
   'settings.model': 'Model',
@@ -102,9 +102,9 @@ const enUSMessages = {
   'settings.setActive': 'Set active',
   'settings.noSavedPresets':
     'No saved provider presets yet. Create one to use a custom OpenAI-compatible endpoint.',
-  'settings.envFallback': 'Env fallback',
-  'settings.envReady': 'Ready to use when no preset is active.',
-  'settings.envNotConfigured': 'Not fully configured in .env.',
+  'settings.serverFallback': 'Server fallback',
+  'settings.serverReady': 'Ready to use when no preset is active.',
+  'settings.serverNotConfigured': 'Not configured in data/app.json.',
   'settings.noFallbackBaseUrl': 'No fallback base URL',
   'settings.noFallbackModel': 'No fallback model',
   'settings.editPreset': 'Edit preset',
@@ -188,10 +188,10 @@ const enUSMessages = {
   'provider.loadingStatus': 'Loading provider status...',
   'provider.usingPreset':
     'Using preset "{{name}}" with model {{model}} for new requests.',
-  'provider.usingEnvModel': 'Using .env fallback with model {{model}}.',
-  'provider.usingEnv': 'Using .env fallback.',
+  'provider.usingFallbackModel': 'Using the server fallback with model {{model}}.',
+  'provider.usingFallback': 'Using the server fallback.',
   'provider.notConfigured':
-    'No AI provider is configured yet. Create a preset or complete the .env fallback before sending messages.',
+    'No AI provider is configured yet. Create a preset or complete the server fallback in data/app.json before sending messages.',
 
   'markdown.model': 'Model',
   'markdown.updated': 'Updated',
@@ -280,7 +280,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.chatDescription':
       '这些设置会控制当前会话或下一个新会话所使用的 system prompt、模型和生成参数。',
     'settings.providerDescription':
-      '管理你保存的 OpenAI 兼容提供商预设。新请求会优先使用当前激活的预设，`.env` 配置仍可作为回退。',
+      '管理你保存的 OpenAI 兼容提供商预设。新请求会优先使用当前激活的预设，`data/app.json` 中的服务器回退配置仍可继续使用。',
     'settings.chatTab': '聊天',
     'settings.providerTab': 'AI 提供商',
     'settings.model': '模型',
@@ -298,9 +298,9 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.setActive': '设为激活',
     'settings.noSavedPresets':
       '还没有已保存的提供商预设。创建一个后即可使用自定义的 OpenAI 兼容端点。',
-    'settings.envFallback': '.env 回退配置',
-    'settings.envReady': '当没有激活预设时可以直接使用。',
-    'settings.envNotConfigured': '.env 尚未完整配置。',
+    'settings.serverFallback': '服务器回退配置',
+    'settings.serverReady': '当没有激活预设时可以直接使用。',
+    'settings.serverNotConfigured': 'data/app.json 中尚未完整配置。',
     'settings.noFallbackBaseUrl': '没有回退 Base URL',
     'settings.noFallbackModel': '没有回退模型',
     'settings.editPreset': '编辑预设',
@@ -378,10 +378,10 @@ export const messages: Record<AppLocale, TranslationTable> = {
 
     'provider.loadingStatus': '正在加载提供商状态...',
     'provider.usingPreset': '新请求将使用预设“{{name}}”和模型 {{model}}。',
-    'provider.usingEnvModel': '当前使用 .env 回退配置中的模型 {{model}}。',
-    'provider.usingEnv': '当前使用 .env 回退配置。',
+    'provider.usingFallbackModel': '当前使用服务器回退配置中的模型 {{model}}。',
+    'provider.usingFallback': '当前使用服务器回退配置。',
     'provider.notConfigured':
-      '当前还没有配置 AI 提供商。发送消息前请先创建一个预设，或补全 .env 回退配置。',
+      '当前还没有配置 AI 提供商。发送消息前请先创建一个预设，或补全 data/app.json 中的服务器回退配置。',
 
     'markdown.model': '模型',
     'markdown.updated': '更新时间',
@@ -467,7 +467,7 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.chatDescription':
       'これらの設定は、現在の会話または次の新しいチャットで使う system prompt、モデル、生成パラメータを制御します。',
     'settings.providerDescription':
-      '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`.env` はフォールバックとして残ります。',
+      '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
     'settings.chatTab': 'チャット',
     'settings.providerTab': 'AI プロバイダー',
     'settings.model': 'モデル',
@@ -485,9 +485,9 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'settings.setActive': '有効化',
     'settings.noSavedPresets':
       'まだ保存済みのプロバイダープリセットはありません。カスタムの OpenAI 互換エンドポイントを使うには作成してください。',
-    'settings.envFallback': '.env フォールバック',
-    'settings.envReady': 'プリセットが有効でないときに利用できます。',
-    'settings.envNotConfigured': '.env の設定がまだ不完全です。',
+    'settings.serverFallback': 'サーバーフォールバック',
+    'settings.serverReady': 'プリセットが有効でないときに利用できます。',
+    'settings.serverNotConfigured': 'data/app.json の設定がまだ不完全です。',
     'settings.noFallbackBaseUrl': 'フォールバックの Base URL がありません',
     'settings.noFallbackModel': 'フォールバックモデルがありません',
     'settings.editPreset': 'プリセットを編集',
@@ -570,10 +570,11 @@ export const messages: Record<AppLocale, TranslationTable> = {
     'provider.loadingStatus': 'プロバイダー状態を読み込み中...',
     'provider.usingPreset':
       '新しいリクエストではプリセット「{{name}}」とモデル {{model}} を使います。',
-    'provider.usingEnvModel': '.env フォールバックのモデル {{model}} を使用しています。',
-    'provider.usingEnv': '.env フォールバックを使用しています。',
+    'provider.usingFallbackModel':
+      'サーバーフォールバックのモデル {{model}} を使用しています。',
+    'provider.usingFallback': 'サーバーフォールバックを使用しています。',
     'provider.notConfigured':
-      'まだ AI プロバイダーが設定されていません。メッセージ送信前にプリセットを作成するか、.env フォールバックを完成させてください。',
+      'まだ AI プロバイダーが設定されていません。メッセージ送信前にプリセットを作成するか、data/app.json のサーバーフォールバックを完成させてください。',
 
     'markdown.model': 'モデル',
     'markdown.updated': '更新日時',

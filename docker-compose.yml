@@ -8,21 +8,8 @@ services:
     restart: unless-stopped
     expose:
       - "5721"
-    environment:
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      MODEL: ${MODEL:-}
-      APP_ENV: production
-      SQLITE_PATH: /data/aichat.db
-      UPLOAD_DIR: /data/uploads
-      SERVER_PORT: "5721"
-      SESSION_SECRET: ${SESSION_SECRET:-}
-      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:10170}
-      BOOTSTRAP_USERNAME: ${BOOTSTRAP_USERNAME:-}
-      BOOTSTRAP_PASSWORD: ${BOOTSTRAP_PASSWORD:-}
     volumes:
-      - ./docker-data/backend:/data
+      - ./data:/data
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5721/api/health >/dev/null || exit 1"]
       interval: 30s

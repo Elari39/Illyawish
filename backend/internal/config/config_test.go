@@ -3,130 +3,149 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestLoadReadsEnvFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	envFile := filepath.Join(tmpDir, ".env")
-	content := "OPENAI_BASE_URL=https://example.com/v1\nOPENAI_API_KEY=test-key\nMODEL=test-model\nSETTINGS_ENCRYPTION_KEY=secret-key\nUPLOAD_DIR=./uploads\n"
-	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
-		t.Fatalf("write env file: %v", err)
-	}
+func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
 
-	previousWD, err := os.Getwd()
+	cfg, err := loadFromDataDir(dataDir)
 	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(previousWD)
-	})
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir: %v", err)
+		t.Fatalf("loadFromDataDir() error = %v", err)
 	}
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	if cfg.AppEnv != defaultAppEnv {
+		t.Fatalf("expected app env %q, got %q", defaultAppEnv, cfg.AppEnv)
+	}
+	if cfg.ServerPort != defaultServerPort {
+		t.Fatalf("expected server port %q, got %q", defaultServerPort, cfg.ServerPort)
+	}
+	if cfg.SQLitePath != filepath.Join(dataDir, defaultSQLiteFileName) {
+		t.Fatalf("expected sqlite path inside data dir, got %q", cfg.SQLitePath)
+	}
+	if cfg.UploadDir != filepath.Join(dataDir, defaultUploadDirName) {
+		t.Fatalf("expected upload dir inside data dir, got %q", cfg.UploadDir)
+	}
+	if len(cfg.SessionSecret) != 64 {
+		t.Fatalf("expected generated session secret, got %q", cfg.SessionSecret)
+	}
+	if len(cfg.SettingsEncryptionKey) != 64 {
+		t.Fatalf("expected generated encryption key, got %q", cfg.SettingsEncryptionKey)
 	}
 
-	if cfg.Model != "test-model" {
-		t.Fatalf("expected model to be test-model, got %q", cfg.Model)
-	}
-	if cfg.SQLitePath != "./data/aichat.db" {
-		t.Fatalf("expected default sqlite path, got %q", cfg.SQLitePath)
-	}
-	if cfg.UploadDir != "./uploads" {
-		t.Fatalf("expected upload dir to be loaded, got %q", cfg.UploadDir)
-	}
-	if cfg.SettingsEncryptionKey != "secret-key" {
-		t.Fatalf("expected settings encryption key to be loaded, got %q", cfg.SettingsEncryptionKey)
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("expected config file to be created: %v", err)
 	}
 }
 
-func TestLoadAllowsMissingAIConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	envFile := filepath.Join(tmpDir, ".env")
-	content := "SERVER_PORT=9000\n"
-	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
-		t.Fatalf("write env file: %v", err)
+func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
 	}
 
-	previousWD, err := os.Getwd()
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "appEnv": "production",
+  "openAIBaseURL": "https://example.com/v1",
+  "openAIApiKey": "test-key",
+  "model": "test-model",
+  "serverPort": "9000",
+  "sqlitePath": "db.sqlite",
+  "uploadDir": "uploads",
+  "sessionSecret": "existing-session-secret",
+  "settingsEncryptionKey": "existing-settings-secret"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
 	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(previousWD)
-	})
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir: %v", err)
+		t.Fatalf("loadFromDataDir() error = %v", err)
 	}
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	if cfg.OpenAIBaseURL != "https://example.com/v1" {
+		t.Fatalf("expected fallback base URL to load, got %q", cfg.OpenAIBaseURL)
 	}
-
-	if cfg.OpenAIBaseURL != "" {
-		t.Fatalf("expected empty OPENAI_BASE_URL fallback, got %q", cfg.OpenAIBaseURL)
+	if cfg.OpenAIAPIKey != "test-key" {
+		t.Fatalf("expected fallback API key to load, got %q", cfg.OpenAIAPIKey)
 	}
-	if cfg.Model != "" {
-		t.Fatalf("expected empty MODEL fallback, got %q", cfg.Model)
+	if cfg.Model != "test-model" {
+		t.Fatalf("expected fallback model to load, got %q", cfg.Model)
 	}
 	if cfg.ServerPort != "9000" {
-		t.Fatalf("expected server port from env file, got %q", cfg.ServerPort)
+		t.Fatalf("expected stored server port, got %q", cfg.ServerPort)
+	}
+	if cfg.SQLitePath != filepath.Join(dataDir, "db.sqlite") {
+		t.Fatalf("expected relative sqlite path to resolve from data dir, got %q", cfg.SQLitePath)
+	}
+	if cfg.UploadDir != filepath.Join(dataDir, "uploads") {
+		t.Fatalf("expected relative upload dir to resolve from data dir, got %q", cfg.UploadDir)
+	}
+	if cfg.SessionSecret != "existing-session-secret" {
+		t.Fatalf("expected session secret to be reused, got %q", cfg.SessionSecret)
+	}
+	if cfg.SettingsEncryptionKey != "existing-settings-secret" {
+		t.Fatalf("expected settings encryption key to be reused, got %q", cfg.SettingsEncryptionKey)
 	}
 }
 
-func TestLoadRejectsPlaceholderSecretsInProduction(t *testing.T) {
-	tmpDir := t.TempDir()
-	envFile := filepath.Join(tmpDir, ".env")
-	content := "APP_ENV=production\nSESSION_SECRET=change-me-session-secret\n"
-	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
-		t.Fatalf("write env file: %v", err)
+func TestLoadFromDataDirBackfillsMissingEncryptionKey(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
 	}
 
-	previousWD, err := os.Getwd()
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "sessionSecret": "existing-session-secret"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
 	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(previousWD)
-	})
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir: %v", err)
+		t.Fatalf("loadFromDataDir() error = %v", err)
 	}
 
-	if _, err := Load(); err == nil {
-		t.Fatal("expected production placeholder secret validation to fail")
+	if cfg.SessionSecret != "existing-session-secret" {
+		t.Fatalf("expected session secret to be reused, got %q", cfg.SessionSecret)
+	}
+	if cfg.SettingsEncryptionKey == "" {
+		t.Fatal("expected missing settings encryption key to be generated")
+	}
+
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config file: %v", err)
+	}
+	if !strings.Contains(string(payload), `"settingsEncryptionKey"`) {
+		t.Fatalf("expected generated settings encryption key to be persisted, got %s", string(payload))
 	}
 }
 
-func TestLoadRequiresBootstrapCredentialPair(t *testing.T) {
-	tmpDir := t.TempDir()
-	envFile := filepath.Join(tmpDir, ".env")
-	content := "BOOTSTRAP_USERNAME=admin\n"
-	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
-		t.Fatalf("write env file: %v", err)
+func TestLoadFromDataDirRequiresBootstrapCredentialPair(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
 	}
 
-	previousWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(previousWD)
-	})
-
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("chdir: %v", err)
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "bootstrapUsername": "admin"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
 	}
 
-	if _, err := Load(); err == nil {
+	if _, err := loadFromDataDir(dataDir); err == nil {
 		t.Fatal("expected bootstrap credential validation to fail")
 	}
 }

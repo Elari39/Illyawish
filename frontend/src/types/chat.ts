@@ -37,7 +37,7 @@ export interface ProviderFallbackState {
 export interface ProviderState {
   presets: ProviderPreset[]
   activePresetId: number | null
-  currentSource: 'preset' | 'env' | 'none'
+  currentSource: 'preset' | 'fallback' | 'none'
   fallback: ProviderFallbackState
 }
 

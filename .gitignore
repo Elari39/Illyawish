@@ -1,7 +1,6 @@
 # Environment files
 .env
 .env.*
-!.env.example
 
 # Local assistant config
 .claude/*
@@ -12,6 +11,7 @@ frontend/dist/
 frontend/dist-ssr/
 
 # Local databases
+data/
 backend/data/*.db
 backend/data/*.db-*
 docker-data/

@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	SourcePreset = "preset"
-	SourceEnv    = "env"
-	SourceNone   = "none"
+	SourcePreset   = "preset"
+	SourceFallback = "fallback"
+	SourceNone     = "none"
 )
 
 var ErrNoProviderConfigured = errors.New("no AI provider configured")
@@ -151,7 +151,7 @@ func (s *Service) ListState(userID uint) (*State, error) {
 	}
 
 	if state.CurrentSource == SourceNone && state.Fallback.Available {
-		state.CurrentSource = SourceEnv
+		state.CurrentSource = SourceFallback
 	}
 
 	return state, nil
@@ -333,7 +333,7 @@ func (s *Service) ResolveForUser(userID uint) (*ResolvedProvider, error) {
 
 	if isCompleteProviderConfig(s.fallback) {
 		return &ResolvedProvider{
-			Source: SourceEnv,
+			Source: SourceFallback,
 			Config: s.fallback,
 		}, nil
 	}

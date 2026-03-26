@@ -2343,12 +2343,12 @@ function SettingsPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-[var(--foreground)]">
-                        {t('settings.envFallback')}
+                        {t('settings.serverFallback')}
                       </p>
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                         {providerState?.fallback.available
-                          ? t('settings.envReady')
-                          : t('settings.envNotConfigured')}
+                          ? t('settings.serverReady')
+                          : t('settings.serverNotConfigured')}
                       </p>
                     </div>
                     <Server className="mt-0.5 h-4 w-4 text-[var(--muted-foreground)]" />
@@ -3018,12 +3018,12 @@ function describeProviderSource(
     })
   }
 
-  if (providerState.currentSource === 'env') {
+  if (providerState.currentSource === 'fallback') {
     return providerState.fallback.available
-      ? t('provider.usingEnvModel', {
+      ? t('provider.usingFallbackModel', {
           model: providerState.fallback.defaultModel,
         })
-      : t('provider.usingEnv')
+      : t('provider.usingFallback')
   }
 
   return t('provider.notConfigured')

@@ -1,10 +1,11 @@
 #!/bin/sh
 set -eu
 
-sqlite_dir="$(dirname "${SQLITE_PATH:-/data/aichat.db}")"
-upload_dir="${UPLOAD_DIR:-/data/uploads}"
+data_dir="/data"
+sqlite_dir="$data_dir"
+upload_dir="$data_dir/uploads"
 
 mkdir -p "$sqlite_dir" "$upload_dir"
-chown -R app:app "$sqlite_dir" "$upload_dir"
+chown -R app:app "$data_dir"
 
 exec su-exec app "$@"

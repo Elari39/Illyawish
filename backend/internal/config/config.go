@@ -1,22 +1,21 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/viper"
 )
 
 const (
-	defaultSQLitePath            = "./data/aichat.db"
-	defaultServerPort            = "5721"
-	defaultSessionSecret         = "change-me-session-secret"
-	defaultSettingsEncryptionKey = "change-me-settings-encryption-key"
-	defaultFrontendOrigin        = "http://localhost:10170"
-	defaultAppEnv                = "development"
-	defaultUploadDir             = "./data/uploads"
+	defaultAppEnv         = "production"
+	defaultServerPort     = "5721"
+	defaultConfigFileName = "app.json"
+	defaultSQLiteFileName = "aichat.db"
+	defaultUploadDirName  = "uploads"
 )
 
 type Config struct {
@@ -29,61 +28,72 @@ type Config struct {
 	ServerPort            string
 	SessionSecret         string
 	SettingsEncryptionKey string
-	FrontendOrigin        string
 	BootstrapUsername     string
 	BootstrapPassword     string
 }
 
-func Load() (*Config, error) {
-	v := viper.New()
-	v.SetConfigType("env")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
+type fileConfig struct {
+	AppEnv                string `json:"appEnv,omitempty"`
+	OpenAIBaseURL         string `json:"openAIBaseURL,omitempty"`
+	OpenAIAPIKey          string `json:"openAIApiKey,omitempty"`
+	Model                 string `json:"model,omitempty"`
+	SQLitePath            string `json:"sqlitePath,omitempty"`
+	UploadDir             string `json:"uploadDir,omitempty"`
+	ServerPort            string `json:"serverPort,omitempty"`
+	SessionSecret         string `json:"sessionSecret,omitempty"`
+	SettingsEncryptionKey string `json:"settingsEncryptionKey,omitempty"`
+	BootstrapUsername     string `json:"bootstrapUsername,omitempty"`
+	BootstrapPassword     string `json:"bootstrapPassword,omitempty"`
+}
 
-	envPath, err := findEnvFile()
+func Load() (*Config, error) {
+	dataDir, err := resolveDataDir()
 	if err != nil {
 		return nil, err
 	}
-	if envPath != "" {
-		v.SetConfigFile(envPath)
-		if err := v.ReadInConfig(); err != nil {
-			return nil, fmt.Errorf("read env file: %w", err)
+
+	return loadFromDataDir(dataDir)
+}
+
+func loadFromDataDir(dataDir string) (*Config, error) {
+	absoluteDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve data dir: %w", err)
+	}
+
+	if err := os.MkdirAll(absoluteDataDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create data dir: %w", err)
+	}
+
+	configPath := filepath.Join(absoluteDataDir, defaultConfigFileName)
+	raw, existed, err := readFileConfig(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	normalized, changed, err := normalizeFileConfig(raw, absoluteDataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	if !existed || changed {
+		if err := writeFileConfig(configPath, normalized); err != nil {
+			return nil, err
 		}
 	}
 
-	mustBindEnv(v, "openai_base_url", "OPENAI_BASE_URL")
-	mustBindEnv(v, "openai_api_key", "OPENAI_API_KEY")
-	mustBindEnv(v, "model", "MODEL")
-	mustBindEnv(v, "app_env", "APP_ENV")
-	mustBindEnv(v, "sqlite_path", "SQLITE_PATH")
-	mustBindEnv(v, "upload_dir", "UPLOAD_DIR")
-	mustBindEnv(v, "server_port", "SERVER_PORT")
-	mustBindEnv(v, "session_secret", "SESSION_SECRET")
-	mustBindEnv(v, "settings_encryption_key", "SETTINGS_ENCRYPTION_KEY")
-	mustBindEnv(v, "frontend_origin", "FRONTEND_ORIGIN")
-	mustBindEnv(v, "bootstrap_username", "BOOTSTRAP_USERNAME")
-	mustBindEnv(v, "bootstrap_password", "BOOTSTRAP_PASSWORD")
-
-	v.SetDefault("app_env", defaultAppEnv)
-	v.SetDefault("sqlite_path", defaultSQLitePath)
-	v.SetDefault("upload_dir", defaultUploadDir)
-	v.SetDefault("server_port", defaultServerPort)
-	v.SetDefault("session_secret", defaultSessionSecret)
-	v.SetDefault("frontend_origin", defaultFrontendOrigin)
-
 	cfg := &Config{
-		AppEnv:                strings.TrimSpace(v.GetString("app_env")),
-		OpenAIBaseURL:         strings.TrimSpace(v.GetString("openai_base_url")),
-		OpenAIAPIKey:          strings.TrimSpace(v.GetString("openai_api_key")),
-		Model:                 strings.TrimSpace(v.GetString("model")),
-		SQLitePath:            strings.TrimSpace(v.GetString("sqlite_path")),
-		UploadDir:             strings.TrimSpace(v.GetString("upload_dir")),
-		ServerPort:            strings.TrimSpace(v.GetString("server_port")),
-		SessionSecret:         strings.TrimSpace(v.GetString("session_secret")),
-		SettingsEncryptionKey: strings.TrimSpace(v.GetString("settings_encryption_key")),
-		FrontendOrigin:        strings.TrimSpace(v.GetString("frontend_origin")),
-		BootstrapUsername:     strings.TrimSpace(v.GetString("bootstrap_username")),
-		BootstrapPassword:     strings.TrimSpace(v.GetString("bootstrap_password")),
+		AppEnv:                normalized.AppEnv,
+		OpenAIBaseURL:         normalized.OpenAIBaseURL,
+		OpenAIAPIKey:          normalized.OpenAIAPIKey,
+		Model:                 normalized.Model,
+		SQLitePath:            normalized.SQLitePath,
+		UploadDir:             normalized.UploadDir,
+		ServerPort:            normalized.ServerPort,
+		SessionSecret:         normalized.SessionSecret,
+		SettingsEncryptionKey: normalized.SettingsEncryptionKey,
+		BootstrapUsername:     normalized.BootstrapUsername,
+		BootstrapPassword:     normalized.BootstrapPassword,
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -98,63 +108,160 @@ func (c *Config) validate() error {
 		return fmt.Errorf("bootstrap username and password must be provided together")
 	}
 
-	if !c.IsProductionLike() {
-		return nil
+	return nil
+}
+
+func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, error) {
+	normalized := fileConfig{
+		AppEnv:                strings.TrimSpace(raw.AppEnv),
+		OpenAIBaseURL:         strings.TrimSpace(raw.OpenAIBaseURL),
+		OpenAIAPIKey:          strings.TrimSpace(raw.OpenAIAPIKey),
+		Model:                 strings.TrimSpace(raw.Model),
+		SQLitePath:            strings.TrimSpace(raw.SQLitePath),
+		UploadDir:             strings.TrimSpace(raw.UploadDir),
+		ServerPort:            strings.TrimSpace(raw.ServerPort),
+		SessionSecret:         strings.TrimSpace(raw.SessionSecret),
+		SettingsEncryptionKey: strings.TrimSpace(raw.SettingsEncryptionKey),
+		BootstrapUsername:     strings.TrimSpace(raw.BootstrapUsername),
+		BootstrapPassword:     strings.TrimSpace(raw.BootstrapPassword),
 	}
 
-	if isPlaceholderSecret(c.SessionSecret) {
-		return fmt.Errorf("SESSION_SECRET must be set to a non-placeholder value when APP_ENV=%s", c.AppEnv)
+	if normalized.AppEnv == "" {
+		normalized.AppEnv = defaultAppEnv
+	}
+	if normalized.ServerPort == "" {
+		normalized.ServerPort = defaultServerPort
 	}
 
-	encryptionSecret := c.SettingsEncryptionKey
-	if strings.TrimSpace(encryptionSecret) == "" {
-		encryptionSecret = c.SessionSecret
+	defaultSQLitePath := filepath.Join(dataDir, defaultSQLiteFileName)
+	normalized.SQLitePath = normalizePath(normalized.SQLitePath, defaultSQLitePath, dataDir)
+
+	defaultUploadDir := filepath.Join(dataDir, defaultUploadDirName)
+	normalized.UploadDir = normalizePath(normalized.UploadDir, defaultUploadDir, dataDir)
+
+	if normalized.SessionSecret == "" {
+		secret, err := generateSecret()
+		if err != nil {
+			return fileConfig{}, false, fmt.Errorf("generate session secret: %w", err)
+		}
+		normalized.SessionSecret = secret
 	}
-	if isPlaceholderSecret(encryptionSecret) {
-		return fmt.Errorf("SETTINGS_ENCRYPTION_KEY must be set to a non-placeholder value when APP_ENV=%s", c.AppEnv)
+
+	if normalized.SettingsEncryptionKey == "" {
+		secret, err := generateSecret()
+		if err != nil {
+			return fileConfig{}, false, fmt.Errorf("generate settings encryption key: %w", err)
+		}
+		normalized.SettingsEncryptionKey = secret
+	}
+
+	return normalized, normalized != raw, nil
+}
+
+func normalizePath(value string, fallback string, dataDir string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return filepath.Clean(fallback)
+	}
+	if filepath.IsAbs(trimmed) {
+		return filepath.Clean(trimmed)
+	}
+
+	return filepath.Clean(filepath.Join(dataDir, trimmed))
+}
+
+func readFileConfig(configPath string) (fileConfig, bool, error) {
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fileConfig{}, false, nil
+		}
+		return fileConfig{}, false, fmt.Errorf("read config file: %w", err)
+	}
+
+	var cfg fileConfig
+	if err := json.Unmarshal(payload, &cfg); err != nil {
+		return fileConfig{}, false, fmt.Errorf("decode config file: %w", err)
+	}
+
+	return cfg, true, nil
+}
+
+func writeFileConfig(configPath string, cfg fileConfig) error {
+	payload, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode config file: %w", err)
+	}
+	payload = append(payload, '\n')
+
+	tempPath := configPath + ".tmp"
+	if err := os.WriteFile(tempPath, payload, 0o600); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
+
+	if err := os.Rename(tempPath, configPath); err != nil {
+		return fmt.Errorf("replace config file: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Config) IsProductionLike() bool {
-	switch strings.ToLower(strings.TrimSpace(c.AppEnv)) {
-	case "", "dev", "development", "local", "test":
-		return false
-	default:
-		return true
+func resolveDataDir() (string, error) {
+	repoDataDir, ok, err := findRepoDataDir()
+	if err != nil {
+		return "", err
 	}
+	if ok {
+		return repoDataDir, nil
+	}
+
+	if stat, err := os.Stat("/data"); err == nil && stat.IsDir() {
+		return "/data", nil
+	}
+
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("get working directory: %w", err)
+	}
+
+	if filepath.Base(workingDir) == "backend" {
+		return filepath.Join(filepath.Dir(workingDir), "data"), nil
+	}
+
+	return filepath.Join(workingDir, "data"), nil
 }
 
-func isPlaceholderSecret(value string) bool {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return true
+func findRepoDataDir() (string, bool, error) {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return "", false, fmt.Errorf("get working directory: %w", err)
 	}
 
-	return trimmed == defaultSessionSecret || trimmed == defaultSettingsEncryptionKey
-}
-
-func findEnvFile() (string, error) {
-	candidates := []string{
-		".env",
-		filepath.Join("..", ".env"),
-		filepath.Join("..", "..", ".env"),
-	}
-
-	for _, candidate := range candidates {
-		if _, err := os.Stat(candidate); err == nil {
-			abs, err := filepath.Abs(candidate)
-			if err != nil {
-				return "", fmt.Errorf("resolve env path: %w", err)
-			}
-			return abs, nil
+	current := workingDir
+	for {
+		if fileExists(filepath.Join(current, "docker-compose.yml")) &&
+			fileExists(filepath.Join(current, "backend", "go.mod")) {
+			return filepath.Join(current, "data"), true, nil
 		}
-	}
 
-	return "", nil
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", false, nil
+		}
+		current = parent
+	}
 }
 
-func mustBindEnv(v *viper.Viper, key string, envKey string) {
-	_ = v.BindEnv(key, envKey)
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func generateSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(buf), nil
 }

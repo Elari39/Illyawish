@@ -27,11 +27,6 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 5721
 
-ENV APP_ENV=production \
-    SERVER_PORT=5721 \
-    SQLITE_PATH=/data/aichat.db \
-    UPLOAD_DIR=/data/uploads
-
 VOLUME ["/data"]
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
