@@ -31,6 +31,20 @@ docker compose logs -f
 docker compose down
 ```
 
+## 1Panel deployment
+
+This project is a good fit for 1Panel's Compose deployment flow. The recommended setup is:
+
+- Import the existing `docker-compose.yml` from this repository through `Containers -> Orchestration`
+- Keep the frontend published on host port `10170`
+- Keep the backend internal-only on `5721`
+- Use a 1Panel website reverse proxy to point your domain at `http://127.0.0.1:10170`
+
+Guides:
+
+- English guide: [`docs/1panel-deploy.md`](docs/1panel-deploy.md)
+- 中文指南: [`docs/1panel-deploy.zh-CN.md`](docs/1panel-deploy.zh-CN.md)
+
 ## Persistent data
 
 All runtime data is stored in the project root `data/` directory:
