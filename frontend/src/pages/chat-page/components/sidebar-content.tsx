@@ -4,7 +4,7 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -61,24 +61,23 @@ export function SidebarContent({
   const { locale, t } = useI18n()
   const [expandedConversationId, setExpandedConversationId] = useState<number | null>(null)
   const isMobileVariant = variant === 'mobile' && !collapsed
-
-  useEffect(() => {
-    if (collapsed || variant !== 'mobile') {
-      setExpandedConversationId(null)
-      return
-    }
-
-    setExpandedConversationId((currentId) => (
-      currentId != null && conversations.some((conversation) => conversation.id === currentId)
-        ? currentId
-        : null
-    ))
-  }, [collapsed, conversations, variant])
+  const effectiveExpandedConversationId =
+    isMobileVariant &&
+    conversations.some((conversation) => conversation.id === expandedConversationId)
+      ? expandedConversationId
+      : null
 
   function handleToggleMobileActions(conversationId: number) {
     setExpandedConversationId((currentId) => (
       currentId === conversationId ? null : conversationId
     ))
+  }
+
+  function handleSelectConversation(conversationId: number) {
+    onSelectConversation(conversationId)
+    if (variant === 'mobile') {
+      setExpandedConversationId(null)
+    }
   }
 
   function handleMobileAction(action: () => void) {
@@ -176,7 +175,7 @@ export function SidebarContent({
             conversations.map((conversation) => {
               const isActive = conversation.id === currentConversationId
               const monogram = getConversationMonogram(conversation.title)
-              const isMobileActionsOpen = isMobileVariant && expandedConversationId === conversation.id
+              const isMobileActionsOpen = effectiveExpandedConversationId === conversation.id
 
               return (
                 <div
@@ -193,7 +192,7 @@ export function SidebarContent({
                     <button
                       aria-label={conversation.title}
                       className="flex w-full justify-center rounded-lg px-0 py-1.5 text-center"
-                      onClick={() => onSelectConversation(conversation.id)}
+                      onClick={() => handleSelectConversation(conversation.id)}
                       title={conversation.title}
                       type="button"
                     >
@@ -214,7 +213,7 @@ export function SidebarContent({
                         <button
                           aria-label={conversation.title}
                           className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left"
-                          onClick={() => onSelectConversation(conversation.id)}
+                          onClick={() => handleSelectConversation(conversation.id)}
                           title={conversation.title}
                           type="button"
                         >
@@ -297,7 +296,7 @@ export function SidebarContent({
                       <button
                         aria-label={conversation.title}
                         className="w-full text-left"
-                        onClick={() => onSelectConversation(conversation.id)}
+                        onClick={() => handleSelectConversation(conversation.id)}
                         title={conversation.title}
                         type="button"
                       >

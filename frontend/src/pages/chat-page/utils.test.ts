@@ -196,6 +196,20 @@ describe('chat page utils', () => {
     expect(parsed.title).toBe('meeting-notes')
   })
 
+  it('sanitizes control characters and invalid filename characters when importing', () => {
+    const parsed = parseConversationMarkdownImport(
+      [
+        '## User',
+        '',
+        'hello',
+      ].join('\n'),
+      'proj\u0000ect:notes?.md',
+      'conversation',
+    )
+
+    expect(parsed.title).toBe('project notes')
+  })
+
   it('builds chat model options from the active provider', () => {
     const options = resolveChatModelOptions(
       {

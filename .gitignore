@@ -4,6 +4,7 @@
 
 # Local assistant config
 .claude/*
+AGENTS.md
 
 # Frontend dependencies and build output
 frontend/node_modules/

@@ -329,6 +329,22 @@ export function useChatSession({
     setIsSending(false)
   }
 
+  async function settleGenerationCleanup(
+    generation: ActiveGenerationState | null,
+  ) {
+    if (!generation) {
+      setIsSending(false)
+      return
+    }
+
+    if (generation.stopRequested && generation.stopPromise) {
+      await generation.stopPromise
+      return
+    }
+
+    await finalizeGeneration(generation.id)
+  }
+
   async function waitForConversationToSettle(
     conversationId: number,
     { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
@@ -556,17 +572,7 @@ export function useChatSession({
         })
       }
     } finally {
-      if (!generation) {
-        setIsSending(false)
-        return
-      }
-
-      if (generation.stopRequested && generation.stopPromise) {
-        await generation.stopPromise
-        return
-      }
-
-      await finalizeGeneration(generation.id)
+      await settleGenerationCleanup(generation)
     }
   }
 
@@ -652,12 +658,7 @@ export function useChatSession({
         clearErrorOnSuccess: false,
       })
     } finally {
-      if (generation.stopRequested && generation.stopPromise) {
-        await generation.stopPromise
-        return
-      }
-
-      await finalizeGeneration(generation.id)
+      await settleGenerationCleanup(generation)
     }
   }
 
@@ -723,12 +724,7 @@ export function useChatSession({
         clearErrorOnSuccess: false,
       })
     } finally {
-      if (generation.stopRequested && generation.stopPromise) {
-        await generation.stopPromise
-        return
-      }
-
-      await finalizeGeneration(generation.id)
+      await settleGenerationCleanup(generation)
     }
   }
 
@@ -798,12 +794,7 @@ export function useChatSession({
         clearErrorOnSuccess: false,
       })
     } finally {
-      if (generation.stopRequested && generation.stopPromise) {
-        await generation.stopPromise
-        return
-      }
-
-      await finalizeGeneration(generation.id)
+      await settleGenerationCleanup(generation)
     }
   }
 

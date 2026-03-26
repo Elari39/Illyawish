@@ -137,4 +137,79 @@ describe('SidebarContent mobile actions', () => {
       }),
     ).not.toBeInTheDocument()
   })
+
+  it('closes the expanded mobile actions when the conversation list changes', () => {
+    const conversations = [
+      createConversation(1, 'First mobile chat'),
+      createConversation(2, 'Second mobile chat'),
+    ]
+
+    const handlers = {
+      onSearchChange: vi.fn(),
+      onToggleArchived: vi.fn(),
+      onLoadMore: vi.fn(),
+      onSelectConversation: vi.fn(),
+      onRenameConversation: vi.fn(),
+      onTogglePinned: vi.fn(),
+      onToggleArchivedConversation: vi.fn(),
+      onDeleteConversation: vi.fn(),
+      onCreateChat: vi.fn(),
+      onLogout: vi.fn(),
+    }
+
+    const { rerender } = render(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="mobile"
+          currentConversationId={1}
+          conversations={conversations}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: `Hide actions for ${conversations[0]!.title}`,
+      }),
+    ).toBeInTheDocument()
+
+    rerender(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="mobile"
+          currentConversationId={2}
+          conversations={[conversations[1]!]}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    expect(
+      screen.queryByRole('button', {
+        name: `Hide actions for ${conversations[0]!.title}`,
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
 })

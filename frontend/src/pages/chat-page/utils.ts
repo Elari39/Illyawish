@@ -405,13 +405,29 @@ export function parseConversationMarkdownImport(
 }
 
 function cleanConversationFileBaseName(value: string | null | undefined) {
-  return (value ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, '')
+  return stripControlCharacters(value ?? '')
     .replace(/[<>:"/\\|?*]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\s+(\.md)$/i, '$1')
     .replace(/^[.\s]+|[.\s]+$/g, '')
+}
+
+function stripControlCharacters(value: string) {
+  let result = ''
+
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)
+    if (
+      codePoint != null &&
+      ((codePoint >= 0x00 && codePoint <= 0x1f) || codePoint === 0x7f)
+    ) {
+      continue
+    }
+    result += character
+  }
+
+  return result
 }
 
 function resolveImportedMessageRole(value: string) {
