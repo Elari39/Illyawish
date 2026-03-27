@@ -95,7 +95,7 @@ describe('AdminPage', () => {
 
     expect(await screen.findByRole('heading', { name: '管理控制台' })).toBeInTheDocument()
     expect(screen.getByText('管理用户、查看审计活动并设置工作区默认值。')).toBeInTheDocument()
-    expect(screen.getByText(/从未登录/)).toBeInTheDocument()
+    expect(await screen.findByText(/从未登录/)).toBeInTheDocument()
     expect(screen.getAllByDisplayValue('管理员').length).toBeGreaterThan(0)
     expect(screen.getAllByDisplayValue('启用').length).toBeGreaterThan(0)
 
@@ -114,7 +114,7 @@ describe('AdminPage', () => {
     expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
     expect(screen.getByText('Manage users, review audit activity, and set workspace defaults.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Users' }))
-    expect(screen.getByText(/Never/)).toBeInTheDocument()
+    expect(await screen.findByText(/Never/)).toBeInTheDocument()
     expect(screen.getAllByDisplayValue('Admin').length).toBeGreaterThan(0)
     expect(screen.getAllByDisplayValue('Active').length).toBeGreaterThan(0)
 

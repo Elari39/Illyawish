@@ -1,4 +1,5 @@
-import { formatMessage, messages } from '../../i18n/messages'
+import { enUSMessages } from '../../i18n/catalogs/en-US'
+import { formatMessage } from '../../i18n/messages'
 import type { I18nContextValue } from '../../i18n/context'
 import { formatDateTime } from '../../lib/utils'
 import {
@@ -14,7 +15,7 @@ import {
 } from './utils'
 
 const t: I18nContextValue['t'] = (key, values) =>
-  formatMessage(messages['en-US'][key], values)
+  formatMessage(enUSMessages[key], values)
 
 describe('chat page utils', () => {
   it('appends deltas to the latest streaming assistant message', () => {
