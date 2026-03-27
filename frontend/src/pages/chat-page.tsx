@@ -264,10 +264,11 @@ export function ChatPage() {
       <aside
         className={cn(
           'hidden shrink-0 flex-col border-r border-[var(--line)] bg-[var(--sidebar-bg)] transition-[width] duration-200 md:flex',
-          uiState.isDesktopSidebarCollapsed ? 'w-[72px]' : 'w-[288px]',
+          uiState.isDesktopSidebarCollapsed ? 'w-[72px]' : 'w-[272px]',
         )}
       >
         <SidebarContent
+          key={uiState.isDesktopSidebarCollapsed ? 'desktop-sidebar-collapsed' : 'desktop-sidebar-expanded'}
           collapsed={uiState.isDesktopSidebarCollapsed}
           variant="desktop"
           currentConversationId={activeConversationId}

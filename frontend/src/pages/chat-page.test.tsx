@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -323,7 +323,7 @@ describe('ChatPage conversation navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
 
-    expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
   })
 
@@ -366,7 +366,7 @@ describe('ChatPage conversation navigation', () => {
 
     const desktopSidebar = container.querySelector('aside')
     expect(desktopSidebar).not.toBeNull()
-    expect(desktopSidebar?.className).toContain('w-[288px]')
+    expect(desktopSidebar?.className).toContain('w-[272px]')
     expect(desktopSidebar?.className).not.toContain('w-[320px]')
 
     const mobileSidebar = container.querySelector('[role="dialog"]')
@@ -569,9 +569,14 @@ describe('ChatPage conversation navigation', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Open conversation sidebar' }))
-    fireEvent.click(screen.getByRole('button', { name: 'More actions for First chat' }))
+    const mobileSidebar = screen.getByRole('dialog', { name: 'Conversation sidebar' })
+    fireEvent.click(
+      within(mobileSidebar).getByRole('button', {
+        name: 'More actions for First chat',
+      }),
+    )
 
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(within(mobileSidebar).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close conversation sidebar' }))
 
@@ -581,9 +586,13 @@ describe('ChatPage conversation navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open conversation sidebar' }))
 
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(
-      screen.getByRole('button', {
+      within(screen.getByRole('dialog', { name: 'Conversation sidebar' })).queryByRole('button', {
+        name: 'Delete',
+      }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Conversation sidebar' })).getByRole('button', {
         name: 'More actions for First chat',
       }),
     ).toHaveAttribute('aria-expanded', 'false')

@@ -4,7 +4,8 @@ import {
   MoreHorizontal,
   Trash2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -60,14 +61,133 @@ export function SidebarContent({
 }: SidebarContentProps) {
   const { locale, t } = useI18n()
   const [expandedConversationId, setExpandedConversationId] = useState<number | null>(null)
+  const [desktopMenuDirection, setDesktopMenuDirection] = useState<'up' | 'down'>('down')
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const desktopMenuRef = useRef<HTMLDivElement | null>(null)
+  const desktopTriggerRefs = useRef(new Map<number, HTMLButtonElement | null>())
   const isMobileVariant = variant === 'mobile' && !collapsed
+  const isDesktopVariant = variant === 'desktop' && !collapsed
   const effectiveExpandedConversationId =
-    isMobileVariant &&
+    !collapsed &&
     conversations.some((conversation) => conversation.id === expandedConversationId)
       ? expandedConversationId
       : null
 
-  function handleToggleMobileActions(conversationId: number) {
+  useEffect(() => {
+    if (!isDesktopVariant || effectiveExpandedConversationId == null) {
+      return
+    }
+
+    const expandedConversationIdForEffect = effectiveExpandedConversationId
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target
+      const menu = desktopMenuRef.current
+      const trigger = desktopTriggerRefs.current.get(expandedConversationIdForEffect)
+
+      if (!(target instanceof Node)) {
+        return
+      }
+
+      if (menu?.contains(target) || trigger?.contains(target)) {
+        return
+      }
+
+      setExpandedConversationId(null)
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        desktopTriggerRefs.current.get(expandedConversationIdForEffect)?.focus()
+        setExpandedConversationId(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [effectiveExpandedConversationId, isDesktopVariant])
+
+  function updateDesktopMenuDirection(conversationId: number) {
+    const scrollContainer = scrollContainerRef.current
+    const menu = desktopMenuRef.current
+    const trigger = desktopTriggerRefs.current.get(conversationId)
+
+    if (scrollContainer == null || menu == null || trigger == null) {
+      return
+    }
+
+    const triggerRect = trigger.getBoundingClientRect()
+    const containerRect = scrollContainer.getBoundingClientRect()
+    const menuRect = menu.getBoundingClientRect()
+    const spaceBelow = containerRect.bottom - triggerRect.bottom
+    const spaceAbove = triggerRect.top - containerRect.top
+
+    setDesktopMenuDirection(
+      spaceBelow < menuRect.height && spaceAbove > spaceBelow ? 'up' : 'down',
+    )
+  }
+
+  function registerDesktopTrigger(
+    conversationId: number,
+    node: HTMLButtonElement | null,
+  ) {
+    if (node == null) {
+      desktopTriggerRefs.current.delete(conversationId)
+      return
+    }
+
+    desktopTriggerRefs.current.set(conversationId, node)
+  }
+
+  function handleDesktopMenuBlur(event: React.FocusEvent<HTMLDivElement>) {
+    const nextFocused = event.relatedTarget
+
+    if (!(nextFocused instanceof Node)) {
+      setExpandedConversationId(null)
+      return
+    }
+
+    const menu = desktopMenuRef.current
+    const trigger =
+      effectiveExpandedConversationId == null
+        ? null
+        : desktopTriggerRefs.current.get(effectiveExpandedConversationId)
+
+    if (menu?.contains(nextFocused) || trigger?.contains(nextFocused)) {
+      return
+    }
+
+    setExpandedConversationId(null)
+  }
+
+  function handleToggleConversationActions(
+    conversationId: number,
+    anchor?: HTMLButtonElement,
+  ) {
+    if (isDesktopVariant && anchor != null) {
+      const nextConversationId =
+        expandedConversationId === conversationId ? null : conversationId
+
+      registerDesktopTrigger(conversationId, anchor)
+
+      if (nextConversationId == null) {
+        setExpandedConversationId(null)
+        return
+      }
+
+      setDesktopMenuDirection('down')
+      flushSync(() => {
+        setExpandedConversationId(nextConversationId)
+      })
+      updateDesktopMenuDirection(nextConversationId)
+      return
+    }
+
     setExpandedConversationId((currentId) => (
       currentId === conversationId ? null : conversationId
     ))
@@ -75,12 +195,10 @@ export function SidebarContent({
 
   function handleSelectConversation(conversationId: number) {
     onSelectConversation(conversationId)
-    if (variant === 'mobile') {
-      setExpandedConversationId(null)
-    }
+    setExpandedConversationId(null)
   }
 
-  function handleMobileAction(action: () => void) {
+  function handleConversationAction(action: () => void) {
     action()
     setExpandedConversationId(null)
   }
@@ -146,7 +264,7 @@ export function SidebarContent({
         ) : null}
       </div>
 
-      <div className={cn('flex-1 overflow-y-auto pb-2', 'px-2')}>
+      <div className={cn('flex-1 overflow-y-auto overflow-x-visible pb-2', 'px-2')} ref={scrollContainerRef}>
         {!collapsed ? (
           <p className="mb-1 px-3 text-xs font-medium text-[var(--muted-foreground)]">
             {showArchived ? t('sidebar.archived') : t('sidebar.recents')}
@@ -176,15 +294,18 @@ export function SidebarContent({
               const isActive = conversation.id === currentConversationId
               const monogram = getConversationMonogram(conversation.title)
               const isMobileActionsOpen = effectiveExpandedConversationId === conversation.id
+              const isDesktopMenuOpen = effectiveExpandedConversationId === conversation.id
 
               return (
                 <div
                   key={conversation.id}
                   className={cn(
-                    'group rounded-xl border border-transparent transition-colors',
+                    'group relative rounded-xl border transition-[border-color,background-color,box-shadow] duration-200',
                     isActive
-                      ? 'border-[var(--line)] bg-[var(--sidebar-accent)]'
-                      : 'hover:bg-black/[0.04]',
+                      ? 'border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--sidebar-accent)_84%,white)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]'
+                      : 'border-transparent hover:border-[var(--line)] hover:bg-white/30',
+                    isDesktopMenuOpen &&
+                      'z-10 border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--sidebar-accent)_74%,white)] shadow-[0_10px_24px_rgba(26,26,24,0.08)]',
                     collapsed ? 'p-1.5' : 'px-2 py-1.5',
                   )}
                 >
@@ -239,7 +360,10 @@ export function SidebarContent({
                           onClick={(event) => {
                             event.preventDefault()
                             event.stopPropagation()
-                            handleToggleMobileActions(conversation.id)
+                            handleToggleConversationActions(
+                              conversation.id,
+                              event.currentTarget,
+                            )
                           }}
                           title={
                             isMobileActionsOpen
@@ -257,14 +381,18 @@ export function SidebarContent({
                           <div className="grid grid-cols-3 gap-2">
                             <Button
                               className="px-2 py-2 text-xs"
-                              onClick={() => handleMobileAction(() => onTogglePinned(conversation))}
+                              onClick={() =>
+                                handleConversationAction(() => onTogglePinned(conversation))
+                              }
                               variant="secondary"
                             >
                               {conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
                             </Button>
                             <Button
                               className="px-2 py-2 text-xs"
-                              onClick={() => handleMobileAction(() => onRenameConversation(conversation))}
+                              onClick={() =>
+                                handleConversationAction(() => onRenameConversation(conversation))
+                              }
                               variant="secondary"
                             >
                               {t('sidebar.rename')}
@@ -272,7 +400,9 @@ export function SidebarContent({
                             <Button
                               className="px-2 py-2 text-xs"
                               onClick={() =>
-                                handleMobileAction(() => onToggleArchivedConversation(conversation))
+                                handleConversationAction(() =>
+                                  onToggleArchivedConversation(conversation)
+                                )
                               }
                               variant="secondary"
                             >
@@ -281,7 +411,9 @@ export function SidebarContent({
                           </div>
                           <Button
                             className="mt-2 w-full px-3 py-2 text-xs"
-                            onClick={() => handleMobileAction(() => onDeleteConversation(conversation.id))}
+                            onClick={() =>
+                              handleConversationAction(() => onDeleteConversation(conversation.id))
+                            }
                             variant="danger"
                           >
                             {t('common.delete')}
@@ -292,57 +424,130 @@ export function SidebarContent({
                   ) : null}
 
                   {!collapsed && !isMobileVariant ? (
-                    <>
+                    <div
+                      className="relative flex items-start gap-2"
+                      data-conversation-actions={conversation.id}
+                    >
                       <button
                         aria-label={conversation.title}
-                        className="w-full text-left"
+                        className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors"
                         onClick={() => handleSelectConversation(conversation.id)}
                         title={conversation.title}
                         type="button"
                       >
-                        <div className="truncate text-sm font-medium text-[var(--foreground)]">
+                        <div
+                          className={cn(
+                            'truncate text-sm font-medium text-[var(--foreground)] transition-colors',
+                            isDesktopMenuOpen && 'text-[color-mix(in_srgb,var(--foreground)_92%,black)]',
+                          )}
+                        >
                           {conversation.isPinned ? t('sidebar.pinnedPrefix') : ''}
                           {conversation.title}
                         </div>
-                        <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                        <div
+                          className={cn(
+                            'mt-0.5 text-[11px] tracking-[0.01em] text-[color-mix(in_srgb,var(--muted-foreground)_88%,var(--foreground)_12%)]',
+                            isDesktopMenuOpen &&
+                              'text-[color-mix(in_srgb,var(--muted-foreground)_72%,var(--foreground)_28%)]',
+                          )}
+                        >
                           {formatConversationDate(conversation.updatedAt, locale)}
                         </div>
                       </button>
 
-                      <div className="mt-2 flex flex-wrap gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-                        <Button
-                          className="px-2 py-1 text-xs"
-                          onClick={() => onTogglePinned(conversation)}
-                          variant="ghost"
+                      <button
+                        aria-expanded={isDesktopMenuOpen}
+                        aria-haspopup={isDesktopVariant ? 'menu' : undefined}
+                        aria-label={
+                          isDesktopMenuOpen
+                            ? t('sidebar.hideActions', { title: conversation.title })
+                            : t('sidebar.moreActions', { title: conversation.title })
+                        }
+                        className={cn(
+                          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-[color-mix(in_srgb,var(--muted-foreground)_92%,var(--foreground)_8%)] transition-all duration-200 hover:border-[var(--line)] hover:bg-white/70 hover:text-[var(--foreground)] focus-visible:border-[var(--line-strong)] focus-visible:bg-white/80 focus-visible:text-[var(--foreground)] focus-visible:opacity-100',
+                          isDesktopMenuOpen
+                            ? 'border-[var(--line)] bg-white/85 text-[var(--foreground)] opacity-100 shadow-[0_6px_16px_rgba(26,26,24,0.08)]'
+                            : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+                        )}
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          handleToggleConversationActions(
+                            conversation.id,
+                            event.currentTarget,
+                          )
+                        }}
+                        title={
+                          isDesktopMenuOpen
+                            ? t('sidebar.hideActions', { title: conversation.title })
+                            : t('sidebar.moreActions', { title: conversation.title })
+                        }
+                        ref={(node) => registerDesktopTrigger(conversation.id, node)}
+                        type="button"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </button>
+
+                      {isDesktopMenuOpen ? (
+                        <div
+                          aria-label={t('sidebar.moreActions', { title: conversation.title })}
+                          onBlur={handleDesktopMenuBlur}
+                          ref={desktopMenuRef}
+                          role="menu"
+                          className={cn(
+                            'absolute right-0 z-20 w-[184px] overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--line-strong)_82%,white_18%)] bg-[color-mix(in_srgb,white_88%,var(--app-bg)_12%)] p-2 shadow-[0_18px_40px_rgba(26,26,24,0.16)] backdrop-blur-sm',
+                            desktopMenuDirection === 'up'
+                              ? 'bottom-full mb-2'
+                              : 'top-full mt-2',
+                          )}
                         >
-                          {conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
-                        </Button>
-                        <Button
-                          className="px-2 py-1 text-xs"
-                          onClick={() => onRenameConversation(conversation)}
-                          variant="ghost"
-                        >
-                          {t('sidebar.rename')}
-                        </Button>
-                        <Button
-                          className="px-2 py-1 text-xs"
-                          onClick={() => onToggleArchivedConversation(conversation)}
-                          variant="ghost"
-                        >
-                          {conversation.isArchived ? t('sidebar.restore') : t('sidebar.archive')}
-                        </Button>
-                        <button
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--danger)]"
-                          onClick={() => onDeleteConversation(conversation.id)}
-                          type="button"
-                          aria-label={t('sidebar.deleteConversation', {
-                            title: conversation.title,
-                          })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </>
+                          <button
+                            className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                            onClick={() =>
+                              handleConversationAction(() => onTogglePinned(conversation))
+                            }
+                            role="menuitem"
+                          >
+                            {conversation.isPinned ? t('sidebar.unpin') : t('sidebar.pin')}
+                          </button>
+                          <button
+                            className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                            onClick={() =>
+                              handleConversationAction(() => onRenameConversation(conversation))
+                            }
+                            role="menuitem"
+                          >
+                            {t('sidebar.rename')}
+                          </button>
+                          <button
+                            className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                            onClick={() =>
+                                handleConversationAction(() =>
+                                  onToggleArchivedConversation(conversation)
+                                )
+                            }
+                            role="menuitem"
+                          >
+                            {conversation.isArchived ? t('sidebar.restore') : t('sidebar.archive')}
+                          </button>
+                          <div
+                            aria-orientation="horizontal"
+                            className="my-2 h-px bg-[color-mix(in_srgb,var(--line-strong)_60%,white_40%)]"
+                            role="separator"
+                          />
+                          <button
+                            className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,white_90%)] hover:text-[color-mix(in_srgb,var(--danger)_88%,black_12%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)]/20"
+                            onClick={() =>
+                              handleConversationAction(() => onDeleteConversation(conversation.id))
+                            }
+                            role="menuitem"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {t('common.delete')}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               )
