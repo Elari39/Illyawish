@@ -593,6 +593,19 @@ export function resolveProviderEditorState(
   }
 }
 
+export function canReuseActivePresetAPIKey(
+  providerState: ProviderState | null,
+) {
+  if (!providerState || providerState.activePresetId == null) {
+    return false
+  }
+
+  const activePreset = providerState.presets.find(
+    (preset) => preset.id === providerState.activePresetId,
+  )
+  return activePreset?.hasApiKey === true
+}
+
 export function describeProviderSource(
   providerState: ProviderState | null,
   activePreset: ProviderPreset | null,

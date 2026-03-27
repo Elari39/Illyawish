@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '../components/auth/auth-context'
 import { I18nProvider } from '../i18n/provider'
 import { APP_LOCALE_STORAGE_KEY } from '../i18n/config'
-import { chatApi } from '../lib/api'
+import { AUTH_UNAUTHORIZED_EVENT, chatApi } from '../lib/api'
 import { LAST_CONVERSATION_STORAGE_KEY } from './chat-page/types'
 import { ChatPage } from './chat-page'
 import type {
@@ -133,6 +133,7 @@ describe('ChatPage conversation navigation', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('auto-resumes the last conversation without reloading it in a loop', async () => {
@@ -327,6 +328,113 @@ describe('ChatPage conversation navigation', () => {
 
     expect(await screen.findByRole('button', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
+  })
+
+  it('opens settings for legacy conversations whose tags come back as null', async () => {
+    vi.restoreAllMocks()
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.endsWith('/api/chat/settings')) {
+        return new Response(
+          JSON.stringify(createChatSettings()),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+
+      if (url.includes('/api/conversations?')) {
+        return new Response(
+          JSON.stringify({
+            conversations: [
+              {
+                id: 9,
+                title: 'Legacy settings',
+                isPinned: false,
+                isArchived: false,
+                folder: '',
+                tags: null,
+                settings: defaultSettings,
+                createdAt: '2026-03-26T09:08:00Z',
+                updatedAt: '2026-03-26T09:08:00Z',
+              },
+            ],
+            total: 1,
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+
+      if (url.endsWith('/api/conversations/9/messages')) {
+        return new Response(
+          JSON.stringify({
+            conversation: {
+              id: 9,
+              title: 'Legacy settings',
+              isPinned: false,
+              isArchived: false,
+              folder: '',
+              tags: null,
+              settings: defaultSettings,
+              createdAt: '2026-03-26T09:08:00Z',
+              updatedAt: '2026-03-26T09:08:00Z',
+            },
+            messages: [createMessage(91, 9, 'assistant', 'Legacy reply')],
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+
+      if (url.endsWith('/api/auth/me')) {
+        return new Response(
+          JSON.stringify({
+            error: 'unauthorized',
+            code: 'unauthorized',
+          }),
+          {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        )
+      }
+
+      throw new Error(`Unhandled fetch for ${url}`)
+    })
+
+    const unauthorizedListener = vi.fn()
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, unauthorizedListener)
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Legacy reply')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Tags')).toHaveValue('')
+    expect(unauthorizedListener).not.toHaveBeenCalled()
+
+    window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, unauthorizedListener)
   })
 
   it('keeps generation controls out of the header and on each assistant reply', async () => {

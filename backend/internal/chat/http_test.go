@@ -110,6 +110,41 @@ func TestListMessagesReturnsPaginationMetadata(t *testing.T) {
 	if !strings.Contains(body, "\"content\":\"message-3\"") || !strings.Contains(body, "\"content\":\"message-4\"") {
 		t.Fatalf("expected latest message page, got %s", body)
 	}
+	if !strings.Contains(body, "\"tags\":[]") {
+		t.Fatalf("expected empty tags array in conversation response, got %s", body)
+	}
+}
+
+func TestListConversationsSerializesNilTagsAsEmptyArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, conversation := newChatTestContext(t)
+	if err := db.Model(&models.Conversation{}).
+		Where("id = ?", conversation.ID).
+		Update("tags", nil).Error; err != nil {
+		t.Fatalf("clear conversation tags: %v", err)
+	}
+
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/conversations?archived=false", nil)
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).ListConversations(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "\"tags\":[]") {
+		t.Fatalf("expected empty tags array in response, got %s", body)
+	}
 }
 
 func TestCancelGenerationReturnsOKWithoutActiveStream(t *testing.T) {
@@ -278,6 +313,32 @@ func TestCreateConversationReturnsQuotaExceededWhenConversationLimitReached(t *t
 	}
 	if body := recorder.Body.String(); !strings.Contains(body, `"code":"quota_exceeded"`) {
 		t.Fatalf("expected quota_exceeded response, got %s", body)
+	}
+}
+
+func TestCreateConversationSerializesEmptyTagsArray(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations", nil)
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).CreateConversation(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, recorder.Code)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "\"tags\":[]") {
+		t.Fatalf("expected empty tags array in response, got %s", body)
 	}
 }
 

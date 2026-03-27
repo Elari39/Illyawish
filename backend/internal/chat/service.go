@@ -531,6 +531,9 @@ func (s *Service) applyConversationDefaults(conversation *models.Conversation) {
 	if strings.TrimSpace(conversation.Title) == "" {
 		conversation.Title = defaultConversationTitle
 	}
+	if conversation.Tags == nil {
+		conversation.Tags = []string{}
+	}
 }
 
 func (s *Service) effectiveConversationSettings(

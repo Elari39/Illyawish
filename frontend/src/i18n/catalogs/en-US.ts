@@ -171,10 +171,14 @@ export const enUSMessages = {
   'settings.apiKeyPlaceholderEdit': 'Leave blank to keep the current key',
   'settings.apiKeyPlaceholderEditHint': 'Leave blank to keep {{hint}}',
   'settings.apiKeyPlaceholderNew': 'sk-...',
+  'settings.apiKeyPlaceholderNewReuse':
+    'Leave blank to reuse the active preset key',
   'settings.apiKeyHelpEdit':
     'Leave this blank to keep the existing encrypted API key, or enter a new one to replace it.',
   'settings.apiKeyHelpNew':
     'Stored encrypted by the backend after saving.',
+  'settings.apiKeyHelpNewReuse':
+    'Leave this blank to reuse the current active preset API key, or enter a new one to store a separate key.',
   'settings.apiKeyStoredHint': 'Stored key: {{hint}}',
   'settings.noStoredKey': 'not stored',
   'settings.saveSettings': 'Save settings',

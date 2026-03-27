@@ -160,9 +160,12 @@ export const zhCNMessages = {
     'settings.apiKeyPlaceholderEdit': '留空保存则保留当前密钥',
     'settings.apiKeyPlaceholderEditHint': '留空则保留 {{hint}}',
     'settings.apiKeyPlaceholderNew': 'sk-...',
+    'settings.apiKeyPlaceholderNewReuse': '留空则复用当前激活预设的密钥',
     'settings.apiKeyHelpEdit': '留空保存会继续保留现有的加密 API Key，输入新值则会替换。',
     'settings.apiKeyHelpNew':
       '保存后后端会继续加密存储该密钥。',
+    'settings.apiKeyHelpNewReuse':
+      '留空会复用当前激活预设已保存的 API Key，输入新值则会为这个新预设单独保存一份密钥。',
     'settings.apiKeyStoredHint': '已保存密钥：{{hint}}',
     'settings.noStoredKey': '未保存',
     'settings.saveSettings': '保存设置',

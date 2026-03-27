@@ -11,6 +11,7 @@ import { describeProviderSource } from '../utils'
 import { ProviderModelEditor } from './provider-model-editor'
 
 interface ProviderSettingsTabProps {
+  canReuseActiveAPIKey: boolean
   editingProviderId: number | null
   isLoadingProviders: boolean
   isSavingProvider: boolean
@@ -34,6 +35,7 @@ interface ProviderSettingsTabProps {
 }
 
 export function ProviderSettingsTab({
+  canReuseActiveAPIKey,
   editingProviderId,
   isLoadingProviders,
   isSavingProvider,
@@ -293,7 +295,9 @@ export function ProviderSettingsTab({
                           hint: editingPreset.apiKeyHint,
                         })
                       : t('settings.apiKeyPlaceholderEdit')
-                    : t('settings.apiKeyPlaceholderNew')
+                    : canReuseActiveAPIKey
+                      ? t('settings.apiKeyPlaceholderNewReuse')
+                      : t('settings.apiKeyPlaceholderNew')
                 }
                 type="password"
                 value={providerForm.apiKey}
@@ -304,7 +308,9 @@ export function ProviderSettingsTab({
               <p className="text-xs text-[var(--muted-foreground)]">
                 {editingProviderId
                   ? t('settings.apiKeyHelpEdit')
-                  : t('settings.apiKeyHelpNew')}
+                  : canReuseActiveAPIKey
+                    ? t('settings.apiKeyHelpNewReuse')
+                    : t('settings.apiKeyHelpNew')}
               </p>
               {editingProviderId && editingPreset?.hasApiKey ? (
                 <p className="text-xs text-[var(--muted-foreground)]">

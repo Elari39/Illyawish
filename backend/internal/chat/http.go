@@ -571,13 +571,18 @@ func ToConversationDTO(
 	conversation *models.Conversation,
 	settings ConversationSettings,
 ) ConversationDTO {
+	tags := append([]string(nil), conversation.Tags...)
+	if tags == nil {
+		tags = []string{}
+	}
+
 	return ConversationDTO{
 		ID:         conversation.ID,
 		Title:      conversation.Title,
 		IsPinned:   conversation.IsPinned,
 		IsArchived: conversation.IsArchived,
 		Folder:     conversation.Folder,
-		Tags:       append([]string(nil), conversation.Tags...),
+		Tags:       tags,
 		Settings: ConversationSettingsDTO{
 			SystemPrompt:       settings.SystemPrompt,
 			Model:              settings.Model,

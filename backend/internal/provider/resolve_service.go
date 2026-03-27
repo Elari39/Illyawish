@@ -74,6 +74,26 @@ func (s *Service) activePreset(userID uint) (*models.LLMProviderPreset, error) {
 	return nil, fmt.Errorf("get active provider preset: %w", err)
 }
 
+func (s *Service) resolveActivePresetAPIKey(userID uint) (string, error) {
+	preset, err := s.activePreset(userID)
+	if err != nil {
+		return "", err
+	}
+	if preset == nil || strings.TrimSpace(preset.EncryptedAPIKey) == "" {
+		return "", requestError{message: "active provider API key is unavailable"}
+	}
+
+	apiKey, err := s.crypter.Decrypt(preset.EncryptedAPIKey)
+	if err != nil {
+		return "", fmt.Errorf("decrypt provider API key: %w", err)
+	}
+	if strings.TrimSpace(apiKey) == "" {
+		return "", requestError{message: "active provider API key is unavailable"}
+	}
+
+	return apiKey, nil
+}
+
 func (s *Service) fallbackState() FallbackState {
 	fallbackModels := []string{}
 	if strings.TrimSpace(s.fallback.DefaultModel) != "" {

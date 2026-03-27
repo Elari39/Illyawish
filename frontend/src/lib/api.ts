@@ -39,6 +39,13 @@ import type {
 } from '../types/chat'
 
 const API_BASE_URL = ''
+const defaultConversationSettings: ConversationSettings = {
+  systemPrompt: '',
+  model: '',
+  temperature: null,
+  maxTokens: null,
+  contextWindowTurns: null,
+}
 
 async function apiRequest<T>(
   path: string,
@@ -74,6 +81,44 @@ export {
   AUTH_UNAUTHORIZED_EVENT,
   isNetworkError,
   isUnauthorizedError,
+}
+
+function normalizeConversationSettings(
+  settings: Partial<ConversationSettings> | null | undefined,
+): ConversationSettings {
+  return {
+    systemPrompt:
+      typeof settings?.systemPrompt === 'string'
+        ? settings.systemPrompt
+        : defaultConversationSettings.systemPrompt,
+    model:
+      typeof settings?.model === 'string'
+        ? settings.model
+        : defaultConversationSettings.model,
+    temperature:
+      typeof settings?.temperature === 'number' || settings?.temperature === null
+        ? settings.temperature
+        : defaultConversationSettings.temperature,
+    maxTokens:
+      typeof settings?.maxTokens === 'number' || settings?.maxTokens === null
+        ? settings.maxTokens
+        : defaultConversationSettings.maxTokens,
+    contextWindowTurns:
+      typeof settings?.contextWindowTurns === 'number' || settings?.contextWindowTurns === null
+        ? settings.contextWindowTurns
+        : defaultConversationSettings.contextWindowTurns,
+  }
+}
+
+function normalizeConversation(conversation: Conversation): Conversation {
+  return {
+    ...conversation,
+    folder: typeof conversation.folder === 'string' ? conversation.folder : '',
+    tags: Array.isArray(conversation.tags)
+      ? conversation.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+    settings: normalizeConversationSettings(conversation.settings),
+  }
 }
 
 export const authApi = {
@@ -150,7 +195,10 @@ export const chatApi = {
     }>(
       `/api/conversations${query ? `?${query}` : ''}`,
     )
-    return response
+    return {
+      ...response,
+      conversations: response.conversations.map(normalizeConversation),
+    }
   },
   async listConversations() {
     const response = await this.listConversationsPage()
@@ -163,7 +211,7 @@ export const chatApi = {
         method: 'POST',
       },
     )
-    return response.conversation
+    return normalizeConversation(response.conversation)
   },
   async importConversation(payload: ImportConversationPayload) {
     const response = await apiRequest<{ conversation: Conversation }>(
@@ -173,7 +221,7 @@ export const chatApi = {
         body: JSON.stringify(payload),
       },
     )
-    return response.conversation
+    return normalizeConversation(response.conversation)
   },
   async updateConversation(
     conversationId: number,
@@ -186,7 +234,7 @@ export const chatApi = {
         body: JSON.stringify(payload),
       },
     )
-    return response.conversation
+    return normalizeConversation(response.conversation)
   },
   async getConversationMessages(
     conversationId: number,
@@ -207,7 +255,10 @@ export const chatApi = {
     const response = await apiRequest<ConversationMessagesResponse>(
       `/api/conversations/${conversationId}/messages${query ? `?${query}` : ''}`,
     )
-    return response
+    return {
+      ...response,
+      conversation: normalizeConversation(response.conversation),
+    }
   },
   async deleteConversation(conversationId: number) {
     await apiRequest<{ ok: boolean }>(`/api/conversations/${conversationId}`, {

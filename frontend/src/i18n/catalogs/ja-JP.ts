@@ -173,9 +173,13 @@ export const jaJPMessages = {
     'settings.apiKeyPlaceholderEdit': '空欄のまま保存すると現在のキーを維持',
     'settings.apiKeyPlaceholderEditHint': '{{hint}} を維持するには空欄のまま保存',
     'settings.apiKeyPlaceholderNew': 'sk-...',
+    'settings.apiKeyPlaceholderNewReuse':
+      '空欄のまま保存すると現在のアクティブなプリセットのキーを再利用',
     'settings.apiKeyHelpEdit': '空欄のまま保存すると既存の暗号化 API キーを維持し、新しい値を入力すると置き換えます。',
     'settings.apiKeyHelpNew':
       '保存後もバックエンドでは暗号化して保存します。',
+    'settings.apiKeyHelpNewReuse':
+      '空欄のままなら現在アクティブなプリセットの API キーを再利用し、新しい値を入力するとこの新しいプリセット専用のキーを保存します。',
     'settings.apiKeyStoredHint': '保存済みキー: {{hint}}',
     'settings.noStoredKey': '未保存',
     'settings.saveSettings': '設定を保存',

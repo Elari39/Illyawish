@@ -323,6 +323,99 @@ func TestCreatePresetIncludesDefaultModelInStoredModels(t *testing.T) {
 	}
 }
 
+func TestCreatePresetReusesActivePresetAPIKeyWhenRequested(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	_, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Primary",
+		BaseURL:      "https://primary.example.com/v1",
+		APIKey:       "shared-key",
+		Models:       []string{"model-a"},
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(primary) error = %v", err)
+	}
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:              "Secondary",
+		BaseURL:           "https://secondary.example.com/v1",
+		Models:            []string{"model-b"},
+		DefaultModel:      "model-b",
+		ReuseActiveAPIKey: true,
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(secondary) error = %v", err)
+	}
+
+	resolved, err := service.ResolveForUser(1)
+	if err != nil {
+		t.Fatalf("ResolveForUser() error = %v", err)
+	}
+	if resolved.Config.APIKey != "shared-key" {
+		t.Fatalf("expected reused API key %q, got %q", "shared-key", resolved.Config.APIKey)
+	}
+	if preset.APIKeyHint == "" {
+		t.Fatal("expected reused API key hint to be stored")
+	}
+}
+
+func TestCreatePresetRejectsReuseWithoutActiveStoredAPIKey(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	_, err := service.CreatePreset(1, CreatePresetInput{
+		Name:              "Secondary",
+		BaseURL:           "https://secondary.example.com/v1",
+		Models:            []string{"model-b"},
+		DefaultModel:      "model-b",
+		ReuseActiveAPIKey: true,
+	})
+	if err == nil {
+		t.Fatal("expected missing active provider API key error")
+	}
+	if !IsRequestError(err) {
+		t.Fatalf("expected request error, got %v", err)
+	}
+}
+
+func TestTestPresetReusesActivePresetAPIKeyWhenRequestedForNewPreset(t *testing.T) {
+	tester := &capturingProviderTester{}
+	service := newTestServiceWithTester(t, &config.Config{
+		SessionSecret: "session-secret",
+	}, tester)
+
+	_, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Primary",
+		BaseURL:      "https://primary.example.com/v1",
+		APIKey:       "shared-key",
+		Models:       []string{"model-a"},
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(primary) error = %v", err)
+	}
+
+	result, err := service.TestPreset(context.Background(), 1, TestPresetInput{
+		BaseURL:           "https://secondary.example.com/v1",
+		DefaultModel:      "model-b",
+		ReuseActiveAPIKey: true,
+	})
+	if err != nil {
+		t.Fatalf("TestPreset() error = %v", err)
+	}
+
+	if !result.OK {
+		t.Fatal("expected successful provider test")
+	}
+	if tester.lastConfig.APIKey != "shared-key" {
+		t.Fatalf("expected reused API key %q, got %q", "shared-key", tester.lastConfig.APIKey)
+	}
+}
+
 func newTestService(t *testing.T, cfg *config.Config) *Service {
 	t.Helper()
 	return newTestServiceWithTester(t, cfg, &fakeProviderTester{})

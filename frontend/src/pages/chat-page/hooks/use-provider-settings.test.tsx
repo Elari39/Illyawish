@@ -189,6 +189,121 @@ describe('useProviderSettings', () => {
     expect(result.current.providerState?.presets[0]?.hasApiKey).toBe(true)
   })
 
+  it('reuses the active preset api key when saving a new preset without entering one', async () => {
+    const activePreset: ProviderPreset = {
+      id: 7,
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      hasApiKey: true,
+      apiKeyHint: 'sk-1...2345',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+      isActive: true,
+      createdAt: '2026-03-26T00:00:00Z',
+      updatedAt: '2026-03-26T00:00:00Z',
+    }
+    listProvidersMock.mockResolvedValue({
+      presets: [activePreset],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+    createProviderMock.mockResolvedValue({
+      presets: [
+        {
+          ...activePreset,
+          id: 8,
+          name: 'Secondary',
+          baseURL: 'https://secondary.example.com/v1',
+          models: ['model-b'],
+          defaultModel: 'model-b',
+        },
+        {
+          ...activePreset,
+          isActive: false,
+        },
+      ],
+      activePresetId: 8,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: true,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerState?.activePresetId).toBe(7)
+    })
+
+    act(() => {
+      result.current.handleStartNewProvider()
+      result.current.handleProviderFieldChange('name', 'Secondary')
+      result.current.handleProviderFieldChange('baseURL', 'https://secondary.example.com/v1')
+      result.current.handleProviderModelsChange({
+        models: ['model-b'],
+        defaultModel: 'model-b',
+      })
+    })
+
+    await act(async () => {
+      await result.current.handleSaveProvider()
+    })
+
+    expect(createProviderMock).toHaveBeenCalledWith({
+      name: 'Secondary',
+      baseURL: 'https://secondary.example.com/v1',
+      reuseActiveApiKey: true,
+      models: ['model-b'],
+      defaultModel: 'model-b',
+    })
+    expect(result.current.providerForm.errors.apiKey).toBeUndefined()
+  })
+
+  it('requires an api key for a new preset when no active preset key can be reused', async () => {
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: false,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.handleProviderFieldChange('name', 'Secondary')
+      result.current.handleProviderFieldChange('baseURL', 'https://secondary.example.com/v1')
+      result.current.handleProviderModelsChange({
+        models: ['model-b'],
+        defaultModel: 'model-b',
+      })
+    })
+
+    await act(async () => {
+      await result.current.handleSaveProvider()
+    })
+
+    expect(createProviderMock).not.toHaveBeenCalled()
+    expect(result.current.providerForm.errors.apiKey).toBeTruthy()
+  })
+
   it('keeps the new preset form when the initial provider request finishes later', async () => {
     const providerState: ProviderState = {
       presets: [
@@ -380,6 +495,72 @@ describe('useProviderSettings', () => {
       baseURL: 'https://api.openai.com/v1',
       apiKey: 'sk-updated-5678',
       defaultModel: 'gpt-4.1-mini',
+    })
+  })
+
+  it('reuses the active preset api key when testing a new preset without entering one', async () => {
+    const activePreset: ProviderPreset = {
+      id: 7,
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      hasApiKey: true,
+      apiKeyHint: 'sk-1...2345',
+      models: ['gpt-4.1-mini'],
+      defaultModel: 'gpt-4.1-mini',
+      isActive: true,
+      createdAt: '2026-03-26T00:00:00Z',
+      updatedAt: '2026-03-26T00:00:00Z',
+    }
+    listProvidersMock.mockResolvedValue({
+      presets: [activePreset],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    } satisfies ProviderState)
+    testProviderMock.mockResolvedValue({
+      ok: true,
+      message: 'provider connection verified',
+      resolvedBaseURL: 'https://secondary.example.com/v1',
+      resolvedModel: 'model-b',
+    })
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: true,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.providerState?.activePresetId).toBe(7)
+    })
+
+    act(() => {
+      result.current.handleStartNewProvider()
+      result.current.handleProviderFieldChange('name', 'Secondary')
+      result.current.handleProviderFieldChange('baseURL', 'https://secondary.example.com/v1')
+      result.current.handleProviderModelsChange({
+        models: ['model-b'],
+        defaultModel: 'model-b',
+      })
+    })
+
+    await act(async () => {
+      await result.current.handleTestProvider()
+    })
+
+    expect(testProviderMock).toHaveBeenCalledWith({
+      baseURL: 'https://secondary.example.com/v1',
+      reuseActiveApiKey: true,
+      defaultModel: 'model-b',
     })
   })
 })

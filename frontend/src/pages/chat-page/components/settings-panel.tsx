@@ -19,7 +19,7 @@ import type {
   ProviderState,
 } from '../../../types/chat'
 import type { ProviderFormState, SettingsTab } from '../types'
-import { resolveChatModelOptions } from '../utils'
+import { canReuseActivePresetAPIKey, resolveChatModelOptions } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
 import { SecuritySettingsTab } from './security-settings-tab'
@@ -149,6 +149,8 @@ export function SettingsPanel({
   }
 
   const modelOptions = resolveChatModelOptions(providerState, chatSettings.model)
+  const canReuseActiveAPIKey =
+    editingProviderId == null && canReuseActivePresetAPIKey(providerState)
   const descriptionKey =
     activeTab === 'chat'
       ? 'settings.chatDescription'
@@ -273,6 +275,7 @@ export function SettingsPanel({
           />
         ) : activeTab === 'provider' ? (
           <ProviderSettingsTab
+            canReuseActiveAPIKey={canReuseActiveAPIKey}
             editingProviderId={editingProviderId}
             isLoadingProviders={isLoadingProviders}
             isSavingProvider={isSavingProvider}

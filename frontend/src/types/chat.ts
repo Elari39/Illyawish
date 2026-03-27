@@ -139,7 +139,8 @@ export interface ImportConversationPayload {
 export interface CreateProviderPayload {
   name: string
   baseURL: string
-  apiKey: string
+  apiKey?: string
+  reuseActiveApiKey?: boolean
   models: string[]
   defaultModel: string
 }
@@ -156,6 +157,7 @@ export interface TestProviderPayload {
   providerId?: number
   baseURL: string
   apiKey?: string
+  reuseActiveApiKey?: boolean
   defaultModel: string
 }
 

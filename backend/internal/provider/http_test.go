@@ -77,6 +77,43 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	}
 }
 
+func TestCreateProviderReusesActivePresetAPIKeyWhenRequested(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+	_, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Primary",
+		BaseURL:      "https://primary.example.com/v1",
+		APIKey:       "shared-key",
+		Models:       []string{"model-a"},
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(primary) error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/ai/providers",
+		bytes.NewBufferString(`{"name":"Secondary","baseURL":"https://secondary.example.com/v1","reuseActiveApiKey":true,"models":["model-b"],"defaultModel":"model-b"}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &models.User{ID: 1, Username: "tester"})
+
+	NewHandler(service).CreateProvider(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d with body %s", http.StatusCreated, recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"name":"Secondary"`) {
+		t.Fatalf("expected created preset in response, got %s", recorder.Body.String())
+	}
+}
+
 func TestUpdateProviderUpdatesPresetAndReturnsState(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -271,5 +308,43 @@ func TestTestProviderReturnsResolvedConfiguration(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"resolvedModel":"gpt-4.1-mini"`) {
 		t.Fatalf("expected resolved model in response, got %s", recorder.Body.String())
+	}
+}
+
+func TestTestProviderReusesActivePresetAPIKeyWhenRequested(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tester := &capturingProviderTester{}
+	service := newTestServiceWithTester(t, &config.Config{
+		SessionSecret: "session-secret",
+	}, tester)
+	_, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Primary",
+		BaseURL:      "https://primary.example.com/v1",
+		APIKey:       "shared-key",
+		Models:       []string{"model-a"},
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(primary) error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/ai/providers/test",
+		bytes.NewBufferString(`{"baseURL":"https://secondary.example.com/v1","reuseActiveApiKey":true,"defaultModel":"model-b"}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &models.User{ID: 1})
+
+	NewHandler(service).TestProvider(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d with body %s", http.StatusOK, recorder.Code, recorder.Body.String())
+	}
+	if tester.lastConfig.APIKey != "shared-key" {
+		t.Fatalf("expected reused API key %q, got %q", "shared-key", tester.lastConfig.APIKey)
 	}
 }

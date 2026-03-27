@@ -59,7 +59,15 @@ func (s *Service) CreatePreset(userID uint, input CreatePresetInput) (*models.LL
 		return nil, err
 	}
 
-	encryptedAPIKey, err := s.crypter.Encrypt(normalized.APIKey)
+	apiKey := normalized.APIKey
+	if apiKey == "" && normalized.ReuseActiveAPIKey {
+		apiKey, err = s.resolveActivePresetAPIKey(userID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	encryptedAPIKey, err := s.crypter.Encrypt(apiKey)
 	if err != nil {
 		return nil, fmt.Errorf("encrypt provider API key: %w", err)
 	}
@@ -69,7 +77,7 @@ func (s *Service) CreatePreset(userID uint, input CreatePresetInput) (*models.LL
 		Name:            normalized.Name,
 		BaseURL:         normalized.BaseURL,
 		EncryptedAPIKey: encryptedAPIKey,
-		APIKeyHint:      apiKeyHint(normalized.APIKey),
+		APIKeyHint:      apiKeyHint(apiKey),
 		Models:          normalized.Models,
 		DefaultModel:    normalized.DefaultModel,
 		IsActive:        true,

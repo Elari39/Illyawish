@@ -48,11 +48,12 @@ type ProviderStateDTO struct {
 }
 
 type createProviderRequest struct {
-	Name         string   `json:"name"`
-	BaseURL      string   `json:"baseURL"`
-	APIKey       string   `json:"apiKey"`
-	Models       []string `json:"models"`
-	DefaultModel string   `json:"defaultModel"`
+	Name              string   `json:"name"`
+	BaseURL           string   `json:"baseURL"`
+	APIKey            string   `json:"apiKey"`
+	ReuseActiveAPIKey bool     `json:"reuseActiveApiKey"`
+	Models            []string `json:"models"`
+	DefaultModel      string   `json:"defaultModel"`
 }
 
 type updateProviderRequest struct {
@@ -64,10 +65,11 @@ type updateProviderRequest struct {
 }
 
 type testProviderRequest struct {
-	ProviderID   *uint  `json:"providerId"`
-	BaseURL      string `json:"baseURL"`
-	APIKey       string `json:"apiKey"`
-	DefaultModel string `json:"defaultModel"`
+	ProviderID        *uint  `json:"providerId"`
+	BaseURL           string `json:"baseURL"`
+	APIKey            string `json:"apiKey"`
+	ReuseActiveAPIKey bool   `json:"reuseActiveApiKey"`
+	DefaultModel      string `json:"defaultModel"`
 }
 
 func NewHandler(service *Service, auditServices ...*audit.Service) *Handler {
@@ -105,11 +107,12 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 	}
 
 	preset, err := h.service.CreatePreset(user.ID, CreatePresetInput{
-		Name:         req.Name,
-		BaseURL:      req.BaseURL,
-		APIKey:       req.APIKey,
-		Models:       req.Models,
-		DefaultModel: req.DefaultModel,
+		Name:              req.Name,
+		BaseURL:           req.BaseURL,
+		APIKey:            req.APIKey,
+		ReuseActiveAPIKey: req.ReuseActiveAPIKey,
+		Models:            req.Models,
+		DefaultModel:      req.DefaultModel,
 	})
 	if err != nil {
 		handleProviderError(c, err)
@@ -199,10 +202,11 @@ func (h *Handler) TestProvider(c *gin.Context) {
 	}
 
 	result, err := h.service.TestPreset(c.Request.Context(), user.ID, TestPresetInput{
-		PresetID:     req.ProviderID,
-		BaseURL:      req.BaseURL,
-		APIKey:       req.APIKey,
-		DefaultModel: req.DefaultModel,
+		PresetID:          req.ProviderID,
+		BaseURL:           req.BaseURL,
+		APIKey:            req.APIKey,
+		ReuseActiveAPIKey: req.ReuseActiveAPIKey,
+		DefaultModel:      req.DefaultModel,
 	})
 	if err != nil {
 		handleProviderError(c, err)

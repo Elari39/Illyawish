@@ -5,6 +5,7 @@ import { providerApi } from '../../../lib/api'
 import type { ProviderPreset, ProviderState } from '../../../types/chat'
 import type { ProviderEditorMode, ProviderFormState } from '../types'
 import {
+  canReuseActivePresetAPIKey,
   createProviderForm,
   hasProviderFormErrors,
   normalizeModelEntries,
@@ -143,6 +144,10 @@ export function useProviderSettings({
     return trimmedAPIKey
   }
 
+  function canReuseActiveAPIKeyForNewPreset() {
+    return canReuseActivePresetAPIKey(providerStateRef.current)
+  }
+
   function handleStartNewProvider() {
     const nextProviderEditorMode: ProviderEditorMode = { type: 'new' }
     providerEditorModeRef.current = nextProviderEditorMode
@@ -196,8 +201,13 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
+      const canReuseActiveAPIKey =
+        providerEditorMode.type !== 'edit' &&
+        canReuseActiveAPIKeyForNewPreset()
       const validation = validateProviderForm(providerForm, {
-        requireAPIKey: providerEditorMode.type !== 'edit',
+        requireAPIKey:
+          providerEditorMode.type !== 'edit' &&
+          !canReuseActiveAPIKey,
         t,
       })
       if (hasProviderFormErrors(validation.errors)) {
@@ -210,6 +220,8 @@ export function useProviderSettings({
 
       const models = normalizeModelEntries(providerForm.models)
       const nextAPIKey = resolveSubmittedAPIKey()
+      const shouldReuseActiveAPIKey =
+        canReuseActiveAPIKey && !nextAPIKey
       const nextState = providerEditorMode.type === 'edit'
         ? await providerApi.update(providerEditorMode.providerId, {
             name: providerForm.name,
@@ -221,7 +233,8 @@ export function useProviderSettings({
         : await providerApi.create({
             name: providerForm.name,
             baseURL: providerForm.baseURL,
-            apiKey: providerForm.apiKey.trim(),
+            ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
+            ...(shouldReuseActiveAPIKey ? { reuseActiveApiKey: true } : {}),
             models,
             defaultModel: validation.defaultModel,
           })
@@ -259,8 +272,13 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
+      const canReuseActiveAPIKey =
+        providerEditorMode.type !== 'edit' &&
+        canReuseActiveAPIKeyForNewPreset()
       const validation = validateProviderForm(providerForm, {
-        requireAPIKey: providerEditorMode.type !== 'edit',
+        requireAPIKey:
+          providerEditorMode.type !== 'edit' &&
+          !canReuseActiveAPIKey,
         t,
       })
       if (hasProviderFormErrors(validation.errors)) {
@@ -272,12 +290,15 @@ export function useProviderSettings({
       }
 
       const nextAPIKey = resolveSubmittedAPIKey()
+      const shouldReuseActiveAPIKey =
+        canReuseActiveAPIKey && !nextAPIKey
       const result = await providerApi.test({
         ...(providerEditorMode.type === 'edit'
           ? { providerId: providerEditorMode.providerId }
           : {}),
         baseURL: providerForm.baseURL,
         ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
+        ...(shouldReuseActiveAPIKey ? { reuseActiveApiKey: true } : {}),
         defaultModel: validation.defaultModel,
       })
       showToast(result.message, 'success')

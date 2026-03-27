@@ -56,11 +56,12 @@ type State struct {
 }
 
 type CreatePresetInput struct {
-	Name         string
-	BaseURL      string
-	APIKey       string
-	Models       []string
-	DefaultModel string
+	Name              string
+	BaseURL           string
+	APIKey            string
+	ReuseActiveAPIKey bool
+	Models            []string
+	DefaultModel      string
 }
 
 type UpdatePresetInput struct {
@@ -79,10 +80,11 @@ type ResolvedProvider struct {
 }
 
 type TestPresetInput struct {
-	PresetID     *uint
-	BaseURL      string
-	APIKey       string
-	DefaultModel string
+	PresetID          *uint
+	BaseURL           string
+	APIKey            string
+	ReuseActiveAPIKey bool
+	DefaultModel      string
 }
 
 type TestResult struct {
@@ -144,7 +146,7 @@ func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, erro
 	}
 
 	apiKey := strings.TrimSpace(input.APIKey)
-	if apiKey == "" {
+	if apiKey == "" && !input.ReuseActiveAPIKey {
 		return CreatePresetInput{}, requestError{message: "provider API key is required"}
 	}
 
@@ -157,11 +159,12 @@ func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, erro
 	}
 
 	return CreatePresetInput{
-		Name:         name,
-		BaseURL:      baseURL,
-		APIKey:       apiKey,
-		Models:       models,
-		DefaultModel: defaultModel,
+		Name:              name,
+		BaseURL:           baseURL,
+		APIKey:            apiKey,
+		ReuseActiveAPIKey: input.ReuseActiveAPIKey,
+		Models:            models,
+		DefaultModel:      defaultModel,
 	}, nil
 }
 
@@ -400,6 +403,14 @@ func (s *Service) resolveTestConfig(userID uint, input TestPresetInput) (llm.Pro
 			if err != nil {
 				return llm.ProviderConfig{}, fmt.Errorf("decrypt provider API key: %w", err)
 			}
+		}
+	}
+
+	if apiKey == "" && input.ReuseActiveAPIKey {
+		var err error
+		apiKey, err = s.resolveActivePresetAPIKey(userID)
+		if err != nil {
+			return llm.ProviderConfig{}, err
 		}
 	}
 
