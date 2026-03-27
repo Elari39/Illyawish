@@ -43,6 +43,7 @@ interface UseChatSessionOptions {
   setChatError: (value: string | null) => void
   showToast: (message: string, variant?: ToastVariant) => void
   insertCreatedConversation: (conversation: Conversation) => void
+  removeConversationFromList: (conversationId: number) => void
   syncConversationIntoList: (conversation: Conversation) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
   navigateToConversation: (conversationId: number, replace?: boolean) => void
@@ -74,6 +75,7 @@ export function useChatSession({
   setChatError,
   showToast,
   insertCreatedConversation,
+  removeConversationFromList,
   syncConversationIntoList,
   loadConversations,
   navigateToConversation,
@@ -159,6 +161,29 @@ export function useChatSession({
   navigateHomeRef.current = navigateHome
   setSkipAutoResumeRef.current = setSkipAutoResume
   tRef.current = t
+
+  async function cleanupEmptyCreatedConversation(conversationId: number) {
+    const reconciled = await reconcileConversationState(conversationId, {
+      clearErrorOnSuccess: false,
+    })
+    if (!reconciled || reconciled.messages.length > 0) {
+      return
+    }
+
+    try {
+      await chatApi.deleteConversation(conversationId)
+    } catch {
+      return
+    }
+
+    removeConversationFromList(conversationId)
+    clearLastConversationId(conversationId)
+    setSkipAutoResumeRef.current(true)
+    activeConversationIdRef.current = null
+    setPendingConversation(null)
+    setMessages([])
+    navigateHomeRef.current(true)
+  }
 
   const canSubmitComposer =
     !isSending &&
@@ -549,34 +574,32 @@ export function useChatSession({
 
     const optimisticAssistantId = -(Date.now() + 1)
     let conversationId = activeConversationId
+    let createdConversationId: number | null = null
     let generation: ActiveGenerationState | null = null
 
     try {
       let conversation = currentConversation
 
       if (!conversationId) {
-        const createdConversation = await chatApi.createConversation()
-        const configuredConversation = await chatApi.updateConversation(
-          createdConversation.id,
-          {
-            ...buildConversationMetadataUpdate(
-              conversationFolderDraft,
-              conversationTagsDraft,
-            ),
-            settings: {
-              ...settingsDraft,
-              model: '',
-              temperature: null,
-              maxTokens: null,
-              contextWindowTurns: null,
-            },
+        const createdConversation = await chatApi.createConversation({
+          ...buildConversationMetadataUpdate(
+            conversationFolderDraft,
+            conversationTagsDraft,
+          ),
+          settings: {
+            ...settingsDraft,
+            model: '',
+            temperature: null,
+            maxTokens: null,
+            contextWindowTurns: null,
           },
-        )
-        conversation = configuredConversation
-        conversationId = configuredConversation.id
+        })
+        conversation = createdConversation
+        conversationId = createdConversation.id
+        createdConversationId = createdConversation.id
         activeConversationIdRef.current = conversationId
-        setPendingConversation(configuredConversation)
-        insertCreatedConversation(configuredConversation)
+        setPendingConversation(createdConversation)
+        insertCreatedConversation(createdConversation)
         navigateToConversation(conversationId)
       }
 
@@ -646,7 +669,9 @@ export function useChatSession({
           }
         }),
       )
-      if (conversationId) {
+      if (createdConversationId) {
+        await cleanupEmptyCreatedConversation(createdConversationId)
+      } else if (conversationId) {
         await reconcileConversationState(conversationId, {
           clearErrorOnSuccess: false,
         })

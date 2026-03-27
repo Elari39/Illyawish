@@ -79,20 +79,53 @@ func (s *Service) ListConversations(
 	}, nil
 }
 
-func (s *Service) CreateConversation(userID uint) (*models.Conversation, error) {
+func (s *Service) CreateConversation(userID uint, input CreateConversationInput) (*models.Conversation, error) {
 	if err := s.enforceConversationQuota(userID); err != nil {
 		return nil, err
 	}
 
+	var settings ConversationSettings
+	if input.Settings != nil {
+		var err error
+		settings, err = sanitizeConversationSettings(input.Settings)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	folder := ""
+	if input.Folder != nil {
+		normalizedFolder, err := sanitizeConversationFolder(*input.Folder)
+		if err != nil {
+			return nil, err
+		}
+		folder = normalizedFolder
+	}
+
+	tags := []string{}
+	if input.Tags != nil {
+		normalizedTags, err := sanitizeConversationTags(*input.Tags)
+		if err != nil {
+			return nil, err
+		}
+		tags = normalizedTags
+	}
+
 	conversation := &models.Conversation{
-		UserID:       userID,
-		Title:        defaultConversationTitle,
-		SystemPrompt: "",
+		UserID:             userID,
+		Title:              defaultConversationTitle,
+		SystemPrompt:       settings.SystemPrompt,
+		Model:              settings.Model,
+		Temperature:        cloneFloat32(settings.Temperature),
+		MaxTokens:          cloneInt(settings.MaxTokens),
+		ContextWindowTurns: cloneInt(settings.ContextWindowTurns),
+		Folder:             folder,
+		Tags:               tags,
 	}
 	if err := s.db.Create(conversation).Error; err != nil {
 		return nil, fmt.Errorf("create conversation: %w", err)
 	}
-	return conversation, nil
+	return s.GetConversation(userID, conversation.ID)
 }
 
 func (s *Service) ImportConversation(

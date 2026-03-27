@@ -342,6 +342,55 @@ func TestCreateConversationSerializesEmptyTagsArray(t *testing.T) {
 	}
 }
 
+func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	payload := bytes.NewReader([]byte(`{
+		"folder":"Work",
+		"tags":["urgent","backend"],
+		"settings":{
+			"systemPrompt":"Draft prompt",
+			"model":"gpt-4.1-mini",
+			"temperature":0.5,
+			"maxTokens":1024,
+			"contextWindowTurns":6
+		}
+	}`))
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations", payload)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).CreateConversation(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, recorder.Code)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, `"folder":"Work"`) {
+		t.Fatalf("expected folder in response, got %s", body)
+	}
+	if !strings.Contains(body, `"tags":["urgent","backend"]`) {
+		t.Fatalf("expected tags in response, got %s", body)
+	}
+	if !strings.Contains(body, `"systemPrompt":"Draft prompt"`) {
+		t.Fatalf("expected system prompt in response, got %s", body)
+	}
+	if !strings.Contains(body, `"model":"gpt-4.1-mini"`) {
+		t.Fatalf("expected model in response, got %s", body)
+	}
+}
+
 func TestRegenerateMessageByIDRejectsInvalidMessageID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

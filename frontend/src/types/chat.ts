@@ -123,6 +123,12 @@ export interface UpdateConversationPayload {
   settings?: ConversationSettings
 }
 
+export interface CreateConversationPayload {
+  folder?: string
+  tags?: string[]
+  settings?: ConversationSettings
+}
+
 export interface ImportConversationMessagePayload {
   role: 'user' | 'assistant'
   content: string

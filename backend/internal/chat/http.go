@@ -140,7 +140,14 @@ func (h *Handler) ListConversations(c *gin.Context) {
 
 func (h *Handler) CreateConversation(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversation, err := h.service.CreateConversation(user.ID)
+
+	var req CreateConversationInput
+	if err := bindOptionalJSON(c, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation payload"})
+		return
+	}
+
+	conversation, err := h.service.CreateConversation(user.ID, req)
 	if err != nil {
 		handleChatError(c, err)
 		return

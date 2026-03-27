@@ -20,6 +20,7 @@ import type {
   ChatSettings,
   CreateUserPayload,
   CreateProviderPayload,
+  CreateConversationPayload,
   ConversationSettings,
   Conversation,
   ConversationMessagesResponse,
@@ -204,11 +205,12 @@ export const chatApi = {
     const response = await this.listConversationsPage()
     return response.conversations
   },
-  async createConversation() {
+  async createConversation(payload?: CreateConversationPayload) {
     const response = await apiRequest<{ conversation: Conversation }>(
       '/api/conversations',
       {
         method: 'POST',
+        body: payload ? JSON.stringify(payload) : undefined,
       },
     )
     return normalizeConversation(response.conversation)

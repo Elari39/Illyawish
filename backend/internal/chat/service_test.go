@@ -478,6 +478,55 @@ func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
 	}
 }
 
+func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	temperature := float32(0.6)
+	maxTokens := 1536
+	contextWindowTurns := 8
+
+	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{
+		Folder: ptrString("  Work  "),
+		Tags:   &[]string{" urgent ", "backend", "URGENT"},
+		Settings: &ConversationSettings{
+			SystemPrompt:       "  Draft prompt  ",
+			Model:              "  gpt-4.1-mini  ",
+			Temperature:        &temperature,
+			MaxTokens:          &maxTokens,
+			ContextWindowTurns: &contextWindowTurns,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateConversation() error = %v", err)
+	}
+
+	if createdConversation.Title != defaultConversationTitle {
+		t.Fatalf("expected default title, got %q", createdConversation.Title)
+	}
+	if createdConversation.Folder != "Work" {
+		t.Fatalf("expected folder to be sanitized, got %q", createdConversation.Folder)
+	}
+	if len(createdConversation.Tags) != 3 || createdConversation.Tags[0] != "urgent" || createdConversation.Tags[1] != "backend" || createdConversation.Tags[2] != "URGENT" {
+		t.Fatalf("expected tags to be sanitized, got %#v", createdConversation.Tags)
+	}
+	if createdConversation.SystemPrompt != "Draft prompt" {
+		t.Fatalf("expected system prompt to be sanitized, got %q", createdConversation.SystemPrompt)
+	}
+	if createdConversation.Model != "gpt-4.1-mini" {
+		t.Fatalf("expected model to be sanitized, got %q", createdConversation.Model)
+	}
+	if createdConversation.Temperature == nil || *createdConversation.Temperature != temperature {
+		t.Fatalf("expected temperature to persist, got %#v", createdConversation.Temperature)
+	}
+	if createdConversation.MaxTokens == nil || *createdConversation.MaxTokens != maxTokens {
+		t.Fatalf("expected max tokens to persist, got %#v", createdConversation.MaxTokens)
+	}
+	if createdConversation.ContextWindowTurns == nil || *createdConversation.ContextWindowTurns != contextWindowTurns {
+		t.Fatalf("expected context window turns to persist, got %#v", createdConversation.ContextWindowTurns)
+	}
+}
+
 func TestListMessagesPageReturnsCursorForOlderMessages(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})

@@ -65,6 +65,7 @@ export function ChatPage() {
     setChatError,
     showToast: uiState.showToast,
     insertCreatedConversation: conversationList.insertCreatedConversation,
+    removeConversationFromList: conversationList.removeConversationFromList,
     syncConversationIntoList: conversationList.syncConversationIntoList,
     loadConversations: conversationList.loadConversations,
     navigateToConversation,

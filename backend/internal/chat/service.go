@@ -106,6 +106,12 @@ type ConversationUpdateInput struct {
 	Settings   *ConversationSettings `json:"settings"`
 }
 
+type CreateConversationInput struct {
+	Folder   *string               `json:"folder"`
+	Tags     *[]string             `json:"tags"`
+	Settings *ConversationSettings `json:"settings"`
+}
+
 type ImportMessageInput struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

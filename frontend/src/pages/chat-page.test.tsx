@@ -240,13 +240,6 @@ describe('ChatPage conversation navigation', () => {
     const createConversationMock = vi
       .spyOn(chatApi, 'createConversation')
       .mockResolvedValue(createdConversation)
-    const updateConversationMock = vi
-      .spyOn(chatApi, 'updateConversation')
-      .mockImplementation(async (conversationId, payload) => ({
-        ...createdConversation,
-        id: conversationId,
-        settings: payload.settings ?? createdConversation.settings,
-      }))
     const streamMessageMock = vi
       .spyOn(chatApi, 'streamMessage')
       .mockImplementation(async (conversationId, _payload, onEvent) => {
@@ -283,11 +276,128 @@ describe('ChatPage conversation navigation', () => {
     })
 
     expect(createConversationMock).toHaveBeenCalledTimes(1)
-    expect(updateConversationMock).toHaveBeenCalledTimes(1)
+    expect(createConversationMock).toHaveBeenCalledWith({
+      settings: {
+        ...defaultSettings,
+        model: '',
+        temperature: null,
+        maxTokens: null,
+        contextWindowTurns: null,
+      },
+    })
     expect(streamMessageMock).toHaveBeenCalledTimes(1)
     expect(
       getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === 5),
     ).toHaveLength(2)
+  })
+
+  it('deletes a newly created empty conversation when the first send fails before any messages persist', async () => {
+    const createdConversation = createConversation(5, 'Fresh chat')
+
+    vi.spyOn(chatApi, 'listConversationsPage')
+      .mockResolvedValueOnce({
+        conversations: [],
+        total: 0,
+      })
+      .mockResolvedValue({
+        conversations: [],
+        total: 0,
+      })
+
+    const createConversationMock = vi
+      .spyOn(chatApi, 'createConversation')
+      .mockResolvedValue(createdConversation)
+    const deleteConversationMock = vi
+      .spyOn(chatApi, 'deleteConversation')
+      .mockResolvedValue(undefined)
+    const getConversationMessagesMock = vi
+      .spyOn(chatApi, 'getConversationMessages')
+      .mockResolvedValue({
+        conversation: createdConversation,
+        messages: [],
+      })
+    vi.spyOn(chatApi, 'streamMessage')
+      .mockRejectedValue(new Error('provider unavailable'))
+
+    renderChatPage(['/chat'])
+
+    const textarea = await screen.findByPlaceholderText('Message Illyawish...')
+    fireEvent.change(textarea, { target: { value: 'Hello from test' } })
+
+    const form = textarea.closest('form')
+    if (!form) {
+      throw new Error('Composer form not found')
+    }
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(createConversationMock).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(getConversationMessagesMock).toHaveBeenCalledWith(5)
+    })
+    await waitFor(() => {
+      expect(deleteConversationMock).toHaveBeenCalledWith(5)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat')
+    })
+    expect(await screen.findByText('provider unavailable')).toBeInTheDocument()
+  })
+
+  it('preserves a newly created conversation when the failed first send already persisted messages', async () => {
+    const createdConversation = createConversation(5, 'Fresh chat')
+
+    vi.spyOn(chatApi, 'listConversationsPage')
+      .mockResolvedValueOnce({
+        conversations: [],
+        total: 0,
+      })
+      .mockResolvedValue({
+        conversations: [createdConversation],
+        total: 1,
+      })
+
+    const createConversationMock = vi
+      .spyOn(chatApi, 'createConversation')
+      .mockResolvedValue(createdConversation)
+    const deleteConversationMock = vi
+      .spyOn(chatApi, 'deleteConversation')
+      .mockResolvedValue(undefined)
+    const getConversationMessagesMock = vi
+      .spyOn(chatApi, 'getConversationMessages')
+      .mockResolvedValue({
+        conversation: createdConversation,
+        messages: [
+          createMessage(51, 5, 'user', 'Hello from test'),
+        ],
+      })
+    vi.spyOn(chatApi, 'streamMessage')
+      .mockRejectedValue(new Error('provider unavailable'))
+
+    renderChatPage(['/chat'])
+
+    const textarea = await screen.findByPlaceholderText('Message Illyawish...')
+    fireEvent.change(textarea, { target: { value: 'Hello from test' } })
+
+    const form = textarea.closest('form')
+    if (!form) {
+      throw new Error('Composer form not found')
+    }
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(createConversationMock).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(getConversationMessagesMock).toHaveBeenCalledWith(5)
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent('/chat/5')
+    })
+    expect(deleteConversationMock).not.toHaveBeenCalled()
   })
 
   it('exposes accessible icon controls with Illyawish branding', async () => {
@@ -791,13 +901,6 @@ describe('ChatPage conversation navigation', () => {
     const createConversationMock = vi
       .spyOn(chatApi, 'createConversation')
       .mockResolvedValue(createdConversation)
-    const updateConversationMock = vi
-      .spyOn(chatApi, 'updateConversation')
-      .mockImplementation(async (conversationId, payload) => ({
-        ...createdConversation,
-        id: conversationId,
-        settings: payload.settings ?? createdConversation.settings,
-      }))
     vi.spyOn(chatApi, 'streamMessage').mockImplementation(async (conversationId, _payload, onEvent) => {
       await onEvent({
         type: 'done',
@@ -850,11 +953,16 @@ describe('ChatPage conversation navigation', () => {
       expect(createConversationMock).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
-      expect(updateConversationMock).toHaveBeenCalledWith(5, {
-        settings: expect.objectContaining({
+      expect(createConversationMock).toHaveBeenCalledWith(expect.objectContaining({
+        settings: {
+          ...defaultSettings,
           systemPrompt: 'Draft session prompt',
-        }),
-      })
+          model: '',
+          temperature: null,
+          maxTokens: null,
+          contextWindowTurns: null,
+        },
+      }))
     })
   })
 
