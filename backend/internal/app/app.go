@@ -10,12 +10,15 @@ import (
 	"syscall"
 	"time"
 
+	"backend/internal/admin"
 	"backend/internal/attachment"
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/chat"
 	"backend/internal/config"
 	"backend/internal/database"
 	"backend/internal/llm"
+	"backend/internal/models"
 	"backend/internal/provider"
 
 	"github.com/gin-contrib/sessions"
@@ -36,7 +39,7 @@ const (
 	uploadBodyLimit     = 8 * 1024 * 1024
 	readHeaderTimeout   = 5 * time.Second
 	readTimeout         = 15 * time.Second
-	writeTimeout        = 30 * time.Second
+	writeTimeout        = 0
 	idleTimeout         = 60 * time.Second
 	shutdownTimeout     = 10 * time.Second
 )
@@ -54,6 +57,7 @@ func New() (*App, error) {
 
 	model := llm.New()
 	providerTester := provider.NewLLMProviderTester(model)
+	auditService := audit.NewService(db)
 
 	if err := auth.EnsureBootstrapUser(db, cfg); err != nil {
 		return nil, err
@@ -69,11 +73,13 @@ func New() (*App, error) {
 		return nil, err
 	}
 
-	authHandler := auth.NewHandler(db)
+	authHandler := auth.NewHandler(db, auditService)
 	chatService := chat.NewService(db, model, providerService, attachmentService)
 	chatHandler := chat.NewHandler(chatService)
-	providerHandler := provider.NewHandler(providerService)
+	providerHandler := provider.NewHandler(providerService, auditService)
 	attachmentHandler := attachment.NewHandler(attachmentService)
+	adminService := admin.NewService(db, auditService)
+	adminHandler := admin.NewHandler(adminService)
 
 	router := gin.New()
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -84,7 +90,7 @@ func New() (*App, error) {
 	store := cookie.NewStore([]byte(cfg.SessionSecret))
 	router.Use(sessions.Sessions("aichat_session", store))
 	router.Use(func(c *gin.Context) {
-		sessions.Default(c).Options(sessionOptionsForRequest(c.Request))
+		sessions.Default(c).Options(sessionOptionsForRequest(c.Request, cfg.TrustProxyHeadersForSecureCookies))
 		c.Next()
 	})
 
@@ -98,6 +104,8 @@ func New() (*App, error) {
 		authGroup.POST("/bootstrap", limitRequestBody(smallJSONBodyLimit), authHandler.Bootstrap)
 		authGroup.POST("/login", limitRequestBody(smallJSONBodyLimit), authHandler.Login)
 		authGroup.POST("/logout", auth.RequireAuth(db), authHandler.Logout)
+		authGroup.POST("/change-password", auth.RequireAuth(db), limitRequestBody(smallJSONBodyLimit), authHandler.ChangePassword)
+		authGroup.POST("/logout-all", auth.RequireAuth(db), authHandler.LogoutAll)
 		authGroup.GET("/me", auth.RequireAuth(db), authHandler.Me)
 	}
 
@@ -130,14 +138,19 @@ func New() (*App, error) {
 		api.DELETE("/conversations/:id", chatHandler.DeleteConversation)
 	}
 
-	server := &http.Server{
-		Addr:              fmt.Sprintf(":%s", cfg.ServerPort),
-		Handler:           router,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
+	adminAPI := api.Group("/admin")
+	adminAPI.Use(auth.RequireRole(models.UserRoleAdmin))
+	{
+		adminAPI.GET("/users", adminHandler.ListUsers)
+		adminAPI.POST("/users", limitRequestBody(mediumJSONBodyLimit), adminHandler.CreateUser)
+		adminAPI.PATCH("/users/:id", limitRequestBody(mediumJSONBodyLimit), adminHandler.UpdateUser)
+		adminAPI.POST("/users/:id/reset-password", limitRequestBody(smallJSONBodyLimit), adminHandler.ResetPassword)
+		adminAPI.GET("/audit-logs", adminHandler.ListAuditLogs)
+		adminAPI.GET("/workspace-policy", adminHandler.GetWorkspacePolicy)
+		adminAPI.PATCH("/workspace-policy", limitRequestBody(mediumJSONBodyLimit), adminHandler.UpdateWorkspacePolicy)
 	}
+
+	server := newHTTPServer(fmt.Sprintf(":%s", cfg.ServerPort), router)
 
 	return &App{
 		config: cfg,
@@ -146,22 +159,37 @@ func New() (*App, error) {
 	}, nil
 }
 
-func sessionOptionsForRequest(request *http.Request) sessions.Options {
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		// Disable the write deadline so long-lived SSE chat streams are not cut off.
+		WriteTimeout: writeTimeout,
+		IdleTimeout:  idleTimeout,
+	}
+}
+
+func sessionOptionsForRequest(request *http.Request, trustProxyHeaders bool) sessions.Options {
 	return sessions.Options{
 		Path:     "/",
 		HttpOnly: true,
 		MaxAge:   60 * 60 * 24 * 7,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(request),
+		Secure:   isSecureRequest(request, trustProxyHeaders),
 	}
 }
 
-func isSecureRequest(request *http.Request) bool {
+func isSecureRequest(request *http.Request, trustProxyHeaders bool) bool {
 	if request == nil {
 		return false
 	}
 	if request.TLS != nil {
 		return true
+	}
+	if !trustProxyHeaders {
+		return false
 	}
 
 	forwardedProto := strings.ToLower(strings.TrimSpace(request.Header.Get("X-Forwarded-Proto")))

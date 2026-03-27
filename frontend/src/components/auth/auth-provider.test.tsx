@@ -28,17 +28,26 @@ vi.mock('../../lib/api', () => ({
 }))
 
 function AuthProbe() {
-  const { isLoading, user } = useAuth()
+  const { authErrorCode, isLoading, user } = useAuth()
 
   return (
     <div>
       <span data-testid="loading">{String(isLoading)}</span>
       <span data-testid="username">{user?.username ?? 'anonymous'}</span>
+      <span data-testid="auth-error">{authErrorCode ?? 'none'}</span>
     </div>
   )
 }
 
 describe('AuthProvider', () => {
+  const currentUser = {
+    id: 1,
+    username: 'elaina',
+    role: 'admin' as const,
+    status: 'active' as const,
+    lastLoginAt: null,
+  }
+
   beforeEach(() => {
     meMock.mockReset()
     loginMock.mockReset()
@@ -46,7 +55,7 @@ describe('AuthProvider', () => {
   })
 
   it('loads the current user on mount', async () => {
-    meMock.mockResolvedValue({ id: 1, username: 'elaina' })
+    meMock.mockResolvedValue(currentUser)
 
     render(
       <AuthProvider>
@@ -59,11 +68,12 @@ describe('AuthProvider', () => {
     })
 
     expect(screen.getByTestId('username')).toHaveTextContent('elaina')
+    expect(screen.getByTestId('auth-error')).toHaveTextContent('none')
     expect(meMock).toHaveBeenCalledTimes(1)
   })
 
   it('clears the user when an unauthorized event is dispatched', async () => {
-    meMock.mockResolvedValue({ id: 1, username: 'elaina' })
+    meMock.mockResolvedValue(currentUser)
 
     render(
       <AuthProvider>
@@ -80,9 +90,10 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('username')).toHaveTextContent('anonymous')
     })
+    expect(screen.getByTestId('auth-error')).toHaveTextContent('none')
   })
 
-  it('treats backend outages as a signed-out state', async () => {
+  it('exposes backend outages without treating them as signed-out state', async () => {
     meMock.mockRejectedValue({ kind: 'network' })
 
     render(
@@ -96,5 +107,41 @@ describe('AuthProvider', () => {
     })
 
     expect(screen.getByTestId('username')).toHaveTextContent('anonymous')
+    expect(screen.getByTestId('auth-error')).toHaveTextContent('backend_unreachable')
+  })
+
+  it('keeps the current user when a refresh hits a backend outage', async () => {
+    meMock
+      .mockResolvedValueOnce(currentUser)
+      .mockRejectedValueOnce({ kind: 'network' })
+
+    function RefreshProbe() {
+      const { refreshUser } = useAuth()
+
+      return (
+        <button onClick={() => void refreshUser()} type="button">
+          refresh
+        </button>
+      )
+    }
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+        <RefreshProbe />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('username')).toHaveTextContent('elaina')
+    })
+
+    screen.getByRole('button', { name: 'refresh' }).click()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-error')).toHaveTextContent('backend_unreachable')
+    })
+
+    expect(screen.getByTestId('username')).toHaveTextContent('elaina')
   })
 })

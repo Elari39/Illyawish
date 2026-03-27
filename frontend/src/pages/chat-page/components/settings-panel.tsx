@@ -22,6 +22,7 @@ import type { ProviderFormState, SettingsTab } from '../types'
 import { resolveChatModelOptions } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
+import { SecuritySettingsTab } from './security-settings-tab'
 import { TransferSettingsTab } from './transfer-settings-tab'
 
 interface SettingsPanelProps {
@@ -145,6 +146,8 @@ export function SettingsPanel({
       ? 'settings.chatDescription'
       : activeTab === 'provider'
         ? 'settings.providerDescription'
+        : activeTab === 'security'
+          ? 'settings.securityDescription'
         : activeTab === 'language'
           ? 'settings.languageDescription'
           : 'settings.transferDescription'
@@ -213,6 +216,18 @@ export function SettingsPanel({
           <button
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'security'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('security')}
+            type="button"
+          >
+            {t('settings.securityTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'language'
                 ? 'bg-white text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
@@ -259,6 +274,8 @@ export function SettingsPanel({
             providerForm={providerForm}
             providerState={providerState}
           />
+        ) : activeTab === 'security' ? (
+          <SecuritySettingsTab />
         ) : activeTab === 'language' ? (
           <div className="mt-6">
             <div className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">

@@ -64,6 +64,13 @@ export async function toApiError(response: Response) {
   return new ApiError(message, response.status, code)
 }
 
+export function shouldNotifyUnauthorized(code?: string) {
+  return code === 'unauthorized' ||
+    code === 'session_expired' ||
+    code === 'session_revoked' ||
+    code === 'account_disabled'
+}
+
 export function notifyUnauthorized(code?: string) {
   if (typeof window === 'undefined') {
     return

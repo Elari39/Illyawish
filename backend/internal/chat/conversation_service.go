@@ -58,6 +58,10 @@ func (s *Service) ListConversations(
 }
 
 func (s *Service) CreateConversation(userID uint) (*models.Conversation, error) {
+	if err := s.enforceConversationQuota(userID); err != nil {
+		return nil, err
+	}
+
 	conversation := &models.Conversation{
 		UserID:       userID,
 		Title:        defaultConversationTitle,
@@ -73,6 +77,10 @@ func (s *Service) ImportConversation(
 	userID uint,
 	input ImportConversationInput,
 ) (*models.Conversation, error) {
+	if err := s.enforceConversationQuota(userID); err != nil {
+		return nil, err
+	}
+
 	title := strings.TrimSpace(input.Title)
 	if title == "" {
 		return nil, requestError{message: "conversation title is required"}

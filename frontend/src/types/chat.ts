@@ -56,6 +56,9 @@ export interface ProviderState {
 export interface User {
   id: number
   username: string
+  role: 'admin' | 'member'
+  status: 'active' | 'disabled'
+  lastLoginAt: string | null
 }
 
 export interface Conversation {
@@ -153,4 +156,62 @@ export interface StreamEvent {
   content?: string
   error?: string
   message?: Message
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string
+  newPassword: string
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  role: 'admin' | 'member'
+  status: 'active' | 'disabled'
+  lastLoginAt: string | null
+  maxConversations: number | null
+  maxAttachmentsPerMessage: number | null
+  dailyMessageLimit: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateUserPayload {
+  username: string
+  password: string
+  role: 'admin' | 'member'
+  status: 'active' | 'disabled'
+  maxConversations: number | null
+  maxAttachmentsPerMessage: number | null
+  dailyMessageLimit: number | null
+}
+
+export interface UpdateUserPayload {
+  role: 'admin' | 'member'
+  status: 'active' | 'disabled'
+  maxConversations: number | null
+  maxAttachmentsPerMessage: number | null
+  dailyMessageLimit: number | null
+}
+
+export interface ResetUserPasswordPayload {
+  newPassword: string
+}
+
+export interface AuditLog {
+  id: number
+  actorUsername: string
+  action: string
+  targetType: string
+  targetId: string
+  targetName: string
+  summary: string
+  createdAt: string
+}
+
+export interface WorkspacePolicy {
+  defaultUserRole: 'admin' | 'member'
+  defaultUserMaxConversations: number | null
+  defaultUserMaxAttachmentsPerMessage: number | null
+  defaultUserDailyMessageLimit: number | null
 }

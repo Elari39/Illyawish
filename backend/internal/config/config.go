@@ -28,6 +28,7 @@ type Config struct {
 	ServerPort            string
 	SessionSecret         string
 	SettingsEncryptionKey string
+	TrustProxyHeadersForSecureCookies bool
 	BootstrapUsername     string
 	BootstrapPassword     string
 }
@@ -42,6 +43,7 @@ type fileConfig struct {
 	ServerPort            string `json:"serverPort,omitempty"`
 	SessionSecret         string `json:"sessionSecret,omitempty"`
 	SettingsEncryptionKey string `json:"settingsEncryptionKey,omitempty"`
+	TrustProxyHeadersForSecureCookies bool `json:"trustProxyHeadersForSecureCookies"`
 	BootstrapUsername     string `json:"bootstrapUsername,omitempty"`
 	BootstrapPassword     string `json:"bootstrapPassword,omitempty"`
 }
@@ -92,6 +94,7 @@ func loadFromDataDir(dataDir string) (*Config, error) {
 		ServerPort:            normalized.ServerPort,
 		SessionSecret:         normalized.SessionSecret,
 		SettingsEncryptionKey: normalized.SettingsEncryptionKey,
+		TrustProxyHeadersForSecureCookies: normalized.TrustProxyHeadersForSecureCookies,
 		BootstrapUsername:     normalized.BootstrapUsername,
 		BootstrapPassword:     normalized.BootstrapPassword,
 	}
@@ -122,6 +125,7 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		ServerPort:            strings.TrimSpace(raw.ServerPort),
 		SessionSecret:         strings.TrimSpace(raw.SessionSecret),
 		SettingsEncryptionKey: strings.TrimSpace(raw.SettingsEncryptionKey),
+		TrustProxyHeadersForSecureCookies: raw.TrustProxyHeadersForSecureCookies,
 		BootstrapUsername:     strings.TrimSpace(raw.BootstrapUsername),
 		BootstrapPassword:     strings.TrimSpace(raw.BootstrapPassword),
 	}

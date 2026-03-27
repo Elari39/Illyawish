@@ -59,8 +59,11 @@ func createFirstUser(db *gorm.DB, username string, password string) (*models.Use
 		}
 
 		user := &models.User{
-			Username:     username,
-			PasswordHash: string(hash),
+			Username:       username,
+			PasswordHash:   string(hash),
+			Role:           models.UserRoleAdmin,
+			Status:         models.UserStatusActive,
+			SessionVersion: 1,
 		}
 		if err := tx.Create(user).Error; err != nil {
 			return fmt.Errorf("create bootstrap user: %w", err)

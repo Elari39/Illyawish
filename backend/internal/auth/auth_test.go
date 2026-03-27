@@ -1,13 +1,19 @@
 package auth
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"backend/internal/config"
 	"backend/internal/models"
 
+	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -88,6 +94,49 @@ func TestLoginRateLimiterBlocksAfterRepeatedFailures(t *testing.T) {
 	}
 }
 
+func TestChangePasswordRejectsWrongCurrentPasswordWithoutSessionError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db := newAuthTestDB(t)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte("super-secret"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("GenerateFromPassword() error = %v", err)
+	}
+	user := &models.User{
+		Username:       "elaina",
+		PasswordHash:   string(passwordHash),
+		Role:           models.UserRoleAdmin,
+		Status:         models.UserStatusActive,
+		SessionVersion: 1,
+	}
+	if err := db.Create(user).Error; err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	payload, err := json.Marshal(changePasswordRequest{
+		CurrentPassword: "wrong-password",
+		NewPassword:     "brand-new-secret",
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/auth/change-password", bytes.NewReader(payload))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set(contextKeyUser, user)
+
+	NewHandler(db).ChangePassword(ctx)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
+	if body := recorder.Body.String(); !jsonContains(body, `"code":"validation_failed"`) {
+		t.Fatalf("expected validation_failed response, got %s", body)
+	}
+}
+
 func newAuthTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -101,4 +150,8 @@ func newAuthTestDB(t *testing.T) *gorm.DB {
 	}
 
 	return db
+}
+
+func jsonContains(body string, needle string) bool {
+	return bytes.Contains([]byte(body), []byte(needle))
 }

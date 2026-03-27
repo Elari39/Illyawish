@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"backend/internal/audit"
 	"backend/internal/auth"
 	"backend/internal/models"
 
@@ -17,6 +18,7 @@ const timeFormat = "2006-01-02T15:04:05Z07:00"
 
 type Handler struct {
 	service *Service
+	audit   *audit.Service
 }
 
 type ProviderPresetDTO struct {
@@ -69,8 +71,12 @@ type testProviderRequest struct {
 	DefaultModel string `json:"defaultModel"`
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, auditServices ...*audit.Service) *Handler {
+	handler := &Handler{service: service}
+	if len(auditServices) > 0 {
+		handler.audit = auditServices[0]
+	}
+	return handler
 }
 
 func (h *Handler) ListProviders(c *gin.Context) {
@@ -99,16 +105,24 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.service.CreatePreset(user.ID, CreatePresetInput{
+	preset, err := h.service.CreatePreset(user.ID, CreatePresetInput{
 		Name:         req.Name,
 		BaseURL:      req.BaseURL,
 		APIKey:       req.APIKey,
 		Models:       req.Models,
 		DefaultModel: req.DefaultModel,
-	}); err != nil {
+	})
+	if err != nil {
 		handleProviderError(c, err)
 		return
 	}
+	h.recordAudit(
+		user,
+		"provider.preset_created",
+		strconv.FormatUint(uint64(preset.ID), 10),
+		preset.Name,
+		"Created provider preset",
+	)
 
 	h.renderProviderState(c, user.ID, http.StatusCreated)
 }
@@ -137,6 +151,7 @@ func (h *Handler) UpdateProvider(c *gin.Context) {
 		handleProviderError(c, err)
 		return
 	}
+	h.recordAudit(user, "provider.preset_updated", strconv.FormatUint(uint64(presetID), 10), "", "Updated provider preset")
 
 	h.renderProviderState(c, user.ID, http.StatusOK)
 }
@@ -153,6 +168,7 @@ func (h *Handler) ActivateProvider(c *gin.Context) {
 		handleProviderError(c, err)
 		return
 	}
+	h.recordAudit(user, "provider.preset_activated", strconv.FormatUint(uint64(presetID), 10), "", "Activated provider preset")
 
 	h.renderProviderState(c, user.ID, http.StatusOK)
 }
@@ -169,6 +185,7 @@ func (h *Handler) DeleteProvider(c *gin.Context) {
 		handleProviderError(c, err)
 		return
 	}
+	h.recordAudit(user, "provider.preset_deleted", strconv.FormatUint(uint64(presetID), 10), "", "Deleted provider preset")
 
 	h.renderProviderState(c, user.ID, http.StatusOK)
 }
@@ -269,6 +286,13 @@ func (h *Handler) toProviderPresetDTO(
 		CreatedAt:    preset.CreatedAt.Format(timeFormat),
 		UpdatedAt:    preset.UpdatedAt.Format(timeFormat),
 	}, nil
+}
+
+func (h *Handler) recordAudit(actor *models.User, action string, targetID string, targetName string, summary string) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.Record(actor, action, "provider_preset", targetID, targetName, summary)
 }
 
 func handleProviderError(c *gin.Context, err error) {

@@ -33,6 +33,9 @@ func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	if len(cfg.SettingsEncryptionKey) != 64 {
 		t.Fatalf("expected generated encryption key, got %q", cfg.SettingsEncryptionKey)
 	}
+	if cfg.TrustProxyHeadersForSecureCookies {
+		t.Fatal("expected trust proxy headers for secure cookies to default to false")
+	}
 
 	configPath := filepath.Join(dataDir, defaultConfigFileName)
 	if _, err := os.Stat(configPath); err != nil {
@@ -92,6 +95,9 @@ func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
 	if cfg.SettingsEncryptionKey != "existing-settings-secret" {
 		t.Fatalf("expected settings encryption key to be reused, got %q", cfg.SettingsEncryptionKey)
 	}
+	if cfg.TrustProxyHeadersForSecureCookies {
+		t.Fatal("expected trust proxy headers for secure cookies to remain false when omitted")
+	}
 }
 
 func TestLoadFromDataDirBackfillsMissingEncryptionKey(t *testing.T) {
@@ -127,6 +133,34 @@ func TestLoadFromDataDirBackfillsMissingEncryptionKey(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), `"settingsEncryptionKey"`) {
 		t.Fatalf("expected generated settings encryption key to be persisted, got %s", string(payload))
+	}
+	if !strings.Contains(string(payload), `"trustProxyHeadersForSecureCookies": false`) {
+		t.Fatalf("expected trust proxy headers flag to be persisted, got %s", string(payload))
+	}
+}
+
+func TestLoadFromDataDirLoadsTrustedProxyCookieFlag(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "trustProxyHeadersForSecureCookies": true
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
+	if err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	if !cfg.TrustProxyHeadersForSecureCookies {
+		t.Fatal("expected trust proxy headers for secure cookies to load from config")
 	}
 }
 

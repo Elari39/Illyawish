@@ -24,7 +24,7 @@ export interface ComposerAttachment {
   revokeOnCleanup: boolean
 }
 
-export type SettingsTab = 'chat' | 'provider' | 'language' | 'transfer'
+export type SettingsTab = 'chat' | 'provider' | 'security' | 'language' | 'transfer'
 
 export interface ProviderFormErrors {
   name?: string

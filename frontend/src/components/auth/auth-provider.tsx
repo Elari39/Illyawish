@@ -16,6 +16,7 @@ import { AuthContext } from './auth-context'
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [authErrorCode, setAuthErrorCode] = useState<'backend_unreachable' | undefined>(undefined)
 
   useEffect(() => {
     void refreshUser()
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     function handleUnauthorized() {
       setUser(null)
+      setAuthErrorCode(undefined)
       setIsLoading(false)
     }
 
@@ -37,11 +39,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const nextUser = await authApi.me()
       setUser(nextUser)
+      setAuthErrorCode(undefined)
     } catch (error) {
-      if (!isUnauthorizedError(error) && !isNetworkError(error)) {
-        console.error(error)
+      if (isNetworkError(error)) {
+        setAuthErrorCode('backend_unreachable')
+      } else {
+        setAuthErrorCode(undefined)
       }
-      setUser(null)
+
+      if (isUnauthorizedError(error)) {
+        setUser(null)
+      } else if (!isNetworkError(error)) {
+        console.error(error)
+        setUser(null)
+      }
     } finally {
       setIsLoading(false)
     }
@@ -50,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(payload: LoginPayload) {
     const nextUser = await authApi.login(payload)
     setUser(nextUser)
+    setAuthErrorCode(undefined)
     return nextUser
   }
 
@@ -58,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await authApi.logout()
     } finally {
       setUser(null)
+      setAuthErrorCode(undefined)
     }
   }
 
@@ -66,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isLoading,
+        authErrorCode,
         login,
         logout,
         refreshUser,

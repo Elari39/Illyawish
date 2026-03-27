@@ -26,6 +26,18 @@ export function formatConversationDate(value: string, locale = 'en-US') {
   }).format(date)
 }
 
+export function formatDateTime(value: string, locale = 'en-US') {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 export function createLocalISOString() {
   return new Date().toISOString()
 }

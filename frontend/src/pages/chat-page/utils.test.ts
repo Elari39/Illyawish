@@ -1,5 +1,6 @@
 import { formatMessage, messages } from '../../i18n/messages'
 import type { I18nContextValue } from '../../i18n/context'
+import { formatDateTime } from '../../lib/utils'
 import {
   appendToStreamingMessage,
   buildConversationExportFilename,
@@ -131,6 +132,9 @@ describe('chat page utils', () => {
     expect(markdown).toContain('![diagram.png](/api/attachments/image-1/file)')
     expect(markdown).toContain('[notes.pdf](/api/attachments/file-1/file)')
     expect(markdown).toContain('Here is the summary.')
+    expect(markdown).toContain(
+      `Updated: ${formatDateTime('2026-03-27T12:34:56Z', 'en-US')}`,
+    )
   })
 
   it('builds a markdown export filename from the original title', () => {

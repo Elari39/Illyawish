@@ -347,6 +347,15 @@ export function ChatPage() {
             >
               {t('chat.settings')}
             </Button>
+            {user?.role === 'admin' ? (
+              <Button
+                className="px-3 py-2"
+                onClick={() => navigate('/admin')}
+                variant="secondary"
+              >
+                {t('chat.admin')}
+              </Button>
+            ) : null}
           </div>
         </header>
 

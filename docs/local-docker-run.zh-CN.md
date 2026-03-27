@@ -93,6 +93,20 @@ http://localhost:10170
 
 这些数据保存在宿主机上，不在容器镜像里。
 
+## 4.1 关于 `trustProxyHeadersForSecureCookies`
+
+默认情况下，`data/app.json` 里的：
+
+```json
+{
+  "trustProxyHeadersForSecureCookies": false
+}
+```
+
+应保持为 `false`，适用于本地直接通过 HTTP 访问前端或后端的情况。
+
+只有当你明确使用了受信任的 HTTPS 反向代理，并且代理向后端转发了 `X-Forwarded-Proto` 或 `X-Forwarded-Ssl` 这类头部时，才需要把它改成 `true`。
+
 ## 5. 如何验证是否运行成功
 
 先查看容器状态：

@@ -40,6 +40,9 @@ const authValue: AuthContextValue = {
   user: {
     id: 1,
     username: 'Elaina',
+    role: 'admin',
+    status: 'active',
+    lastLoginAt: null,
   },
   isLoading: false,
   login: vi.fn(),

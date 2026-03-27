@@ -22,6 +22,9 @@ func (s *Service) StreamAssistantReply(
 	if err != nil {
 		return err
 	}
+	if err := s.enforceDailyMessageQuota(userID); err != nil {
+		return err
+	}
 
 	conversation, err := s.GetConversation(userID, conversationID)
 	if err != nil {

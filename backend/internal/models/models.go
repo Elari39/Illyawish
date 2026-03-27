@@ -11,6 +11,12 @@ const (
 	MessageStatusStreaming = "streaming"
 	MessageStatusFailed    = "failed"
 	MessageStatusCancelled = "cancelled"
+
+	UserRoleAdmin  = "admin"
+	UserRoleMember = "member"
+
+	UserStatusActive   = "active"
+	UserStatusDisabled = "disabled"
 )
 
 type Attachment struct {
@@ -36,16 +42,24 @@ type User struct {
 	ID                        uint   `gorm:"primaryKey"`
 	Username                  string `gorm:"uniqueIndex;size:64;not null"`
 	PasswordHash              string `gorm:"size:255;not null"`
+	Role                      string `gorm:"size:32;not null;default:member"`
+	Status                    string `gorm:"size:32;not null;default:active"`
+	LastLoginAt               *time.Time
+	SessionVersion            uint `gorm:"not null;default:1"`
 	GlobalPrompt              string `gorm:"type:text;not null;default:''"`
 	DefaultModel              string `gorm:"size:128;not null;default:''"`
 	DefaultTemperature        *float32
 	DefaultMaxTokens          *int
 	DefaultContextWindowTurns *int
+	MaxConversations          *int
+	MaxAttachmentsPerMessage  *int
+	DailyMessageLimit         *int
 	CreatedAt                 time.Time
 	UpdatedAt                 time.Time
 	Conversations             []Conversation
 	LLMProviderPresets        []LLMProviderPreset
 	Attachments               []StoredAttachment
+	AuditLogs                 []AuditLog `gorm:"foreignKey:ActorID"`
 }
 
 type Conversation struct {
@@ -96,4 +110,26 @@ type LLMProviderPreset struct {
 	IsActive        bool     `gorm:"not null;default:false;uniqueIndex:idx_provider_active_per_user,priority:2,where:is_active = 1"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+}
+
+type AuditLog struct {
+	ID            uint `gorm:"primaryKey"`
+	ActorID       *uint
+	ActorUsername string `gorm:"size:64;not null;default:''"`
+	Action        string `gorm:"size:80;not null;index"`
+	TargetType    string `gorm:"size:80;not null;index"`
+	TargetID      string `gorm:"size:120;not null;default:''"`
+	TargetName    string `gorm:"size:255;not null;default:''"`
+	Summary       string `gorm:"type:text;not null;default:''"`
+	CreatedAt     time.Time `gorm:"index"`
+}
+
+type WorkspacePolicy struct {
+	ID                              uint `gorm:"primaryKey"`
+	DefaultUserRole                 string `gorm:"size:32;not null;default:member"`
+	DefaultUserMaxConversations     *int
+	DefaultUserMaxAttachmentsPerMsg *int
+	DefaultUserDailyMessageLimit    *int
+	CreatedAt                       time.Time
+	UpdatedAt                       time.Time
 }

@@ -1,5 +1,6 @@
 import type { I18nContextValue } from '../../i18n/context'
 import { ApiError } from '../../lib/http'
+import { formatDateTime } from '../../lib/utils'
 import type {
   Attachment,
   Conversation,
@@ -284,7 +285,7 @@ export function buildConversationMarkdown(
     `# ${conversation.title}`,
     '',
     `${t('markdown.model')}: ${conversation.settings.model || t('chat.defaultModel')}`,
-    `${t('markdown.updated')}: ${new Date(conversation.updatedAt).toLocaleString(locale)}`,
+    `${t('markdown.updated')}: ${formatDateTime(conversation.updatedAt, locale)}`,
     '',
   ]
 

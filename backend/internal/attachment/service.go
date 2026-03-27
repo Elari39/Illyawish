@@ -132,8 +132,12 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 }
 
 func (s *Service) ValidateForUser(userID uint, attachments []models.Attachment) ([]models.Attachment, error) {
-	if len(attachments) > maxAttachments {
-		return nil, requestError{message: fmt.Sprintf("a maximum of %d attachments can be attached", maxAttachments)}
+	effectiveMax, err := s.maxAttachmentsForUser(userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(attachments) > effectiveMax {
+		return nil, requestError{message: fmt.Sprintf("a maximum of %d attachments can be attached", effectiveMax)}
 	}
 
 	normalized := make([]models.Attachment, 0, len(attachments))
@@ -157,6 +161,22 @@ func (s *Service) ValidateForUser(userID uint, attachments []models.Attachment) 
 	}
 
 	return normalized, nil
+}
+
+func (s *Service) maxAttachmentsForUser(userID uint) (int, error) {
+	effectiveMax := maxAttachments
+
+	var user models.User
+	if err := s.db.Select("max_attachments_per_message").First(&user, userID).Error; err != nil {
+		return 0, fmt.Errorf("load user attachment quota: %w", err)
+	}
+	if user.MaxAttachmentsPerMessage != nil && *user.MaxAttachmentsPerMessage < effectiveMax {
+		effectiveMax = *user.MaxAttachmentsPerMessage
+	}
+	if effectiveMax <= 0 {
+		effectiveMax = 1
+	}
+	return effectiveMax, nil
 }
 
 func (s *Service) OpenForUser(userID uint, attachmentID string) (*models.StoredAttachment, string, error) {

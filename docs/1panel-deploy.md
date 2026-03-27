@@ -171,6 +171,20 @@ http://127.0.0.1:5721
 
 The frontend container is the correct entrypoint because it serves the app and forwards `/api` to the backend. If you proxy the domain straight to the backend, the UI will not work correctly.
 
+## Cookie security setting for HTTPS reverse proxy
+
+Because 1Panel terminates HTTPS before forwarding traffic inward, set this in `data/app.json` after the first startup:
+
+```json
+{
+  "trustProxyHeadersForSecureCookies": true
+}
+```
+
+This allows the backend to trust `X-Forwarded-Proto` / `X-Forwarded-Ssl` when deciding whether the session cookie should use the `Secure` flag.
+
+Keep this value `false` for direct HTTP access without a trusted reverse proxy.
+
 ## 7. Updating the deployment later
 
 For future updates, the recommended server-side flow is:

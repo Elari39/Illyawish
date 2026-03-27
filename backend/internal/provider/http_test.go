@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"backend/internal/audit"
 	"backend/internal/config"
 	"backend/internal/models"
 
@@ -20,6 +21,10 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	service := newTestService(t, &config.Config{
 		SessionSecret: "session-secret",
 	})
+	if err := service.db.AutoMigrate(&models.AuditLog{}); err != nil {
+		t.Fatalf("migrate audit logs: %v", err)
+	}
+	auditService := audit.NewService(service.db)
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -29,9 +34,9 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 		bytes.NewBufferString(`{"name":"OpenAI","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","models":["gpt-4.1-mini","gpt-4.1"],"defaultModel":"gpt-4.1-mini"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
-	ctx.Set("current_user", &models.User{ID: 1})
+	ctx.Set("current_user", &models.User{ID: 1, Username: "tester"})
 
-	NewHandler(service).CreateProvider(ctx)
+	NewHandler(service, auditService).CreateProvider(ctx)
 
 	if recorder.Code != http.StatusCreated {
 		t.Fatalf("expected status %d, got %d", http.StatusCreated, recorder.Code)
@@ -49,6 +54,23 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	}
 	if payload.Presets[0].APIKey != "sk-test" {
 		t.Fatalf("expected decrypted API key in response, got %q", payload.Presets[0].APIKey)
+	}
+
+	var logs []models.AuditLog
+	if err := service.db.Order("id asc").Find(&logs).Error; err != nil {
+		t.Fatalf("query audit logs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 audit log, got %d", len(logs))
+	}
+	if logs[0].TargetType != "provider_preset" {
+		t.Fatalf("expected provider_preset target type, got %q", logs[0].TargetType)
+	}
+	if logs[0].TargetID != "1" {
+		t.Fatalf("expected audit log target id 1, got %q", logs[0].TargetID)
+	}
+	if logs[0].TargetName != "OpenAI" {
+		t.Fatalf("expected audit log target name OpenAI, got %q", logs[0].TargetName)
 	}
 }
 

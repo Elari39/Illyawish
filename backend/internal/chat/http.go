@@ -135,7 +135,7 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 	user := auth.CurrentUser(c)
 	conversation, err := h.service.CreateConversation(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create conversation"})
+		handleChatError(c, err)
 		return
 	}
 
@@ -593,6 +593,8 @@ func handleChatError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 	case errors.Is(err, provider.ErrNoProviderConfigured):
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+	case isQuotaExceededError(err):
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error(), "code": "quota_exceeded"})
 	case isRequestError(err):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 	default:
@@ -610,6 +612,7 @@ func errorMessage(err error) string {
 		errors.Is(err, ErrInvalidRegenerateAction) ||
 		errors.Is(err, ErrInvalidUserEdit) ||
 		errors.Is(err, provider.ErrNoProviderConfigured) ||
+		isQuotaExceededError(err) ||
 		errors.Is(err, gorm.ErrRecordNotFound) {
 		return err.Error()
 	}

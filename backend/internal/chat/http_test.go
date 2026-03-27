@@ -200,6 +200,39 @@ func TestImportConversationReturnsCreatedConversation(t *testing.T) {
 	}
 }
 
+func TestCreateConversationReturnsQuotaExceededWhenConversationLimitReached(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	maxConversations := 1
+	if err := db.Model(&models.User{}).
+		Where("id = ?", user.ID).
+		Update("max_conversations", maxConversations).Error; err != nil {
+		t.Fatalf("set max conversations: %v", err)
+	}
+
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations", nil)
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).CreateConversation(ctx)
+
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected status %d, got %d", http.StatusForbidden, recorder.Code)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, `"code":"quota_exceeded"`) {
+		t.Fatalf("expected quota_exceeded response, got %s", body)
+	}
+}
+
 func TestRegenerateMessageByIDRejectsInvalidMessageID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

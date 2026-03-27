@@ -5,13 +5,18 @@ import {
   isNetworkError,
   isUnauthorizedError,
   notifyUnauthorized,
+  shouldNotifyUnauthorized,
   toApiError,
 } from './http'
 import type {
   Attachment,
+  AdminUser,
+  AuditLog,
   BootstrapPayload,
   BootstrapStatus,
+  ChangePasswordPayload,
   ChatSettings,
+  CreateUserPayload,
   CreateProviderPayload,
   ConversationSettings,
   Conversation,
@@ -19,13 +24,16 @@ import type {
   LoginPayload,
   Message,
   ProviderState,
+  ResetUserPasswordPayload,
   SendMessagePayload,
   StreamEvent,
   TestProviderPayload,
   TestProviderResult,
+  UpdateUserPayload,
   UpdateProviderPayload,
   UpdateConversationPayload,
   User,
+  WorkspacePolicy,
 } from '../types/chat'
 
 const API_BASE_URL = ''
@@ -48,7 +56,7 @@ async function apiRequest<T>(
 
   if (!response.ok) {
     const apiError = await toApiError(response)
-    if (response.status === 401) {
+    if (response.status === 401 && shouldNotifyUnauthorized(apiError.code)) {
       notifyUnauthorized(apiError.code)
     }
     throw apiError
@@ -84,6 +92,17 @@ export const authApi = {
   },
   logout() {
     return apiRequest<{ ok: boolean }>('/api/auth/logout', {
+      method: 'POST',
+    })
+  },
+  changePassword(payload: ChangePasswordPayload) {
+    return apiRequest<{ ok: boolean }>('/api/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+  logoutAll() {
+    return apiRequest<{ ok: boolean }>('/api/auth/logout-all', {
       method: 'POST',
     })
   },
@@ -274,6 +293,58 @@ export const providerApi = {
   test(payload: TestProviderPayload) {
     return apiRequest<TestProviderResult>('/api/ai/providers/test', {
       method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+}
+
+export const adminApi = {
+  async listUsers() {
+    const response = await apiRequest<{ users: AdminUser[] }>('/api/admin/users')
+    return response.users
+  },
+  async createUser(payload: CreateUserPayload) {
+    const response = await apiRequest<{ user: AdminUser }>('/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.user
+  },
+  async updateUser(userId: number, payload: UpdateUserPayload) {
+    const response = await apiRequest<{ user: AdminUser }>(`/api/admin/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+    return response.user
+  },
+  async resetUserPassword(userId: number, payload: ResetUserPasswordPayload) {
+    const response = await apiRequest<{ user: AdminUser }>(`/api/admin/users/${userId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.user
+  },
+  async listAuditLogs(params?: { action?: string; limit?: number; offset?: number }) {
+    const search = new URLSearchParams()
+    if (params?.action) {
+      search.set('action', params.action)
+    }
+    if (typeof params?.limit === 'number') {
+      search.set('limit', String(params.limit))
+    }
+    if (typeof params?.offset === 'number') {
+      search.set('offset', String(params.offset))
+    }
+
+    const query = search.toString()
+    return apiRequest<{ logs: AuditLog[]; total: number }>(`/api/admin/audit-logs${query ? `?${query}` : ''}`)
+  },
+  getWorkspacePolicy() {
+    return apiRequest<WorkspacePolicy>('/api/admin/workspace-policy')
+  },
+  updateWorkspacePolicy(payload: WorkspacePolicy) {
+    return apiRequest<WorkspacePolicy>('/api/admin/workspace-policy', {
+      method: 'PATCH',
       body: JSON.stringify(payload),
     })
   },

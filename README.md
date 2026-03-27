@@ -85,6 +85,16 @@ You can also optionally preconfigure first-user bootstrap credentials in `data/a
 }
 ```
 
+If you deploy behind an HTTPS reverse proxy that forwards plain HTTP to the Go backend, also set:
+
+```json
+{
+  "trustProxyHeadersForSecureCookies": true
+}
+```
+
+Keep this value `false` for direct local HTTP access such as `http://localhost:5721` or `http://localhost:10170`.
+
 ## Local development
 
 Start the backend:

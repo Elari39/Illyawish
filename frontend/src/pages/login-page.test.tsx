@@ -20,6 +20,9 @@ describe('LoginPage', () => {
     login: vi.fn().mockResolvedValue({
       id: 1,
       username: 'Elaina',
+      role: 'admin',
+      status: 'active',
+      lastLoginAt: null,
     }),
     logout: vi.fn(),
     refreshUser: vi.fn(),
