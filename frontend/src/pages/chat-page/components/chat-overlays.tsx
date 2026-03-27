@@ -34,6 +34,8 @@ interface ChatOverlaysProps {
   confirmation: ConfirmationState | null
   editingProviderId: number | null
   chatSettings: ChatSettings
+  conversationFolder: string
+  conversationTags: string
   isLoadingProviders: boolean
   isOpen: boolean
   isImporting: boolean
@@ -46,6 +48,8 @@ interface ChatOverlaysProps {
   providerState: ProviderState | null
   settings: ConversationSettings
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
+  setConversationFolder: Dispatch<SetStateAction<string>>
+  setConversationTags: Dispatch<SetStateAction<string>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
   toasts: ToastState[]
@@ -77,6 +81,8 @@ export function ChatOverlays({
   confirmation,
   editingProviderId,
   chatSettings,
+  conversationFolder,
+  conversationTags,
   isLoadingProviders,
   isOpen,
   isImporting,
@@ -89,6 +95,8 @@ export function ChatOverlays({
   providerState,
   settings,
   setChatSettings,
+  setConversationFolder,
+  setConversationTags,
   setSettings,
   transferConversation,
   toasts,
@@ -116,6 +124,8 @@ export function ChatOverlays({
       <SettingsPanel
         activeTab={activeTab}
         chatSettings={chatSettings}
+        conversationFolder={conversationFolder}
+        conversationTags={conversationTags}
         editingProviderId={editingProviderId}
         isLoadingProviders={isLoadingProviders}
         isOpen={isOpen}
@@ -143,6 +153,8 @@ export function ChatOverlays({
         providerState={providerState}
         settings={settings}
         setChatSettings={setChatSettings}
+        setConversationFolder={setConversationFolder}
+        setConversationTags={setConversationTags}
         setSettings={setSettings}
         transferConversation={transferConversation}
       />

@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
 
+import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n/use-i18n'
 import type { Conversation, Message } from '../../../types/chat'
 import { EmptyState } from './empty-state'
@@ -8,7 +9,9 @@ import { MessageBubble } from './message-bubble'
 interface MessageListProps {
   activeConversationId: number | null
   hasConversationShell: boolean
+  hasMoreMessages: boolean
   isLoadingMessages: boolean
+  isLoadingOlderMessages: boolean
   messages: Message[]
   latestUserMessage: Message | null
   isSending: boolean
@@ -18,6 +21,7 @@ interface MessageListProps {
   viewportRef: RefObject<HTMLDivElement | null>
   onContinueLast: () => void
   onEditMessage: (message: Message) => void
+  onLoadMore: () => void
   onRetryMessage: (message: Message) => void
   onRegenerateMessage: (message: Message) => void
 }
@@ -25,7 +29,9 @@ interface MessageListProps {
 export function MessageList({
   activeConversationId,
   hasConversationShell,
+  hasMoreMessages,
   isLoadingMessages,
+  isLoadingOlderMessages,
   messages,
   latestUserMessage,
   isSending,
@@ -35,6 +41,7 @@ export function MessageList({
   viewportRef,
   onContinueLast,
   onEditMessage,
+  onLoadMore,
   onRetryMessage,
   onRegenerateMessage,
 }: MessageListProps) {
@@ -52,6 +59,19 @@ export function MessageList({
         </div>
       ) : messages.length > 0 ? (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+          {hasMoreMessages ? (
+            <div className="flex justify-center">
+              <Button
+                disabled={isLoadingOlderMessages}
+                onClick={onLoadMore}
+                variant="secondary"
+              >
+                {isLoadingOlderMessages
+                  ? t('common.loading')
+                  : t('common.loadMore')}
+              </Button>
+            </div>
+          ) : null}
           {messages.map((message) => (
             <MessageBubble
               key={message.id}

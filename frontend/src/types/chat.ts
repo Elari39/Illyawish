@@ -30,7 +30,7 @@ export interface ProviderPreset {
   id: number
   name: string
   baseURL: string
-  apiKey: string
+  hasApiKey: boolean
   apiKeyHint: string
   models: string[]
   defaultModel: string
@@ -66,6 +66,8 @@ export interface Conversation {
   title: string
   isPinned: boolean
   isArchived: boolean
+  folder: string
+  tags: string[]
   settings: ConversationSettings
   createdAt: string
   updatedAt: string
@@ -79,6 +81,17 @@ export interface Message {
   attachments: Attachment[]
   status: MessageStatus
   createdAt: string
+}
+
+export interface MessagePagination {
+  hasMore: boolean
+  nextBeforeId: number | null
+}
+
+export interface ConversationMessagesResponse {
+  conversation: Conversation
+  messages: Message[]
+  pagination?: MessagePagination
 }
 
 export interface LoginPayload {
@@ -105,6 +118,8 @@ export interface UpdateConversationPayload {
   title?: string
   isPinned?: boolean
   isArchived?: boolean
+  folder?: string
+  tags?: string[]
   settings?: ConversationSettings
 }
 
@@ -207,6 +222,34 @@ export interface AuditLog {
   targetName: string
   summary: string
   createdAt: string
+}
+
+export interface AuditLogListParams {
+  actor?: string
+  action?: string
+  targetType?: string
+  dateFrom?: string
+  dateTo?: string
+  limit?: number
+  offset?: number
+}
+
+export interface ActiveProviderDistribution {
+  name: string
+  baseURL: string
+  userCount: number
+}
+
+export interface AdminUsageStats {
+  totalUsers: number
+  activeUsers: number
+  recentUsers: number
+  totalConversations: number
+  totalMessages: number
+  totalAttachments: number
+  configuredProviderPresets: number
+  activeProviderPresets: number
+  activeProviderDistribution: ActiveProviderDistribution[]
 }
 
 export interface WorkspacePolicy {

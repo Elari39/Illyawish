@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"backend/internal/audit"
@@ -46,6 +47,24 @@ type WorkspacePolicyDTO struct {
 	DefaultUserMaxConversations     *int   `json:"defaultUserMaxConversations"`
 	DefaultUserMaxAttachmentsPerMsg *int   `json:"defaultUserMaxAttachmentsPerMessage"`
 	DefaultUserDailyMessageLimit    *int   `json:"defaultUserDailyMessageLimit"`
+}
+
+type UsageStatsDTO struct {
+	TotalUsers                 int64              `json:"totalUsers"`
+	ActiveUsers                int64              `json:"activeUsers"`
+	RecentUsers                int64              `json:"recentUsers"`
+	TotalConversations         int64              `json:"totalConversations"`
+	TotalMessages              int64              `json:"totalMessages"`
+	TotalAttachments           int64              `json:"totalAttachments"`
+	ConfiguredProviderPresets  int64              `json:"configuredProviderPresets"`
+	ActiveProviderPresets      int64              `json:"activeProviderPresets"`
+	ActiveProviderDistribution []ProviderUsageDTO `json:"activeProviderDistribution"`
+}
+
+type ProviderUsageDTO struct {
+	Name      string `json:"name"`
+	BaseURL   string `json:"baseURL"`
+	UserCount int64  `json:"userCount"`
 }
 
 func NewHandler(service *Service) *Handler {
@@ -129,7 +148,21 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 func (h *Handler) ListAuditLogs(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	result, err := h.service.ListAuditLogs(auditListParams(c.Query("action"), limit, offset))
+	params, err := auditListParams(
+		c.Query("actor"),
+		c.Query("action"),
+		c.Query("targetType"),
+		c.Query("dateFrom"),
+		c.Query("dateTo"),
+		limit,
+		offset,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid audit filter", "code": "validation_failed"})
+		return
+	}
+
+	result, err := h.service.ListAuditLogs(params)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list audit logs"})
 		return
@@ -140,6 +173,15 @@ func (h *Handler) ListAuditLogs(c *gin.Context) {
 		logs = append(logs, toAuditLogDTO(&log))
 	}
 	c.JSON(http.StatusOK, gin.H{"logs": logs, "total": result.Total})
+}
+
+func (h *Handler) GetUsageStats(c *gin.Context) {
+	stats, err := h.service.GetUsageStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load usage stats"})
+		return
+	}
+	c.JSON(http.StatusOK, toUsageStatsDTO(stats))
 }
 
 func (h *Handler) GetWorkspacePolicy(c *gin.Context) {
@@ -193,12 +235,25 @@ func userIDParam(c *gin.Context) (uint, error) {
 	return uint(parsed), nil
 }
 
-func auditListParams(action string, limit int, offset int) audit.ListParams {
-	return audit.ListParams{
-		Action: action,
-		Limit:  limit,
-		Offset: offset,
+func auditListParams(actor string, action string, targetType string, dateFrom string, dateTo string, limit int, offset int) (audit.ListParams, error) {
+	parsedDateFrom, err := parseAuditDate(dateFrom, false)
+	if err != nil {
+		return audit.ListParams{}, err
 	}
+	parsedDateTo, err := parseAuditDate(dateTo, true)
+	if err != nil {
+		return audit.ListParams{}, err
+	}
+
+	return audit.ListParams{
+		Actor:      actor,
+		Action:     action,
+		TargetType: targetType,
+		DateFrom:   parsedDateFrom,
+		DateTo:     parsedDateTo,
+		Limit:      limit,
+		Offset:     offset,
+	}, nil
 }
 
 func toUserDTO(user *models.User) UserDTO {
@@ -244,10 +299,53 @@ func toWorkspacePolicyDTO(policy *models.WorkspacePolicy) WorkspacePolicyDTO {
 	}
 }
 
+func toUsageStatsDTO(stats *UsageStats) UsageStatsDTO {
+	distribution := make([]ProviderUsageDTO, 0, len(stats.ActiveProviderDistribution))
+	for _, item := range stats.ActiveProviderDistribution {
+		distribution = append(distribution, ProviderUsageDTO{
+			Name:      item.Name,
+			BaseURL:   item.BaseURL,
+			UserCount: item.UserCount,
+		})
+	}
+
+	return UsageStatsDTO{
+		TotalUsers:                 stats.TotalUsers,
+		ActiveUsers:                stats.ActiveUsers,
+		RecentUsers:                stats.RecentUsers,
+		TotalConversations:         stats.TotalConversations,
+		TotalMessages:              stats.TotalMessages,
+		TotalAttachments:           stats.TotalAttachments,
+		ConfiguredProviderPresets:  stats.ConfiguredProviderPresets,
+		ActiveProviderPresets:      stats.ActiveProviderPresets,
+		ActiveProviderDistribution: distribution,
+	}
+}
+
 func cloneInt(value *int) *int {
 	if value == nil {
 		return nil
 	}
 	copy := *value
 	return &copy
+}
+
+func parseAuditDate(raw string, inclusiveEndOfDay bool) (*time.Time, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil, nil
+	}
+
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return &parsed, nil
+	}
+
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return nil, err
+	}
+	if inclusiveEndOfDay {
+		parsed = parsed.Add(24 * time.Hour)
+	}
+	return &parsed, nil
 }

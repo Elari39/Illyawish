@@ -29,6 +29,8 @@ interface SettingsPanelProps {
   activeTab: SettingsTab
   editingProviderId: number | null
   chatSettings: ChatSettings
+  conversationFolder: string
+  conversationTags: string
   isLoadingProviders: boolean
   isImporting: boolean
   isOpen: boolean
@@ -42,6 +44,8 @@ interface SettingsPanelProps {
   providerForm: ProviderFormState
   providerState: ProviderState | null
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
+  setConversationFolder: Dispatch<SetStateAction<string>>
+  setConversationTags: Dispatch<SetStateAction<string>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   onClose: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
@@ -71,6 +75,8 @@ export function SettingsPanel({
   activeTab,
   editingProviderId,
   chatSettings,
+  conversationFolder,
+  conversationTags,
   isLoadingProviders,
   isImporting,
   isOpen,
@@ -84,6 +90,8 @@ export function SettingsPanel({
   providerForm,
   providerState,
   setChatSettings,
+  setConversationFolder,
+  setConversationTags,
   setSettings,
   onClose,
   onDeleteProvider,
@@ -254,8 +262,12 @@ export function SettingsPanel({
         {activeTab === 'chat' ? (
           <ChatSettingsTab
             chatSettings={chatSettings}
+            conversationFolder={conversationFolder}
+            conversationTags={conversationTags}
             modelOptions={modelOptions}
             settings={settings}
+            setConversationFolder={setConversationFolder}
+            setConversationTags={setConversationTags}
             setChatSettings={setChatSettings}
             setSettings={setSettings}
           />

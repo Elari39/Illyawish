@@ -27,95 +27,62 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const fallbackMessages = getFallbackMessages()
   const [initialLocale] = useState<AppLocale>(() => getInitialLocale())
   const [locale, setLocaleState] = useState<AppLocale>(() => initialLocale)
-  const [messageCatalog, setMessageCatalog] = useState(() =>
-    getCachedMessages(initialLocale) ?? null,
-  )
-  const [isHydrated, setIsHydrated] = useState(() => (
-    getCachedMessages(initialLocale) !== undefined
-  ))
+  const [loadedBundle, setLoadedBundle] = useState<{
+    locale: AppLocale
+    messages: TranslationTable
+  } | null>(() => {
+    const cachedCatalog = getCachedMessages(initialLocale)
+    if (!cachedCatalog) {
+      return null
+    }
+
+    return {
+      locale: initialLocale,
+      messages: cachedCatalog,
+    }
+  })
+  const messageCatalog =
+    getCachedMessages(locale) ??
+    (loadedBundle?.locale === locale ? loadedBundle.messages : fallbackMessages)
   const localeRequestIdRef = useRef(0)
   const pendingLocaleRef = useRef<AppLocale | null>(null)
 
   useEffect(() => {
-    if (!isHydrated || !messageCatalog) {
-      return
-    }
-
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, locale)
     document.documentElement.lang = locale
-  }, [isHydrated, locale, messageCatalog])
-
-  const commitLocale = useCallback((
-    nextLocale: AppLocale,
-    nextCatalog: TranslationTable,
-  ) => {
-    setLocaleState(nextLocale)
-    setMessageCatalog(nextCatalog)
-    setIsHydrated(true)
-  }, [])
-
-  const requestLocale = useCallback(async (
-    nextLocale: AppLocale,
-    options?: { fallbackOnFailure?: boolean },
-  ) => {
-    const requestId = ++localeRequestIdRef.current
-    pendingLocaleRef.current = nextLocale
-
-    try {
-      const nextCatalog = await loadMessages(nextLocale)
-      if (localeRequestIdRef.current !== requestId) {
-        return false
-      }
-
-      pendingLocaleRef.current = null
-      commitLocale(nextLocale, nextCatalog)
-      return true
-    } catch {
-      if (localeRequestIdRef.current !== requestId) {
-        return false
-      }
-
-      pendingLocaleRef.current = null
-      if (options?.fallbackOnFailure) {
-        commitLocale(DEFAULT_APP_LOCALE, fallbackMessages)
-      } else {
-        setIsHydrated(true)
-      }
-      return false
-    }
-  }, [commitLocale, fallbackMessages])
+  }, [locale])
 
   useEffect(() => {
-    if (messageCatalog) {
+    if (getCachedMessages(locale) || loadedBundle?.locale === locale) {
+      pendingLocaleRef.current = null
       return
     }
 
-    let cancelled = false
     const requestId = ++localeRequestIdRef.current
-    pendingLocaleRef.current = initialLocale
+    pendingLocaleRef.current = locale
 
-    void loadMessages(initialLocale)
+    void loadMessages(locale)
       .then((nextCatalog) => {
-        if (cancelled || localeRequestIdRef.current !== requestId) {
+        if (localeRequestIdRef.current !== requestId) {
           return
         }
 
         pendingLocaleRef.current = null
-        commitLocale(initialLocale, nextCatalog)
+        setLoadedBundle({
+          locale,
+          messages: nextCatalog,
+        })
       })
       .catch(() => {
-        if (cancelled || localeRequestIdRef.current !== requestId) {
+        if (localeRequestIdRef.current !== requestId) {
           return
         }
 
         pendingLocaleRef.current = null
-        commitLocale(DEFAULT_APP_LOCALE, fallbackMessages)
+        setLocaleState(DEFAULT_APP_LOCALE)
+        setLoadedBundle(null)
       })
-
-    return () => {
-      cancelled = true
-    }
-  }, [commitLocale, fallbackMessages, initialLocale, messageCatalog])
+  }, [loadedBundle?.locale, locale])
 
   const setLocale = useCallback((nextLocale: AppLocale) => {
     if (
@@ -125,18 +92,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    void requestLocale(nextLocale)
-  }, [locale, requestLocale])
+    pendingLocaleRef.current = nextLocale
+    setLocaleState(nextLocale)
+  }, [locale])
 
   const t = useCallback(
     (key: TranslationKey, values?: TranslationValues) =>
-      formatMessage((messageCatalog ?? fallbackMessages)[key], values),
-    [fallbackMessages, messageCatalog],
+      formatMessage(messageCatalog[key], values),
+    [messageCatalog],
   )
-
-  if (!isHydrated || !messageCatalog) {
-    return null
-  }
 
   return (
     <I18nContext.Provider

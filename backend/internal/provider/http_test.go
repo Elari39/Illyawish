@@ -52,8 +52,11 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	if payload.Presets[0].Name != "OpenAI" {
 		t.Fatalf("expected created preset in response, got %s", recorder.Body.String())
 	}
-	if payload.Presets[0].APIKey != "sk-test" {
-		t.Fatalf("expected decrypted API key in response, got %q", payload.Presets[0].APIKey)
+	if payload.Presets[0].HasAPIKey != true {
+		t.Fatalf("expected preset to report a stored API key, got %#v", payload.Presets[0])
+	}
+	if payload.Presets[0].APIKeyHint == "" {
+		t.Fatalf("expected API key hint in response, got %#v", payload.Presets[0])
 	}
 
 	var logs []models.AuditLog
@@ -118,15 +121,18 @@ func TestUpdateProviderUpdatesPresetAndReturnsState(t *testing.T) {
 	if payload.Presets[0].Name != "OpenAI 2" {
 		t.Fatalf("expected updated preset in response, got %s", recorder.Body.String())
 	}
-	if payload.Presets[0].APIKey != "sk-test" {
-		t.Fatalf("expected API key to remain visible, got %q", payload.Presets[0].APIKey)
+	if payload.Presets[0].HasAPIKey != true {
+		t.Fatalf("expected API key to remain stored, got %#v", payload.Presets[0])
+	}
+	if payload.Presets[0].APIKeyHint == "" {
+		t.Fatalf("expected API key hint to remain visible, got %#v", payload.Presets[0])
 	}
 	if preset.ID != 1 {
 		t.Fatalf("expected preset id 1, got %d", preset.ID)
 	}
 }
 
-func TestListProvidersReturnsDecryptedAPIKeysForEachPreset(t *testing.T) {
+func TestListProvidersMasksStoredAPIKeysForEachPreset(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := newTestService(t, &config.Config{
@@ -171,11 +177,11 @@ func TestListProvidersReturnsDecryptedAPIKeysForEachPreset(t *testing.T) {
 	if len(payload.Presets) != 2 {
 		t.Fatalf("expected 2 presets in response, got %d", len(payload.Presets))
 	}
-	if payload.Presets[0].ID != second.ID || payload.Presets[0].APIKey != "sk-anthropic" {
-		t.Fatalf("expected active preset with decrypted key first, got %#v", payload.Presets[0])
+	if payload.Presets[0].ID != second.ID || !payload.Presets[0].HasAPIKey || payload.Presets[0].APIKeyHint == "" {
+		t.Fatalf("expected active preset with masked key first, got %#v", payload.Presets[0])
 	}
-	if payload.Presets[1].ID != first.ID || payload.Presets[1].APIKey != "sk-openai" {
-		t.Fatalf("expected inactive preset with decrypted key second, got %#v", payload.Presets[1])
+	if payload.Presets[1].ID != first.ID || !payload.Presets[1].HasAPIKey || payload.Presets[1].APIKeyHint == "" {
+		t.Fatalf("expected inactive preset with masked key second, got %#v", payload.Presets[1])
 	}
 }
 

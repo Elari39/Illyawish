@@ -23,6 +23,8 @@ function createConversation(
     title,
     isPinned: false,
     isArchived: false,
+    folder: '',
+    tags: [],
     settings: defaultSettings,
     createdAt: '2026-03-26T09:08:00Z',
     updatedAt: '2026-03-26T09:08:00Z',

@@ -78,6 +78,8 @@ describe('chat page utils', () => {
         title: 'Project notes',
         isPinned: false,
         isArchived: false,
+        folder: '',
+        tags: [],
         settings: {
           systemPrompt: 'You are a helpful assistant.',
           model: 'gpt-4.1-mini',
@@ -231,7 +233,7 @@ describe('chat page utils', () => {
             id: 1,
             name: 'OpenAI',
             baseURL: 'https://api.openai.com/v1',
-            apiKey: 'sk-openai-1234',
+            hasApiKey: true,
             apiKeyHint: 'sk-1...2345',
             models: ['gpt-4.1-mini', 'gpt-4.1'],
             defaultModel: 'gpt-4.1-mini',

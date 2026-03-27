@@ -133,26 +133,10 @@ export function useProviderSettings({
     )
   }
 
-  function findEditingPreset() {
-    if (providerEditorMode.type !== 'edit') {
-      return null
-    }
-
-    return (
-      providerStateRef.current?.presets.find(
-        (preset) => preset.id === providerEditorMode.providerId,
-      ) ?? null
-    )
-  }
-
-  function resolveSubmittedAPIKey(currentPreset: ProviderPreset | null) {
+  function resolveSubmittedAPIKey() {
     const trimmedAPIKey = providerForm.apiKey.trim()
 
     if (!trimmedAPIKey) {
-      return undefined
-    }
-
-    if (currentPreset && trimmedAPIKey === currentPreset.apiKey.trim()) {
       return undefined
     }
 
@@ -225,8 +209,7 @@ export function useProviderSettings({
       }
 
       const models = normalizeModelEntries(providerForm.models)
-      const currentPreset = findEditingPreset()
-      const nextAPIKey = resolveSubmittedAPIKey(currentPreset)
+      const nextAPIKey = resolveSubmittedAPIKey()
       const nextState = providerEditorMode.type === 'edit'
         ? await providerApi.update(providerEditorMode.providerId, {
             name: providerForm.name,
@@ -288,8 +271,7 @@ export function useProviderSettings({
         return
       }
 
-      const currentPreset = findEditingPreset()
-      const nextAPIKey = resolveSubmittedAPIKey(currentPreset)
+      const nextAPIKey = resolveSubmittedAPIKey()
       const result = await providerApi.test({
         ...(providerEditorMode.type === 'edit'
           ? { providerId: providerEditorMode.providerId }

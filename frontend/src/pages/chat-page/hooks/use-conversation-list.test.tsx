@@ -274,6 +274,8 @@ describe('useConversationList', () => {
         title: 'Local active chat',
         isPinned: false,
         isArchived: false,
+        folder: '',
+        tags: [],
         settings: {
           systemPrompt: 'You are a helpful assistant.',
           model: '',
@@ -350,6 +352,8 @@ describe('useConversationList', () => {
         title: 'Fresh chat',
         isPinned: false,
         isArchived: false,
+        folder: '',
+        tags: [],
         settings: {
           systemPrompt: 'You are a helpful assistant.',
           model: '',
@@ -545,6 +549,8 @@ describe('useConversationList', () => {
         title: 'Brand new chat',
         isPinned: false,
         isArchived: false,
+        folder: '',
+        tags: [],
         settings: {
           systemPrompt: 'You are a helpful assistant.',
           model: '',
@@ -616,6 +622,8 @@ describe('useConversationList', () => {
         title: 'Visible chat',
         isPinned: false,
         isArchived: true,
+        folder: '',
+        tags: [],
         settings: {
           systemPrompt: 'You are a helpful assistant.',
           model: '',

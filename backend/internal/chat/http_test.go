@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -61,6 +62,53 @@ func TestListMessagesReturnsNotFoundForMissingConversation(t *testing.T) {
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, recorder.Code)
+	}
+}
+
+func TestListMessagesReturnsPaginationMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	for index := 0; index < 4; index += 1 {
+		role := models.RoleUser
+		if index%2 == 1 {
+			role = models.RoleAssistant
+		}
+		mustCreateMessageRecord(t, db, &models.Message{
+			ConversationID: conversation.ID,
+			Role:           role,
+			Content:        fmt.Sprintf("message-%d", index+1),
+			Status:         models.MessageStatusCompleted,
+		})
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/conversations/%d/messages?limit=2", conversation.ID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", conversation.ID)}}
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).ListMessages(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	body := recorder.Body.String()
+	if !strings.Contains(body, "\"hasMore\":true") {
+		t.Fatalf("expected pagination metadata in response, got %s", body)
+	}
+	if !strings.Contains(body, "\"nextBeforeId\"") {
+		t.Fatalf("expected nextBeforeId in response, got %s", body)
+	}
+	if !strings.Contains(body, "\"content\":\"message-3\"") || !strings.Contains(body, "\"content\":\"message-4\"") {
+		t.Fatalf("expected latest message page, got %s", body)
 	}
 }
 

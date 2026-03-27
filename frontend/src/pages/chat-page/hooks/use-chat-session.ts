@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { chatApi } from '../../../lib/api'
@@ -7,6 +7,7 @@ import { createLocalISOString } from '../../../lib/utils'
 import type {
   Attachment,
   Conversation,
+  ConversationMessagesResponse,
   Message,
   StreamEvent,
 } from '../../../types/chat'
@@ -17,6 +18,7 @@ import {
   buildConversationMarkdown,
   buildConversationExportFilename,
   clearLastConversationId,
+  dedupeMessages,
   downloadTextFile,
   isConversationNotFoundError,
   isSameMessage,
@@ -24,6 +26,11 @@ import {
   upsertMessage,
   writeLastConversationId,
 } from '../utils'
+import {
+  buildConversationMetadataUpdate,
+  resolveConversationForList,
+  wait,
+} from './chat-session-helpers'
 import { useChatComposerState } from './use-chat-composer-state'
 import { useChatMessagesState } from './use-chat-messages-state'
 import { useChatSettingsState } from './use-chat-settings-state'
@@ -57,6 +64,7 @@ interface ActiveGenerationState {
 
 const STOP_RECONCILE_ATTEMPTS = 12
 const STOP_RECONCILE_DELAY_MS = 150
+const MESSAGE_PAGE_SIZE = 50
 
 export function useChatSession({
   activeConversationId,
@@ -101,15 +109,20 @@ export function useChatSession({
     isSending,
     latestUserMessage,
     latestAssistantMessage,
+    skipNextMessageAutoScroll,
     setMessages,
     setIsLoadingMessages,
     setIsSending,
   } = useChatMessagesState()
   const {
     chatSettingsDraft,
+    conversationFolderDraft,
+    conversationTagsDraft,
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
+    setConversationFolderDraft,
+    setConversationTagsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -124,6 +137,11 @@ export function useChatSession({
     t,
   })
   const [isImporting, setIsImporting] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(false)
+  const [nextBeforeMessageId, setNextBeforeMessageId] = useState<number | null>(
+    null,
+  )
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
 
   const activeGenerationRef = useRef<ActiveGenerationState | null>(null)
   const nextGenerationIdRef = useRef(0)
@@ -157,10 +175,34 @@ export function useChatSession({
     }
 
     setMessages([])
+    setHasMoreMessages(false)
+    setNextBeforeMessageId(null)
+    setIsLoadingOlderMessages(false)
     resetForNewChatSettings()
     clearEditingMessage()
     setChatError(null)
   }, [activeConversationId, clearEditingMessage, resetForNewChatSettings, setChatError, setMessages])
+
+  const applyConversationSnapshot = useCallback((
+    response: ConversationMessagesResponse,
+    replaceMessages: boolean,
+  ) => {
+    syncConversationIntoListRef.current(
+      resolveConversationForList(
+        response.conversation,
+        showArchivedRef.current,
+        conversationSearchRef.current,
+      ),
+    )
+    setPendingConversation(response.conversation)
+    if (replaceMessages) {
+      setMessages(response.messages)
+      setSettingsDraft(response.conversation.settings)
+    }
+    setHasMoreMessages(response.pagination?.hasMore ?? false)
+    setNextBeforeMessageId(response.pagination?.nextBeforeId ?? null)
+    writeLastConversationId(response.conversation.id)
+  }, [setMessages, setPendingConversation, setSettingsDraft])
 
   useEffect(() => {
     if (
@@ -184,17 +226,9 @@ export function useChatSession({
           return
         }
 
-        setMessages(response.messages)
-        setPendingConversation(response.conversation)
-        setSettingsDraft(response.conversation.settings)
-        syncConversationIntoListRef.current(
-          resolveConversationForList(
-            response.conversation,
-            showArchivedRef.current,
-            conversationSearchRef.current,
-          ),
-        )
-        writeLastConversationId(response.conversation.id)
+        applyConversationSnapshot(response, true)
+        setConversationFolderDraft(response.conversation.folder)
+        setConversationTagsDraft(response.conversation.tags.join(', '))
       } catch (error) {
         if (cancelled) {
           return
@@ -225,29 +259,15 @@ export function useChatSession({
     return () => {
       cancelled = true
     }
-  }, [activeConversationId, setChatError, setIsLoadingMessages, setMessages, setPendingConversation, setSettingsDraft])
-
-  function applyConversationSnapshot(
-    response: {
-      conversation: Conversation
-      messages: Message[]
-    },
-    replaceMessages: boolean,
-  ) {
-    syncConversationIntoListRef.current(
-      resolveConversationForList(
-        response.conversation,
-        showArchivedRef.current,
-        conversationSearchRef.current,
-      ),
-    )
-    setPendingConversation(response.conversation)
-    if (replaceMessages) {
-      setMessages(response.messages)
-      setSettingsDraft(response.conversation.settings)
-    }
-    writeLastConversationId(response.conversation.id)
-  }
+  }, [
+    activeConversationId,
+    applyConversationSnapshot,
+    setChatError,
+    setConversationFolderDraft,
+    setConversationTagsDraft,
+    setIsLoadingMessages,
+    setMessages,
+  ])
 
   async function reconcileConversationState(
     conversationId: number,
@@ -274,6 +294,62 @@ export function useChatSession({
         }
       }
       return null
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (
+      !activeConversationId ||
+      !hasMoreMessages ||
+      !nextBeforeMessageId ||
+      isLoadingOlderMessages
+    ) {
+      return
+    }
+
+    const viewport = messageViewportRef.current
+    const previousScrollHeight = viewport?.scrollHeight ?? 0
+
+    setIsLoadingOlderMessages(true)
+    setChatError(null)
+
+    try {
+      const response = await chatApi.getConversationMessages(activeConversationId, {
+        beforeId: nextBeforeMessageId,
+        limit: MESSAGE_PAGE_SIZE,
+      })
+
+      skipNextMessageAutoScroll()
+      setMessages((previous) => dedupeMessages([
+        ...response.messages,
+        ...previous,
+      ]))
+      setPendingConversation(response.conversation)
+      syncConversationIntoListRef.current(
+        resolveConversationForList(
+          response.conversation,
+          showArchivedRef.current,
+          conversationSearchRef.current,
+        ),
+      )
+      setHasMoreMessages(response.pagination?.hasMore ?? false)
+      setNextBeforeMessageId(response.pagination?.nextBeforeId ?? null)
+
+      window.requestAnimationFrame(() => {
+        const nextViewport = messageViewportRef.current
+        if (!nextViewport) {
+          return
+        }
+
+        const heightDelta = nextViewport.scrollHeight - previousScrollHeight
+        nextViewport.scrollTop += heightDelta
+      })
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : t('error.loadMessages'),
+      )
+    } finally {
+      setIsLoadingOlderMessages(false)
     }
   }
 
@@ -483,6 +559,10 @@ export function useChatSession({
         const configuredConversation = await chatApi.updateConversation(
           createdConversation.id,
           {
+            ...buildConversationMetadataUpdate(
+              conversationFolderDraft,
+              conversationTagsDraft,
+            ),
             settings: {
               ...settingsDraft,
               model: '',
@@ -910,6 +990,9 @@ export function useChatSession({
     activeConversationIdRef.current = null
     setChatError(null)
     setMessages([])
+    setHasMoreMessages(false)
+    setNextBeforeMessageId(null)
+    setIsLoadingOlderMessages(false)
     resetForNewChatSettings()
     resetComposer()
   }
@@ -922,6 +1005,8 @@ export function useChatSession({
     messages,
     composerValue,
     chatSettingsDraft,
+    conversationFolderDraft,
+    conversationTagsDraft,
     selectedAttachments,
     settingsDraft,
     pendingConversation,
@@ -929,17 +1014,23 @@ export function useChatSession({
     isLoadingMessages,
     isSending,
     isImporting,
+    hasMoreMessages,
+    nextBeforeMessageId,
+    isLoadingOlderMessages,
     latestUserMessage,
     latestAssistantMessage,
     hasPendingUploads,
     canSubmitComposer,
     setComposerValue,
     setChatSettingsDraft,
+    setConversationFolderDraft,
+    setConversationTagsDraft,
     setSettingsDraft,
     resetSettingsDraft,
     syncSettingsDraft,
     handleExportConversation,
     handleImportConversation,
+    loadOlderMessages,
     handleFilesSelected,
     handleRegenerateAssistant,
     handleRetryAssistant,
@@ -951,29 +1042,4 @@ export function useChatSession({
     startEditingMessage,
     cancelEditingMessage,
   }
-}
-
-function resolveConversationForList(
-  conversation: Conversation,
-  showArchived: boolean,
-  search: string,
-) {
-  if (
-    conversation.isArchived !== showArchived ||
-    (search &&
-      !conversation.title.toLowerCase().includes(search.toLowerCase()))
-  ) {
-    return {
-      ...conversation,
-      isArchived: conversation.isArchived,
-    }
-  }
-
-  return conversation
-}
-
-function wait(durationMs: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, durationMs)
-  })
 }

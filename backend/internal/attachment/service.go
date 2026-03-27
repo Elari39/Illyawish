@@ -87,7 +87,8 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 	if err != nil {
 		return nil, err
 	}
-	if _, err := extractAttachmentText(mimeType, payload); err != nil {
+	extractedText, err := extractAttachmentText(mimeType, payload)
+	if err != nil {
 		return nil, err
 	}
 
@@ -117,6 +118,7 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 		MIMEType:   mimeType,
 		Size:       int64(len(payload)),
 		StorageKey: storageKey,
+		ExtractedText: truncateAttachmentText(extractedText),
 	}
 	if record.Name == "" {
 		record.Name = "attachment" + extension
@@ -196,12 +198,11 @@ func (s *Service) BuildModelAttachments(attachments []models.Attachment) ([]llm.
 			return nil, err
 		}
 
-		payload, err := os.ReadFile(filepath.Join(s.uploadDir, record.StorageKey))
-		if err != nil {
-			return nil, fmt.Errorf("read attachment payload: %w", err)
-		}
-
 		if strings.HasPrefix(record.MIMEType, "image/") {
+			payload, err := os.ReadFile(filepath.Join(s.uploadDir, record.StorageKey))
+			if err != nil {
+				return nil, fmt.Errorf("read attachment payload: %w", err)
+			}
 			result = append(result, llm.Attachment{
 				Kind:     llm.AttachmentKindImage,
 				Name:     record.Name,
@@ -211,16 +212,11 @@ func (s *Service) BuildModelAttachments(attachments []models.Attachment) ([]llm.
 			continue
 		}
 
-		text, err := extractAttachmentText(record.MIMEType, payload)
-		if err != nil {
-			return nil, err
-		}
-
 		result = append(result, llm.Attachment{
 			Kind:     llm.AttachmentKindText,
 			Name:     record.Name,
 			MIMEType: record.MIMEType,
-			Text:     truncateAttachmentText(text),
+			Text:     truncateAttachmentText(record.ExtractedText),
 		})
 	}
 

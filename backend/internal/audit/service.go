@@ -3,6 +3,7 @@ package audit
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"backend/internal/models"
 
@@ -14,9 +15,13 @@ type Service struct {
 }
 
 type ListParams struct {
-	Action string
-	Limit  int
-	Offset int
+	Actor      string
+	Action     string
+	TargetType string
+	DateFrom   *time.Time
+	DateTo     *time.Time
+	Limit      int
+	Offset     int
 }
 
 type ListResult struct {
@@ -63,9 +68,23 @@ func (s *Service) List(params ListParams) (*ListResult, error) {
 	}
 
 	query := s.db.Model(&models.AuditLog{})
+	actor := strings.TrimSpace(params.Actor)
+	if actor != "" {
+		query = query.Where("LOWER(actor_username) LIKE ?", "%"+strings.ToLower(actor)+"%")
+	}
 	action := strings.TrimSpace(params.Action)
 	if action != "" {
 		query = query.Where("action = ?", action)
+	}
+	targetType := strings.TrimSpace(params.TargetType)
+	if targetType != "" {
+		query = query.Where("target_type = ?", targetType)
+	}
+	if params.DateFrom != nil {
+		query = query.Where("created_at >= ?", params.DateFrom.UTC())
+	}
+	if params.DateTo != nil {
+		query = query.Where("created_at < ?", params.DateTo.UTC())
 	}
 
 	var total int64

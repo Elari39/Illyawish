@@ -97,7 +97,7 @@ describe('I18nProvider transition handling', () => {
     })
   })
 
-  it('does not render fallback English before a saved locale finishes loading', async () => {
+  it('renders fallback messages immediately before a saved locale finishes loading', async () => {
     const zhCNDeferred = createDeferred<typeof i18nMocks.zhCNMessages>()
 
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, 'zh-CN')
@@ -114,7 +114,8 @@ describe('I18nProvider transition handling', () => {
       </I18nProvider>,
     )
 
-    expect(screen.queryByTestId('message')).not.toBeInTheDocument()
+    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
+    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
 
     zhCNDeferred.resolve(i18nMocks.zhCNMessages)
 
@@ -124,7 +125,7 @@ describe('I18nProvider transition handling', () => {
     })
   })
 
-  it('keeps the current locale visible until the next locale is ready', async () => {
+  it('switches locale immediately and uses fallback messages until the next locale is ready', async () => {
     const jaJPDeferred = createDeferred<typeof i18nMocks.jaJPMessages>()
 
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, 'zh-CN')
@@ -160,9 +161,9 @@ describe('I18nProvider transition handling', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '日本語' }))
 
-    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
-    expect(screen.getByTestId('message')).toHaveTextContent('加载中...')
-    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
+    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
+    expect(document.documentElement.lang).toBe('ja-JP')
 
     jaJPDeferred.resolve(i18nMocks.jaJPMessages)
 
@@ -172,7 +173,7 @@ describe('I18nProvider transition handling', () => {
     })
   })
 
-  it('keeps the current locale when loading the next locale fails', async () => {
+  it('falls back to the default locale when loading the next locale fails', async () => {
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, 'zh-CN')
     i18nMocks.getCachedMessagesMock.mockImplementation((locale: AppLocale) => {
       switch (locale) {
@@ -204,10 +205,10 @@ describe('I18nProvider transition handling', () => {
     fireEvent.click(screen.getByRole('button', { name: '日本語' }))
 
     await waitFor(() => {
-      expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
-      expect(screen.getByTestId('message')).toHaveTextContent('加载中...')
-      expect(document.documentElement.lang).toBe('zh-CN')
-      expect(window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)).toBe('zh-CN')
+      expect(screen.getByTestId('locale')).toHaveTextContent('en-US')
+      expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
+      expect(document.documentElement.lang).toBe('en-US')
+      expect(window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)).toBe('en-US')
     })
   })
 })

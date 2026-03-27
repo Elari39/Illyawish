@@ -34,6 +34,7 @@ type StoredAttachment struct {
 	MIMEType   string `gorm:"size:128;not null"`
 	Size       int64  `gorm:"not null"`
 	StorageKey string `gorm:"size:255;not null;uniqueIndex"`
+	ExtractedText string `gorm:"type:text;not null;default:''"`
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -68,6 +69,8 @@ type Conversation struct {
 	Title              string `gorm:"size:255;not null;default:New chat"`
 	IsPinned           bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
 	IsArchived         bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:2"`
+	Folder             string `gorm:"size:120;not null;default:''"`
+	Tags               []string `gorm:"serializer:json;type:text"`
 	SystemPrompt       string `gorm:"type:text;not null;default:''"`
 	Model              string `gorm:"size:128;not null;default:''"`
 	Temperature        *float32

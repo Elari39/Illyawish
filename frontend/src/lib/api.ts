@@ -11,7 +11,9 @@ import {
 import type {
   Attachment,
   AdminUser,
+  AdminUsageStats,
   AuditLog,
+  AuditLogListParams,
   BootstrapPayload,
   BootstrapStatus,
   ChangePasswordPayload,
@@ -20,9 +22,9 @@ import type {
   CreateProviderPayload,
   ConversationSettings,
   Conversation,
+  ConversationMessagesResponse,
   ImportConversationPayload,
   LoginPayload,
-  Message,
   ProviderState,
   ResetUserPasswordPayload,
   SendMessagePayload,
@@ -186,11 +188,25 @@ export const chatApi = {
     )
     return response.conversation
   },
-  async getConversationMessages(conversationId: number) {
-    const response = await apiRequest<{
-      conversation: Conversation
-      messages: Message[]
-    }>(`/api/conversations/${conversationId}/messages`)
+  async getConversationMessages(
+    conversationId: number,
+    params?: {
+      beforeId?: number
+      limit?: number
+    },
+  ) {
+    const search = new URLSearchParams()
+    if (typeof params?.beforeId === 'number') {
+      search.set('beforeId', String(params.beforeId))
+    }
+    if (typeof params?.limit === 'number') {
+      search.set('limit', String(params.limit))
+    }
+
+    const query = search.toString()
+    const response = await apiRequest<ConversationMessagesResponse>(
+      `/api/conversations/${conversationId}/messages${query ? `?${query}` : ''}`,
+    )
     return response
   },
   async deleteConversation(conversationId: number) {
@@ -324,10 +340,22 @@ export const adminApi = {
     })
     return response.user
   },
-  async listAuditLogs(params?: { action?: string; limit?: number; offset?: number }) {
+  async listAuditLogs(params?: AuditLogListParams) {
     const search = new URLSearchParams()
+    if (params?.actor) {
+      search.set('actor', params.actor)
+    }
     if (params?.action) {
       search.set('action', params.action)
+    }
+    if (params?.targetType) {
+      search.set('targetType', params.targetType)
+    }
+    if (params?.dateFrom) {
+      search.set('dateFrom', params.dateFrom)
+    }
+    if (params?.dateTo) {
+      search.set('dateTo', params.dateTo)
     }
     if (typeof params?.limit === 'number') {
       search.set('limit', String(params.limit))
@@ -338,6 +366,9 @@ export const adminApi = {
 
     const query = search.toString()
     return apiRequest<{ logs: AuditLog[]; total: number }>(`/api/admin/audit-logs${query ? `?${query}` : ''}`)
+  },
+  getUsageStats() {
+    return apiRequest<AdminUsageStats>('/api/admin/usage-stats')
   },
   getWorkspacePolicy() {
     return apiRequest<WorkspacePolicy>('/api/admin/workspace-policy')

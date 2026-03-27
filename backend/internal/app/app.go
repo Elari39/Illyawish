@@ -146,6 +146,7 @@ func New() (*App, error) {
 		adminAPI.PATCH("/users/:id", limitRequestBody(mediumJSONBodyLimit), adminHandler.UpdateUser)
 		adminAPI.POST("/users/:id/reset-password", limitRequestBody(smallJSONBodyLimit), adminHandler.ResetPassword)
 		adminAPI.GET("/audit-logs", adminHandler.ListAuditLogs)
+		adminAPI.GET("/usage-stats", adminHandler.GetUsageStats)
 		adminAPI.GET("/workspace-policy", adminHandler.GetWorkspacePolicy)
 		adminAPI.PATCH("/workspace-policy", limitRequestBody(mediumJSONBodyLimit), adminHandler.UpdateWorkspacePolicy)
 	}

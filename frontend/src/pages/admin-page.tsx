@@ -18,12 +18,22 @@ import { PromptDialog } from './chat-page/components/prompt-dialog'
 import type { PromptState } from './chat-page/types'
 import type {
   AdminUser,
+  AdminUsageStats,
   AuditLog,
+  AuditLogListParams,
   CreateUserPayload,
   WorkspacePolicy,
 } from '../types/chat'
 
 type AdminTab = 'users' | 'audit' | 'policy'
+
+interface AuditFilters {
+  actor: string
+  action: string
+  targetType: string
+  dateFrom: string
+  dateTo: string
+}
 
 interface UserDraft {
   role: 'admin' | 'member'
@@ -43,6 +53,16 @@ const emptyCreateUserForm: CreateUserPayload = {
   dailyMessageLimit: null,
 }
 
+const defaultAuditFilters: AuditFilters = {
+  actor: '',
+  action: '',
+  targetType: '',
+  dateFrom: '',
+  dateTo: '',
+}
+
+const AUDIT_PAGE_SIZE = 100
+
 export function AdminPage() {
   const { user, logout } = useAuth()
   const { locale, t } = useI18n()
@@ -50,16 +70,20 @@ export function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('users')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [auditTotal, setAuditTotal] = useState(0)
+  const [usageStats, setUsageStats] = useState<AdminUsageStats | null>(null)
   const [workspacePolicy, setWorkspacePolicy] = useState<WorkspacePolicy | null>(null)
   const [userDrafts, setUserDrafts] = useState<Record<number, UserDraft>>({})
   const [createUserForm, setCreateUserForm] = useState<CreateUserPayload>(emptyCreateUserForm)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false)
   const [isSavingUserId, setIsSavingUserId] = useState<number | null>(null)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
   const [isSavingPolicy, setIsSavingPolicy] = useState(false)
   const [resetPasswordPrompt, setResetPasswordPrompt] = useState<PromptState | null>(null)
+  const [auditFilters, setAuditFilters] = useState<AuditFilters>(defaultAuditFilters)
 
   const canManageUsers = user?.role === 'admin'
   const sortedUsers = useMemo(
@@ -67,18 +91,25 @@ export function AdminPage() {
     [users],
   )
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (filters: AuditFilters = defaultAuditFilters) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const [nextUsers, nextAuditLogs, nextPolicy] = await Promise.all([
+      const [nextUsers, nextAuditLogs, nextPolicy, nextUsageStats] = await Promise.all([
         adminApi.listUsers(),
-        adminApi.listAuditLogs({ limit: 100 }),
+        adminApi.listAuditLogs({
+          ...buildAuditLogListParams(filters),
+          limit: AUDIT_PAGE_SIZE,
+          offset: 0,
+        }),
         adminApi.getWorkspacePolicy(),
+        adminApi.getUsageStats(),
       ])
       setUsers(nextUsers)
       setAuditLogs(nextAuditLogs.logs)
+      setAuditTotal(nextAuditLogs.total)
+      setUsageStats(nextUsageStats)
       setWorkspacePolicy(nextPolicy)
       setUserDrafts(
         Object.fromEntries(
@@ -207,6 +238,45 @@ export function AdminPage() {
     navigate('/login', { replace: true })
   }
 
+  async function handleApplyAuditFilters(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError(null)
+    setIsLoadingAudit(true)
+
+    try {
+      const result = await adminApi.listAuditLogs({
+        ...buildAuditLogListParams(auditFilters),
+        limit: AUDIT_PAGE_SIZE,
+        offset: 0,
+      })
+      setAuditLogs(result.logs)
+      setAuditTotal(result.total)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('error.loadAdminData'))
+    } finally {
+      setIsLoadingAudit(false)
+    }
+  }
+
+  async function handleResetAuditFilters() {
+    setAuditFilters(defaultAuditFilters)
+    setError(null)
+    setIsLoadingAudit(true)
+
+    try {
+      const result = await adminApi.listAuditLogs({
+        limit: AUDIT_PAGE_SIZE,
+        offset: 0,
+      })
+      setAuditLogs(result.logs)
+      setAuditTotal(result.total)
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('error.loadAdminData'))
+    } finally {
+      setIsLoadingAudit(false)
+    }
+  }
+
   if (!canManageUsers) {
     return null
   }
@@ -273,6 +343,67 @@ export function AdminPage() {
           {isLoading ? (
             <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
               {t('admin.loading')}
+            </section>
+          ) : null}
+
+          {!isLoading && usageStats ? (
+            <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">{t('admin.statsTitle')}</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
+                    {t('admin.statsDescription')}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                  {t('admin.stats.activeProvidersSummary', {
+                    active: usageStats.activeProviderPresets,
+                    configured: usageStats.configuredProviderPresets,
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <StatCard label={t('admin.stats.totalUsers')} value={String(usageStats.totalUsers)} />
+                <StatCard label={t('admin.stats.activeUsers')} value={String(usageStats.activeUsers)} />
+                <StatCard label={t('admin.stats.recentUsers')} value={String(usageStats.recentUsers)} />
+                <StatCard label={t('admin.stats.totalConversations')} value={String(usageStats.totalConversations)} />
+                <StatCard label={t('admin.stats.totalMessages')} value={String(usageStats.totalMessages)} />
+                <StatCard label={t('admin.stats.totalAttachments')} value={String(usageStats.totalAttachments)} />
+              </div>
+
+              <div className="mt-5 rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">
+                      {t('admin.stats.activeProviderDistribution')}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                      {t('admin.stats.activeProviderDistributionHelp')}
+                    </p>
+                  </div>
+                </div>
+
+                {usageStats.activeProviderDistribution.length > 0 ? (
+                  <div className="mt-4 space-y-3">
+                    {usageStats.activeProviderDistribution.map((item) => (
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-white px-4 py-3" key={`${item.name}:${item.baseURL}`}>
+                        <div>
+                          <p className="font-medium text-[var(--foreground)]">{item.name}</p>
+                          <p className="mt-1 text-xs text-[var(--muted-foreground)]">{item.baseURL}</p>
+                        </div>
+                        <p className="text-sm font-medium text-[var(--foreground)]">
+                          {t('admin.stats.userCount', { count: item.userCount })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-[var(--muted-foreground)]">
+                    {t('admin.stats.noActiveProviders')}
+                  </p>
+                )}
+              </div>
             </section>
           ) : null}
 
@@ -367,7 +498,62 @@ export function AdminPage() {
 
           {!isLoading && activeTab === 'audit' ? (
             <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
-              <h2 className="text-xl font-semibold">{t('admin.auditTitle')}</h2>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-semibold">{t('admin.auditTitle')}</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
+                    {t('admin.audit.filtersDescription')}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
+                  {t('admin.audit.resultCount', { count: auditLogs.length, total: auditTotal })}
+                </div>
+              </div>
+
+              <form className="mt-5 grid gap-4 rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-4 md:grid-cols-2 xl:grid-cols-5" onSubmit={handleApplyAuditFilters}>
+                <LabeledInput
+                  label={t('admin.audit.filterActor')}
+                  value={auditFilters.actor}
+                  onChange={(value) => setAuditFilters((previous) => ({ ...previous, actor: value }))}
+                />
+                <LabeledInput
+                  label={t('admin.audit.filterAction')}
+                  value={auditFilters.action}
+                  onChange={(value) => setAuditFilters((previous) => ({ ...previous, action: value }))}
+                />
+                <LabeledInput
+                  label={t('admin.audit.filterTargetType')}
+                  value={auditFilters.targetType}
+                  onChange={(value) => setAuditFilters((previous) => ({ ...previous, targetType: value }))}
+                />
+                <LabeledInput
+                  label={t('admin.audit.filterDateFrom')}
+                  type="date"
+                  value={auditFilters.dateFrom}
+                  onChange={(value) => setAuditFilters((previous) => ({ ...previous, dateFrom: value }))}
+                />
+                <LabeledInput
+                  label={t('admin.audit.filterDateTo')}
+                  type="date"
+                  value={auditFilters.dateTo}
+                  onChange={(value) => setAuditFilters((previous) => ({ ...previous, dateTo: value }))}
+                />
+
+                <div className="flex flex-wrap items-end gap-3 md:col-span-2 xl:col-span-5">
+                  <Button disabled={isLoadingAudit} type="submit">
+                    {isLoadingAudit ? t('common.loading') : t('admin.audit.applyFilters')}
+                  </Button>
+                  <Button
+                    disabled={isLoadingAudit}
+                    onClick={() => void handleResetAuditFilters()}
+                    type="button"
+                    variant="secondary"
+                  >
+                    {t('admin.audit.resetFilters')}
+                  </Button>
+                </div>
+              </form>
+
               <div className="mt-5 overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="text-[var(--muted-foreground)]">
@@ -389,6 +575,13 @@ export function AdminPage() {
                         <td className="px-3 py-3">{log.summary}</td>
                       </tr>
                     ))}
+                    {auditLogs.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-6 text-[var(--muted-foreground)]" colSpan={5}>
+                          {t('admin.audit.empty')}
+                        </td>
+                      </tr>
+                    ) : null}
                   </tbody>
                 </table>
               </div>
@@ -559,4 +752,29 @@ function parseNullableNumber(value: number | string | null) {
   }
   const parsed = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function buildAuditLogListParams(filters: AuditFilters): AuditLogListParams {
+  return {
+    actor: filters.actor.trim() || undefined,
+    action: filters.action.trim() || undefined,
+    targetType: filters.targetType.trim() || undefined,
+    dateFrom: filters.dateFrom || undefined,
+    dateTo: filters.dateTo || undefined,
+  }
+}
+
+function StatCard({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <article className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-4">
+      <p className="text-sm text-[var(--muted-foreground)]">{label}</p>
+      <p className="mt-3 text-3xl font-semibold text-[var(--foreground)]">{value}</p>
+    </article>
+  )
 }

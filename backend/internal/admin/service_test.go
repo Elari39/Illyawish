@@ -120,6 +120,144 @@ func TestServiceCreateUserRejectsDuplicateUsername(t *testing.T) {
 	}
 }
 
+func TestServiceGetUsageStatsAggregatesWorkspaceState(t *testing.T) {
+	db := newAdminTestDB(t)
+	service := NewService(db, audit.NewService(db))
+	adminUser := createAdminActor(t, db)
+
+	recentLogin := time.Now().Add(-48 * time.Hour).UTC()
+	inactiveLogin := time.Now().Add(-15 * 24 * time.Hour).UTC()
+	member := &models.User{
+		Username:       "member",
+		PasswordHash:   adminUser.PasswordHash,
+		Role:           models.UserRoleMember,
+		Status:         models.UserStatusActive,
+		SessionVersion: 1,
+		LastLoginAt:    &recentLogin,
+	}
+	disabled := &models.User{
+		Username:       "disabled",
+		PasswordHash:   adminUser.PasswordHash,
+		Role:           models.UserRoleMember,
+		Status:         models.UserStatusDisabled,
+		SessionVersion: 1,
+		LastLoginAt:    &inactiveLogin,
+	}
+	if err := db.Create(member).Error; err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+	if err := db.Create(disabled).Error; err != nil {
+		t.Fatalf("create disabled user: %v", err)
+	}
+
+	conversation := &models.Conversation{
+		UserID: member.ID,
+		Title:  "Ops review",
+		Model:  "gpt-4.1-mini",
+	}
+	if err := db.Create(conversation).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	message := &models.Message{
+		ConversationID: conversation.ID,
+		Role:           models.RoleUser,
+		Content:        "Need a summary",
+		Status:         models.MessageStatusCompleted,
+	}
+	if err := db.Create(message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	attachment := &models.StoredAttachment{
+		ID:            "att-1",
+		UserID:        member.ID,
+		Name:          "brief.txt",
+		MIMEType:      "text/plain",
+		Size:          128,
+		StorageKey:    "uploads/brief.txt",
+		ExtractedText: "briefing",
+	}
+	if err := db.Create(attachment).Error; err != nil {
+		t.Fatalf("create attachment: %v", err)
+	}
+
+	presets := []models.LLMProviderPreset{
+		{
+			UserID:          member.ID,
+			Name:            "OpenAI",
+			BaseURL:         "https://api.openai.com/v1",
+			EncryptedAPIKey: "enc-1",
+			APIKeyHint:      "sk-***1",
+			Models:          []string{"gpt-4.1-mini"},
+			DefaultModel:    "gpt-4.1-mini",
+			IsActive:        true,
+		},
+		{
+			UserID:          adminUser.ID,
+			Name:            "OpenAI",
+			BaseURL:         "https://api.openai.com/v1",
+			EncryptedAPIKey: "enc-2",
+			APIKeyHint:      "sk-***2",
+			Models:          []string{"gpt-4.1"},
+			DefaultModel:    "gpt-4.1",
+			IsActive:        true,
+		},
+		{
+			UserID:          disabled.ID,
+			Name:            "Anthropic",
+			BaseURL:         "https://api.anthropic.com",
+			EncryptedAPIKey: "enc-3",
+			APIKeyHint:      "sk-***3",
+			Models:          []string{"claude-sonnet"},
+			DefaultModel:    "claude-sonnet",
+			IsActive:        false,
+		},
+	}
+	if err := db.Create(&presets).Error; err != nil {
+		t.Fatalf("create provider presets: %v", err)
+	}
+
+	stats, err := service.GetUsageStats()
+	if err != nil {
+		t.Fatalf("GetUsageStats() error = %v", err)
+	}
+
+	if stats.TotalUsers != 3 {
+		t.Fatalf("expected 3 total users, got %d", stats.TotalUsers)
+	}
+	if stats.ActiveUsers != 2 {
+		t.Fatalf("expected 2 active users, got %d", stats.ActiveUsers)
+	}
+	if stats.RecentUsers != 1 {
+		t.Fatalf("expected 1 recent user, got %d", stats.RecentUsers)
+	}
+	if stats.TotalConversations != 1 {
+		t.Fatalf("expected 1 conversation, got %d", stats.TotalConversations)
+	}
+	if stats.TotalMessages != 1 {
+		t.Fatalf("expected 1 message, got %d", stats.TotalMessages)
+	}
+	if stats.TotalAttachments != 1 {
+		t.Fatalf("expected 1 attachment, got %d", stats.TotalAttachments)
+	}
+	if stats.ConfiguredProviderPresets != 3 {
+		t.Fatalf("expected 3 configured provider presets, got %d", stats.ConfiguredProviderPresets)
+	}
+	if stats.ActiveProviderPresets != 2 {
+		t.Fatalf("expected 2 active provider presets, got %d", stats.ActiveProviderPresets)
+	}
+	if len(stats.ActiveProviderDistribution) != 1 {
+		t.Fatalf("expected 1 active provider distribution entry, got %d", len(stats.ActiveProviderDistribution))
+	}
+	if stats.ActiveProviderDistribution[0].Name != "OpenAI" {
+		t.Fatalf("expected OpenAI provider distribution, got %s", stats.ActiveProviderDistribution[0].Name)
+	}
+	if stats.ActiveProviderDistribution[0].UserCount != 2 {
+		t.Fatalf("expected OpenAI distribution count 2, got %d", stats.ActiveProviderDistribution[0].UserCount)
+	}
+}
+
 func newAdminTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -128,7 +266,15 @@ func newAdminTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.AuditLog{}, &models.WorkspacePolicy{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.AuditLog{},
+		&models.WorkspacePolicy{},
+		&models.Conversation{},
+		&models.Message{},
+		&models.StoredAttachment{},
+		&models.LLMProviderPreset{},
+	); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}
 	if err := db.Create(&models.WorkspacePolicy{ID: 1, DefaultUserRole: models.UserRoleMember}).Error; err != nil {

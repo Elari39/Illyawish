@@ -56,6 +56,10 @@ export function ProviderSettingsTab({
       providerForm.errors.baseURL ||
       providerForm.errors.apiKey,
   )
+  const editingPreset =
+    editingProviderId == null || !providerState
+      ? null
+      : providerState.presets.find((preset) => preset.id === editingProviderId) ?? null
   const activePreset =
     providerState?.presets.find((preset) => preset.isActive) ?? null
 
@@ -153,7 +157,7 @@ export function ProviderSettingsTab({
                       {preset.baseURL}
                     </p>
                     <p className="mt-1 break-all text-xs text-[var(--muted-foreground)]">
-                      {t('settings.key')}: {preset.apiKey}
+                      {t('settings.key')}: {preset.apiKeyHint || t('settings.noStoredKey')}
                     </p>
                     <p className="mt-2 text-xs text-[var(--muted-foreground)]">
                       {preset.models.join(', ')}
@@ -284,9 +288,14 @@ export function ProviderSettingsTab({
                 ref={apiKeyInputRef}
                 placeholder={
                   editingProviderId
-                    ? t('settings.apiKeyPlaceholderEdit')
+                    ? editingPreset?.apiKeyHint
+                      ? t('settings.apiKeyPlaceholderEditHint', {
+                          hint: editingPreset.apiKeyHint,
+                        })
+                      : t('settings.apiKeyPlaceholderEdit')
                     : t('settings.apiKeyPlaceholderNew')
                 }
+                type="password"
                 value={providerForm.apiKey}
                 onChange={(event) =>
                   onProviderFieldChange('apiKey', event.target.value)
@@ -297,6 +306,11 @@ export function ProviderSettingsTab({
                   ? t('settings.apiKeyHelpEdit')
                   : t('settings.apiKeyHelpNew')}
               </p>
+              {editingProviderId && editingPreset?.hasApiKey ? (
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  {t('settings.apiKeyStoredHint', { hint: editingPreset.apiKeyHint })}
+                </p>
+              ) : null}
               {providerForm.errors.apiKey ? (
                 <p className="text-xs text-[var(--danger)]">
                   {providerForm.errors.apiKey}

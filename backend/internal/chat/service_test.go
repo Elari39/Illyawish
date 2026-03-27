@@ -458,6 +458,138 @@ func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 	}
 }
 
+func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
+		Folder: ptrString("Work"),
+		Tags:   &[]string{"urgent", "backend"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateConversation() error = %v", err)
+	}
+
+	if updatedConversation.Folder != "Work" {
+		t.Fatalf("expected folder to update, got %q", updatedConversation.Folder)
+	}
+	if len(updatedConversation.Tags) != 2 || updatedConversation.Tags[0] != "urgent" || updatedConversation.Tags[1] != "backend" {
+		t.Fatalf("expected tags to update, got %#v", updatedConversation.Tags)
+	}
+}
+
+func TestListMessagesPageReturnsCursorForOlderMessages(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	for index := 0; index < 5; index += 1 {
+		role := models.RoleUser
+		if index%2 == 1 {
+			role = models.RoleAssistant
+		}
+		message := &models.Message{
+			ConversationID: conversation.ID,
+			Role:           role,
+			Content:        fmt.Sprintf("message-%d", index+1),
+			Status:         models.MessageStatusCompleted,
+		}
+		mustCreateMessageRecord(t, db, message)
+	}
+
+	result, err := service.ListMessagesPage(user.ID, conversation.ID, ListMessagesParams{
+		Limit: 2,
+	})
+	if err != nil {
+		t.Fatalf("ListMessagesPage() error = %v", err)
+	}
+
+	if len(result.Messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(result.Messages))
+	}
+	if result.Messages[0].Content != "message-4" || result.Messages[1].Content != "message-5" {
+		t.Fatalf("expected latest message window in ascending order, got %#v", result.Messages)
+	}
+	if !result.HasMore {
+		t.Fatal("expected older messages to remain")
+	}
+	if result.NextBeforeID == nil || *result.NextBeforeID == 0 {
+		t.Fatalf("expected cursor for older messages, got %#v", result.NextBeforeID)
+	}
+
+	older, err := service.ListMessagesPage(user.ID, conversation.ID, ListMessagesParams{
+		Limit:    2,
+		BeforeID: result.NextBeforeID,
+	})
+	if err != nil {
+		t.Fatalf("ListMessagesPage(older) error = %v", err)
+	}
+	if len(older.Messages) != 2 {
+		t.Fatalf("expected 2 older messages, got %d", len(older.Messages))
+	}
+	if older.Messages[0].Content != "message-2" || older.Messages[1].Content != "message-3" {
+		t.Fatalf("expected older window in ascending order, got %#v", older.Messages)
+	}
+}
+
+func TestListConversationsSearchMatchesFolderTagsMessageAndAttachmentText(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	attachment := models.Attachment{
+		ID:       "attachment-1",
+		Name:     "roadmap.txt",
+		MIMEType: "text/plain",
+		URL:      "/api/attachments/attachment-1/file",
+		Size:     128,
+	}
+	createStoredAttachment(t, db, user.ID, attachment)
+	if err := db.Model(&models.StoredAttachment{}).
+		Where("id = ?", attachment.ID).
+		Update("extracted_text", "searchable roadmap details").Error; err != nil {
+		t.Fatalf("update extracted text: %v", err)
+	}
+
+	message := &models.Message{
+		ConversationID: conversation.ID,
+		Role:           models.RoleUser,
+		Content:        "Discuss quarterly plan",
+		Attachments:    []models.Attachment{attachment},
+		Status:         models.MessageStatusCompleted,
+	}
+	mustCreateMessageRecord(t, db, message)
+
+	if _, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
+		Folder: ptrString("Work"),
+		Tags:   &[]string{"urgent", "planning"},
+	}); err != nil {
+		t.Fatalf("UpdateConversation() error = %v", err)
+	}
+
+	testCases := []struct {
+		name   string
+		search string
+	}{
+		{name: "folder", search: "Work"},
+		{name: "tag", search: "planning"},
+		{name: "message", search: "quarterly"},
+		{name: "attachment text", search: "roadmap details"},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := service.ListConversations(user.ID, ListConversationsParams{
+				Search: testCase.search,
+			})
+			if err != nil {
+				t.Fatalf("ListConversations() error = %v", err)
+			}
+			if len(result.Conversations) != 1 || result.Conversations[0].ID != conversation.ID {
+				t.Fatalf("expected search %q to match conversation, got %#v", testCase.search, result.Conversations)
+			}
+		})
+	}
+}
+
 func TestResolveSystemPromptUsesSessionAndGlobalPriority(t *testing.T) {
 	db, user, _ := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
@@ -969,7 +1101,7 @@ func newChatTestContext(t *testing.T) (*gorm.DB, models.User, models.Conversatio
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.MessageAttachment{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.MessageAttachment{}, &models.StoredAttachment{}); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}
 
@@ -1007,8 +1139,13 @@ func createStoredAttachment(t *testing.T, db *gorm.DB, userID uint, attachment m
 		MIMEType:   attachment.MIMEType,
 		Size:       attachment.Size,
 		StorageKey: fmt.Sprintf("attachment-%s", attachment.ID),
+		ExtractedText: attachment.Name,
 	}
 	if err := db.Create(&storedAttachment).Error; err != nil {
 		t.Fatalf("create stored attachment: %v", err)
 	}
+}
+
+func ptrString(value string) *string {
+	return &value
 }

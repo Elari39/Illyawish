@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"backend/internal/llm"
 	"backend/internal/models"
@@ -40,19 +39,6 @@ func (e requestError) Error() string {
 
 func isRequestError(err error) bool {
 	var target requestError
-	return errors.As(err, &target)
-}
-
-type quotaExceededError struct {
-	message string
-}
-
-func (e quotaExceededError) Error() string {
-	return e.message
-}
-
-func isQuotaExceededError(err error) bool {
-	var target quotaExceededError
 	return errors.As(err, &target)
 }
 
@@ -115,6 +101,8 @@ type ConversationUpdateInput struct {
 	Title      *string               `json:"title"`
 	IsPinned   *bool                 `json:"isPinned"`
 	IsArchived *bool                 `json:"isArchived"`
+	Folder     *string               `json:"folder"`
+	Tags       *[]string             `json:"tags"`
 	Settings   *ConversationSettings `json:"settings"`
 }
 
@@ -185,95 +173,6 @@ func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*Send
 		Attachments: attachments,
 		Options:     options,
 	}, nil
-}
-
-func (s *Service) enforceConversationQuota(userID uint) error {
-	quota, err := s.userQuotas(userID)
-	if err != nil {
-		return err
-	}
-	if quota.MaxConversations == nil {
-		return nil
-	}
-
-	var count int64
-	if err := s.db.Model(&models.Conversation{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
-		return fmt.Errorf("count user conversations: %w", err)
-	}
-	if count >= int64(*quota.MaxConversations) {
-		return quotaExceeded("conversation quota reached")
-	}
-	return nil
-}
-
-func (s *Service) enforceDailyMessageQuota(userID uint) error {
-	quota, err := s.userQuotas(userID)
-	if err != nil {
-		return err
-	}
-	if quota.DailyMessageLimit == nil {
-		return nil
-	}
-
-	startOfDay := time.Now().UTC().Truncate(24 * time.Hour)
-	var count int64
-	if err := s.db.Model(&models.Message{}).
-		Joins("JOIN conversations ON conversations.id = messages.conversation_id").
-		Where("conversations.user_id = ? AND messages.role = ? AND messages.created_at >= ?", userID, models.RoleUser, startOfDay).
-		Count(&count).Error; err != nil {
-		return fmt.Errorf("count daily messages: %w", err)
-	}
-	if count >= int64(*quota.DailyMessageLimit) {
-		return quotaExceeded("daily message quota reached")
-	}
-	return nil
-}
-
-func (s *Service) enforceAttachmentQuota(userID uint, attachmentCount int) error {
-	if attachmentCount == 0 {
-		return nil
-	}
-
-	quota, err := s.userQuotas(userID)
-	if err != nil {
-		return err
-	}
-
-	effectiveMax := 4
-	if quota.MaxAttachmentsPerMessage != nil && *quota.MaxAttachmentsPerMessage < effectiveMax {
-		effectiveMax = *quota.MaxAttachmentsPerMessage
-	}
-	if attachmentCount > effectiveMax {
-		return quotaExceeded("attachment quota reached")
-	}
-	return nil
-}
-
-type userQuotaSettings struct {
-	MaxConversations         *int
-	MaxAttachmentsPerMessage *int
-	DailyMessageLimit        *int
-}
-
-func (s *Service) userQuotas(userID uint) (*userQuotaSettings, error) {
-	var user models.User
-	if err := s.db.Select(
-		"max_conversations",
-		"max_attachments_per_message",
-		"daily_message_limit",
-	).First(&user, userID).Error; err != nil {
-		return nil, fmt.Errorf("load user quotas: %w", err)
-	}
-
-	return &userQuotaSettings{
-		MaxConversations:         cloneInt(user.MaxConversations),
-		MaxAttachmentsPerMessage: cloneInt(user.MaxAttachmentsPerMessage),
-		DailyMessageLimit:        cloneInt(user.DailyMessageLimit),
-	}, nil
-}
-
-func quotaExceeded(message string) error {
-	return quotaExceededError{message: message}
 }
 
 func (s *Service) GetChatSettings(userID uint) (ChatSettings, error) {
@@ -373,77 +272,6 @@ func (s *Service) resolveSystemPrompt(userID uint, sessionPrompt string) (string
 	}
 
 	return settings.GlobalPrompt, nil
-}
-
-func sanitizeConversationSettings(settings *ConversationSettings) (ConversationSettings, error) {
-	if settings == nil {
-		return ConversationSettings{}, nil
-	}
-	normalized := ConversationSettings{
-		SystemPrompt: strings.TrimSpace(settings.SystemPrompt),
-		Model:        strings.TrimSpace(settings.Model),
-	}
-
-	if settings.Temperature != nil {
-		if *settings.Temperature < 0 || *settings.Temperature > 2 {
-			return ConversationSettings{}, requestError{message: "temperature must be between 0 and 2"}
-		}
-		normalized.Temperature = ptrFloat32(*settings.Temperature)
-	}
-
-	if settings.MaxTokens != nil {
-		if *settings.MaxTokens < 0 {
-			return ConversationSettings{}, requestError{message: "max tokens must be greater than or equal to 0"}
-		}
-		if *settings.MaxTokens > 0 {
-			normalized.MaxTokens = ptrInt(*settings.MaxTokens)
-		}
-	}
-
-	if settings.ContextWindowTurns != nil {
-		if *settings.ContextWindowTurns < 0 {
-			return ConversationSettings{}, requestError{message: "context window turns must be greater than or equal to 0"}
-		}
-		if *settings.ContextWindowTurns > 0 {
-			normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
-		}
-	}
-
-	return normalized, nil
-}
-
-func sanitizeChatSettings(settings ChatSettings) (ChatSettings, error) {
-	normalized := ChatSettings{
-		GlobalPrompt: strings.TrimSpace(settings.GlobalPrompt),
-		Model:        strings.TrimSpace(settings.Model),
-	}
-
-	if settings.Temperature != nil {
-		if *settings.Temperature < 0 || *settings.Temperature > 2 {
-			return ChatSettings{}, requestError{message: "temperature must be between 0 and 2"}
-		}
-		normalized.Temperature = ptrFloat32(*settings.Temperature)
-	}
-
-	if settings.MaxTokens != nil {
-		if *settings.MaxTokens < 0 {
-			return ChatSettings{}, requestError{message: "max tokens must be greater than or equal to 0"}
-		}
-		if *settings.MaxTokens > 0 {
-			normalized.MaxTokens = ptrInt(*settings.MaxTokens)
-		}
-	}
-
-	if settings.ContextWindowTurns != nil {
-		if *settings.ContextWindowTurns < 0 {
-			return ChatSettings{}, requestError{message: "context window turns must be greater than or equal to 0"}
-		}
-		if *settings.ContextWindowTurns > 0 {
-			normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
-		}
-	}
-
-	return normalized, nil
 }
 
 func (s *Service) prepareAssistantReplay(
@@ -705,13 +533,6 @@ func (s *Service) applyConversationDefaults(conversation *models.Conversation) {
 	}
 }
 
-func applyChatSettingsDefaults(settings ChatSettings) ChatSettings {
-	if settings.Temperature == nil {
-		settings.Temperature = ptrFloat32(defaultTemperature)
-	}
-	return settings
-}
-
 func (s *Service) effectiveConversationSettings(
 	userID uint,
 	conversation *models.Conversation,
@@ -728,234 +549,4 @@ func (s *Service) effectiveConversationSettings(
 		MaxTokens:          firstNonNilInt(conversation.MaxTokens, chatSettings.MaxTokens),
 		ContextWindowTurns: firstNonNilInt(conversation.ContextWindowTurns, chatSettings.ContextWindowTurns),
 	}, nil
-}
-
-func includeMessageInHistory(message models.Message) bool {
-	if message.Role == models.RoleAssistant && message.Status != models.MessageStatusCompleted {
-		return false
-	}
-	return strings.TrimSpace(message.Content) != "" || len(message.Attachments) > 0
-}
-
-func trimHistoryToRecentTurns(
-	history []llm.ChatMessage,
-	contextWindowTurns *int,
-) []llm.ChatMessage {
-	if contextWindowTurns == nil || *contextWindowTurns <= 0 {
-		return history
-	}
-
-	userTurns := 0
-	startIndex := 0
-	for index := len(history) - 1; index >= 0; index-- {
-		if history[index].Role != models.RoleUser {
-			continue
-		}
-		userTurns++
-		startIndex = index
-		if userTurns >= *contextWindowTurns {
-			return history[startIndex:]
-		}
-	}
-
-	return history
-}
-
-func shouldAutoContinue(
-	result llm.StreamResult,
-	streamErr error,
-) bool {
-	if result.FinishReason == "length" {
-		return true
-	}
-
-	if streamErr == nil || result.Content == "" {
-		return false
-	}
-
-	if errors.Is(streamErr, context.Canceled) {
-		return false
-	}
-
-	return isRecoverableStreamError(streamErr)
-}
-
-func isRecoverableStreamError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-
-	message := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(message, "unexpected eof") ||
-		strings.HasSuffix(message, "eof") ||
-		strings.Contains(message, "connection reset") ||
-		strings.Contains(message, "broken pipe") ||
-		strings.Contains(message, "stream closed") ||
-		strings.Contains(message, "timeout") ||
-		strings.Contains(message, "closed network connection")
-}
-
-func deriveConversationTitle(content string, attachments []models.Attachment) string {
-	content = strings.TrimSpace(content)
-	if content == "" && len(attachments) > 0 {
-		title := strings.TrimSpace(attachments[0].Name)
-		if title == "" {
-			return "Image chat"
-		}
-		content = "Image: " + title
-	}
-	if content == "" {
-		return defaultConversationTitle
-	}
-
-	const maxRunes = 30
-	if utf8.RuneCountInString(content) <= maxRunes {
-		return content
-	}
-
-	runes := []rune(content)
-	return string(runes[:maxRunes]) + "..."
-}
-
-func conversationMessageByID(tx *gorm.DB, conversationID uint, messageID uint) (*models.Message, error) {
-	var message models.Message
-	if err := tx.Where("conversation_id = ? AND id = ?", conversationID, messageID).First(&message).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("load message: %w", err)
-	}
-	return &message, nil
-}
-
-func latestConversationMessage(tx *gorm.DB, conversationID uint) (*models.Message, error) {
-	var message models.Message
-	if err := tx.Where("conversation_id = ?", conversationID).Order("id desc").First(&message).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("load latest message: %w", err)
-	}
-	return &message, nil
-}
-
-func latestConversationMessageByRole(
-	tx *gorm.DB,
-	conversationID uint,
-	role string,
-) (*models.Message, error) {
-	var message models.Message
-	if err := tx.Where("conversation_id = ? AND role = ?", conversationID, role).
-		Order("id desc").
-		First(&message).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("load latest %s message: %w", role, err)
-	}
-	return &message, nil
-}
-
-func previousUserMessage(tx *gorm.DB, conversationID uint, beforeMessageID uint) (*models.Message, error) {
-	var message models.Message
-	if err := tx.Where("conversation_id = ? AND role = ? AND id < ?", conversationID, models.RoleUser, beforeMessageID).
-		Order("id desc").
-		First(&message).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, err
-		}
-		return nil, fmt.Errorf("load previous user message: %w", err)
-	}
-	return &message, nil
-}
-
-func escapeLike(input string) string {
-	replacer := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_")
-	return replacer.Replace(input)
-}
-
-func cloneFloat32(value *float32) *float32 {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
-}
-
-func cloneInt(value *int) *int {
-	if value == nil {
-		return nil
-	}
-	copy := *value
-	return &copy
-}
-
-func ptrFloat32(value float32) *float32 {
-	return &value
-}
-
-func ptrInt(value int) *int {
-	return &value
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func firstNonNilFloat32(values ...*float32) *float32 {
-	for _, value := range values {
-		if value != nil {
-			return cloneFloat32(value)
-		}
-	}
-	return nil
-}
-
-func firstNonNilInt(values ...*int) *int {
-	for _, value := range values {
-		if value != nil {
-			return cloneInt(value)
-		}
-	}
-	return nil
-}
-
-func containsStatus(statuses []string, candidate string) bool {
-	for _, status := range statuses {
-		if status == candidate {
-			return true
-		}
-	}
-	return false
-}
-
-func maxInt(left int, right int) int {
-	if left > right {
-		return left
-	}
-	return right
-}
-
-func collectMessageAttachments(messages []models.Message) []models.Attachment {
-	attachments := make([]models.Attachment, 0)
-	for _, message := range messages {
-		attachments = append(attachments, messageAttachments(message)...)
-	}
-	return attachments
-}
-
-func messageAttachments(message models.Message) []models.Attachment {
-	if len(message.Attachments) > 0 {
-		return message.Attachments
-	}
-	return message.LegacyAttachments
 }

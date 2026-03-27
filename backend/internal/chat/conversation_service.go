@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -29,7 +30,28 @@ func (s *Service) ListConversations(
 	search := strings.TrimSpace(params.Search)
 	if search != "" {
 		like := "%" + escapeLike(search) + "%"
-		query = query.Where("title LIKE ? ESCAPE '\\'", like)
+		query = query.Where(`
+			conversations.title LIKE ? ESCAPE '\' OR
+			conversations.folder LIKE ? ESCAPE '\' OR
+			COALESCE(conversations.tags, '') LIKE ? ESCAPE '\' OR
+			EXISTS (
+				SELECT 1
+				FROM messages
+				WHERE messages.conversation_id = conversations.id
+				  AND messages.content LIKE ? ESCAPE '\'
+			) OR
+			EXISTS (
+				SELECT 1
+				FROM messages
+				LEFT JOIN message_attachments ON message_attachments.message_id = messages.id
+				LEFT JOIN stored_attachments ON stored_attachments.id = message_attachments.attachment_id
+				WHERE messages.conversation_id = conversations.id
+				  AND (
+					stored_attachments.name LIKE ? ESCAPE '\' OR
+					COALESCE(stored_attachments.extracted_text, '') LIKE ? ESCAPE '\'
+				  )
+			)
+		`, like, like, like, like, like, like)
 	}
 
 	var total int64
@@ -194,6 +216,24 @@ func (s *Service) UpdateConversation(
 	if input.IsArchived != nil {
 		updates["is_archived"] = *input.IsArchived
 	}
+	if input.Folder != nil {
+		folder, err := sanitizeConversationFolder(*input.Folder)
+		if err != nil {
+			return nil, err
+		}
+		updates["folder"] = folder
+	}
+	if input.Tags != nil {
+		normalizedTags, err := sanitizeConversationTags(*input.Tags)
+		if err != nil {
+			return nil, err
+		}
+		serializedTags, err := serializeConversationTags(normalizedTags)
+		if err != nil {
+			return nil, err
+		}
+		updates["tags"] = serializedTags
+	}
 	if input.Settings != nil {
 		settings, err := sanitizeConversationSettings(input.Settings)
 		if err != nil {
@@ -247,18 +287,11 @@ func (s *Service) cleanupAttachments(messages []models.Message) error {
 }
 
 func (s *Service) ListMessages(userID uint, conversationID uint) ([]models.Message, error) {
-	if _, err := s.GetConversation(userID, conversationID); err != nil {
+	result, err := s.ListMessagesPage(userID, conversationID, ListMessagesParams{})
+	if err != nil {
 		return nil, err
 	}
-
-	var messages []models.Message
-	if err := s.db.Where("conversation_id = ?", conversationID).Order("id asc").Find(&messages).Error; err != nil {
-		return nil, fmt.Errorf("list messages: %w", err)
-	}
-	if err := hydrateMessageAttachments(s.db, messages); err != nil {
-		return nil, err
-	}
-	return messages, nil
+	return result.Messages, nil
 }
 
 func (s *Service) CancelGeneration(userID uint, conversationID uint) error {
@@ -276,4 +309,55 @@ func (s *Service) CancelGeneration(userID uint, conversationID uint) error {
 
 	cancel()
 	return nil
+}
+
+func sanitizeConversationFolder(value string) (string, error) {
+	folder := strings.TrimSpace(value)
+	if len([]rune(folder)) > 120 {
+		return "", requestError{message: "conversation folder must be 120 characters or fewer"}
+	}
+	return folder, nil
+}
+
+func sanitizeConversationTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return nil, nil
+	}
+
+	normalized := make([]string, 0, len(tags))
+	seen := map[string]struct{}{}
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			continue
+		}
+		if len([]rune(trimmed)) > 32 {
+			return nil, requestError{message: "conversation tags must be 32 characters or fewer"}
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	if len(normalized) > 12 {
+		return nil, requestError{message: "a maximum of 12 tags can be saved"}
+	}
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+	return normalized, nil
+}
+
+func serializeConversationTags(tags []string) (string, error) {
+	if len(tags) == 0 {
+		return "[]", nil
+	}
+
+	encoded, err := json.Marshal(tags)
+	if err != nil {
+		return "", fmt.Errorf("serialize conversation tags: %w", err)
+	}
+	return string(encoded), nil
 }

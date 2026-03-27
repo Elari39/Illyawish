@@ -189,10 +189,9 @@ func sanitizeUpdatePresetInput(
 
 	if input.APIKey != nil {
 		apiKey := strings.TrimSpace(*input.APIKey)
-		if apiKey == "" {
-			return UpdatePresetInput{}, requestError{message: "provider API key is required"}
+		if apiKey != "" {
+			normalized.APIKey = &apiKey
 		}
-		normalized.APIKey = &apiKey
 	}
 
 	if input.Models != nil || input.DefaultModel != nil {

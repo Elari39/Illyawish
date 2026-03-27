@@ -45,6 +45,24 @@ const workspacePolicy: WorkspacePolicy = {
   defaultUserDailyMessageLimit: 100,
 }
 
+const usageStats = {
+  totalUsers: 3,
+  activeUsers: 2,
+  recentUsers: 1,
+  totalConversations: 12,
+  totalMessages: 48,
+  totalAttachments: 7,
+  configuredProviderPresets: 3,
+  activeProviderPresets: 2,
+  activeProviderDistribution: [
+    {
+      name: 'OpenAI',
+      baseURL: 'https://api.openai.com/v1',
+      userCount: 2,
+    },
+  ],
+}
+
 const authValue: AuthContextValue = {
   user: {
     id: 99,
@@ -83,6 +101,7 @@ describe('AdminPage', () => {
       logs: auditLogs,
       total: auditLogs.length,
     })
+    vi.spyOn(adminApi, 'getUsageStats').mockResolvedValue(usageStats)
     vi.spyOn(adminApi, 'getWorkspacePolicy').mockResolvedValue(workspacePolicy)
     vi.spyOn(adminApi, 'createUser').mockResolvedValue(users[0])
     vi.spyOn(adminApi, 'updateUser').mockResolvedValue(users[0])
@@ -151,6 +170,48 @@ describe('AdminPage', () => {
     await waitFor(() => {
       expect(resetPasswordSpy).toHaveBeenCalledWith(1, {
         newPassword: 'moonlit-secret',
+      })
+    })
+  })
+
+  it('shows usage stats and applies audit log filters', async () => {
+    const listAuditLogsSpy = vi.spyOn(adminApi, 'listAuditLogs')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+    expect(screen.getByText('48')).toBeInTheDocument()
+    expect(screen.getByText('OpenAI')).toBeInTheDocument()
+    expect(screen.getByText('2 users')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Audit Logs' }))
+
+    fireEvent.change(screen.getByLabelText('Actor'), {
+      target: { value: 'aria' },
+    })
+    fireEvent.change(screen.getByLabelText('Action'), {
+      target: { value: 'admin.user_updated' },
+    })
+    fireEvent.change(screen.getByLabelText('Target type'), {
+      target: { value: 'user' },
+    })
+    fireEvent.change(screen.getByLabelText('Date from'), {
+      target: { value: '2026-03-01' },
+    })
+    fireEvent.change(screen.getByLabelText('Date to'), {
+      target: { value: '2026-03-31' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }))
+
+    await waitFor(() => {
+      expect(listAuditLogsSpy).toHaveBeenLastCalledWith({
+        actor: 'aria',
+        action: 'admin.user_updated',
+        targetType: 'user',
+        dateFrom: '2026-03-01',
+        dateTo: '2026-03-31',
+        limit: 100,
+        offset: 0,
       })
     })
   })

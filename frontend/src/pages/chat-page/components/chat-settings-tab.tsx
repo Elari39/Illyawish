@@ -8,16 +8,24 @@ import type { ChatSettings, ConversationSettings } from '../../../types/chat'
 
 interface ChatSettingsTabProps {
   chatSettings: ChatSettings
+  conversationFolder: string
+  conversationTags: string
   modelOptions: string[]
   settings: ConversationSettings
+  setConversationFolder: Dispatch<SetStateAction<string>>
+  setConversationTags: Dispatch<SetStateAction<string>>
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
 }
 
 export function ChatSettingsTab({
   chatSettings,
+  conversationFolder,
+  conversationTags,
   modelOptions,
   settings,
+  setConversationFolder,
+  setConversationTags,
   setChatSettings,
   setSettings,
 }: ChatSettingsTabProps) {
@@ -190,6 +198,33 @@ export function ChatSettingsTab({
             {t('settings.sessionPromptHelp')}
           </p>
         </div>
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-[var(--foreground)]">
+              {t('settings.folder')}
+            </span>
+            <Input
+              placeholder={t('settings.folderPlaceholder')}
+              value={conversationFolder}
+              onChange={(event) => setConversationFolder(event.target.value)}
+            />
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-[var(--foreground)]">
+              {t('settings.tags')}
+            </span>
+            <Input
+              placeholder={t('settings.tagsPlaceholder')}
+              value={conversationTags}
+              onChange={(event) => setConversationTags(event.target.value)}
+            />
+          </label>
+        </div>
+        <p className="text-sm leading-6 text-[var(--muted-foreground)]">
+          {t('settings.tagsHelp')}
+        </p>
       </div>
     </div>
   )

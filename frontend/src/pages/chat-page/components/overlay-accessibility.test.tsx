@@ -35,6 +35,8 @@ const conversation: Conversation = {
   title: 'Imported conversation',
   isPinned: false,
   isArchived: false,
+  folder: '',
+  tags: [],
   settings,
   createdAt: '2026-03-26T00:00:00Z',
   updatedAt: '2026-03-26T00:00:00Z',
@@ -62,6 +64,8 @@ describe('overlay accessibility', () => {
         <SettingsPanel
           activeTab="chat"
           chatSettings={chatSettings}
+          conversationFolder=""
+          conversationTags=""
           editingProviderId={null}
           isLoadingProviders={false}
           isImporting={false}
@@ -96,6 +100,8 @@ describe('overlay accessibility', () => {
           providerState={providerState}
           settings={settings}
           setChatSettings={vi.fn()}
+          setConversationFolder={vi.fn()}
+          setConversationTags={vi.fn()}
           setSettings={vi.fn()}
           transferConversation={conversation}
         />

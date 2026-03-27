@@ -40,6 +40,8 @@ const providerState: ProviderState = {
 
 function ProviderSettingsHarness() {
   const [chatSettings, setChatSettings] = useState(initialChatSettings)
+  const [conversationFolder, setConversationFolder] = useState('')
+  const [conversationTags, setConversationTags] = useState('')
   const [settings, setSettings] = useState(initialSettings)
   const [providerForm, setProviderForm] = useState({
     name: '',
@@ -54,6 +56,8 @@ function ProviderSettingsHarness() {
     <SettingsPanel
       activeTab="provider"
       chatSettings={chatSettings}
+      conversationFolder={conversationFolder}
+      conversationTags={conversationTags}
       editingProviderId={null}
       isLoadingProviders={false}
       isImporting={false}
@@ -92,6 +96,8 @@ function ProviderSettingsHarness() {
       providerState={providerState}
       settings={settings}
       setChatSettings={setChatSettings}
+      setConversationFolder={setConversationFolder}
+      setConversationTags={setConversationTags}
       setSettings={setSettings}
       transferConversation={null}
     />
@@ -139,7 +145,7 @@ describe('SettingsPanel', () => {
     })
     expect(baseURLInput).toHaveFocus()
 
-    const apiKeyInput = screen.getByRole('textbox', { name: /^API key/i })
+    const apiKeyInput = screen.getByLabelText(/^API key/i)
     apiKeyInput.focus()
     fireEvent.change(apiKeyInput, {
       target: { value: 'sk-test' },

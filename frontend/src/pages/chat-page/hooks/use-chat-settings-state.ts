@@ -34,11 +34,15 @@ export function useChatSettingsState({
     defaultChatSettings,
   )
   const [newChatSystemPrompt, setNewChatSystemPrompt] = useState('')
+  const [newConversationFolder, setNewConversationFolder] = useState('')
+  const [newConversationTagsInput, setNewConversationTagsInput] = useState('')
   const [pendingConversation, setPendingConversation] =
     useState<Conversation | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<ConversationSettings>(
     defaultConversationSettings,
   )
+  const [conversationFolderDraft, setConversationFolderDraft] = useState('')
+  const [conversationTagsDraft, setConversationTagsDraft] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +75,13 @@ export function useChatSettingsState({
 
   const handleSaveSettings = useCallback(async (onSaved: () => void) => {
     setChatError(null)
+    const nextFolder = sanitizeConversationFolder(conversationFolderDraft)
+    const nextTags = parseConversationTags(conversationTagsDraft)
+    const metadataUpdate = buildConversationMetadataUpdate(
+      nextFolder,
+      nextTags,
+      currentConversation,
+    )
 
     try {
       const updatedChatSettings =
@@ -80,12 +91,18 @@ export function useChatSettingsState({
 
       if (!activeConversationId) {
         setNewChatSystemPrompt(settingsDraft.systemPrompt)
+        setNewConversationFolder(nextFolder)
+        setNewConversationTagsInput(
+          nextTags.join(', '),
+        )
         setSettingsDraft(
           buildDraftConversationSettings(
             updatedChatSettings,
             settingsDraft.systemPrompt,
           ),
         )
+        setConversationFolderDraft(nextFolder)
+        setConversationTagsDraft(nextTags.join(', '))
         onSaved()
         return
       }
@@ -93,6 +110,7 @@ export function useChatSettingsState({
       const updatedConversation = await chatApi.updateConversation(
         activeConversationId,
         {
+          ...metadataUpdate,
           settings: {
             ...defaultConversationSettings,
             systemPrompt: settingsDraft.systemPrompt,
@@ -111,6 +129,9 @@ export function useChatSettingsState({
   }, [
     activeConversationId,
     chatSettingsDraft,
+    conversationFolderDraft,
+    conversationTagsDraft,
+    currentConversation,
     settingsDraft,
     setChatError,
     syncConversationIntoList,
@@ -122,13 +143,23 @@ export function useChatSettingsState({
 
     if (currentConversation) {
       setSettingsDraft(currentConversation.settings)
+      setConversationFolderDraft(currentConversation.folder)
+      setConversationTagsDraft(currentConversation.tags.join(', '))
       return
     }
 
     setSettingsDraft(
       buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
     )
-  }, [chatSettings, currentConversation, newChatSystemPrompt])
+    setConversationFolderDraft(newConversationFolder)
+    setConversationTagsDraft(newConversationTagsInput)
+  }, [
+    chatSettings,
+    currentConversation,
+    newChatSystemPrompt,
+    newConversationFolder,
+    newConversationTagsInput,
+  ])
 
   const resetSettingsDraft = useCallback(() => {
     syncSettingsDraft()
@@ -143,13 +174,24 @@ export function useChatSettingsState({
     setSettingsDraft(
       buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
     )
-  }, [chatSettings, newChatSystemPrompt])
+    setConversationFolderDraft(newConversationFolder)
+    setConversationTagsDraft(newConversationTagsInput)
+  }, [
+    chatSettings,
+    newChatSystemPrompt,
+    newConversationFolder,
+    newConversationTagsInput,
+  ])
 
   return {
     chatSettingsDraft,
+    conversationFolderDraft,
+    conversationTagsDraft,
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
+    setConversationFolderDraft,
+    setConversationTagsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -157,6 +199,48 @@ export function useChatSettingsState({
     resetPendingConversation,
     resetSettingsDraft,
     syncSettingsDraft,
+  }
+}
+
+function sanitizeConversationFolder(value: string) {
+  return value.trim()
+}
+
+function parseConversationTags(value: string) {
+  const seen = new Set<string>()
+  const tags: string[] = []
+
+  for (const item of value.split(',')) {
+    const tag = item.trim()
+    const normalizedTag = tag.toLowerCase()
+    if (!tag || seen.has(normalizedTag)) {
+      continue
+    }
+
+    seen.add(normalizedTag)
+    tags.push(tag)
+  }
+
+  return tags
+}
+
+function buildConversationMetadataUpdate(
+  folder: string,
+  tags: string[],
+  currentConversation: Conversation | null,
+) {
+  if (!currentConversation) {
+    return {}
+  }
+
+  const folderChanged = folder !== currentConversation.folder
+  const tagsChanged =
+    tags.length !== currentConversation.tags.length ||
+    tags.some((tag, index) => tag !== currentConversation.tags[index])
+
+  return {
+    ...(folderChanged ? { folder } : {}),
+    ...(tagsChanged ? { tags } : {}),
   }
 }
 

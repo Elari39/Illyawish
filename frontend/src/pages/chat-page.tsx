@@ -362,7 +362,9 @@ export function ChatPage() {
 
         <MessageList
           activeConversationId={activeConversationId}
+          hasMoreMessages={chatSession.hasMoreMessages}
           isLoadingMessages={chatSession.isLoadingMessages}
+          isLoadingOlderMessages={chatSession.isLoadingOlderMessages}
           messages={chatSession.messages}
           latestUserMessage={chatSession.latestUserMessage}
           isSending={chatSession.isSending}
@@ -377,6 +379,7 @@ export function ChatPage() {
             }
           }}
           onEditMessage={chatSession.startEditingMessage}
+          onLoadMore={() => void chatSession.loadOlderMessages()}
           onRetryMessage={(message) => void chatSession.handleRetryAssistant(message)}
           onRegenerateMessage={(message) => void chatSession.handleRegenerateAssistant(message)}
         />
@@ -405,6 +408,8 @@ export function ChatPage() {
         activeTab={uiState.activeSettingsTab}
         chatSettings={chatSession.chatSettingsDraft}
         confirmation={uiState.confirmation}
+        conversationFolder={chatSession.conversationFolderDraft}
+        conversationTags={chatSession.conversationTagsDraft}
         editingProviderId={providerSettings.editingProviderId}
         isLoadingProviders={providerSettings.isLoadingProviders}
         isOpen={uiState.isSettingsOpen}
@@ -441,6 +446,8 @@ export function ChatPage() {
         transferConversation={displayConversation}
         settings={chatSession.settingsDraft}
         setChatSettings={chatSession.setChatSettingsDraft}
+        setConversationFolder={chatSession.setConversationFolderDraft}
+        setConversationTags={chatSession.setConversationTagsDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}
       />

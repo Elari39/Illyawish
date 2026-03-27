@@ -25,6 +25,8 @@ type ConversationDTO struct {
 	Title      string                  `json:"title"`
 	IsPinned   bool                    `json:"isPinned"`
 	IsArchived bool                    `json:"isArchived"`
+	Folder     string                  `json:"folder"`
+	Tags       []string                `json:"tags"`
 	Settings   ConversationSettingsDTO `json:"settings"`
 	CreatedAt  string                  `json:"createdAt"`
 	UpdatedAt  string                  `json:"updatedAt"`
@@ -66,6 +68,11 @@ type MessageDTO struct {
 
 type regenerateRequest struct {
 	Options *ConversationSettings `json:"options"`
+}
+
+type MessagePaginationDTO struct {
+	HasMore      bool  `json:"hasMore"`
+	NextBeforeID *uint `json:"nextBeforeId"`
 }
 
 func NewHandler(service *Service) *Handler {
@@ -215,14 +222,20 @@ func (h *Handler) ListMessages(c *gin.Context) {
 		return
 	}
 
-	messages, err := h.service.ListMessages(user.ID, conversationID)
+	params, err := listMessagesParams(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	messagePage, err := h.service.ListMessagesPage(user.ID, conversationID, params)
 	if err != nil {
 		handleChatError(c, err)
 		return
 	}
 
-	messageDTOs := make([]MessageDTO, 0, len(messages))
-	for _, message := range messages {
+	messageDTOs := make([]MessageDTO, 0, len(messagePage.Messages))
+	for _, message := range messagePage.Messages {
 		messageDTOs = append(messageDTOs, *ToMessageDTO(&message))
 	}
 
@@ -235,6 +248,10 @@ func (h *Handler) ListMessages(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"conversation": ToConversationDTO(conversation, effectiveSettings),
 		"messages":     messageDTOs,
+		"pagination": MessagePaginationDTO{
+			HasMore:      messagePage.HasMore,
+			NextBeforeID: messagePage.NextBeforeID,
+		},
 	})
 }
 
@@ -495,6 +512,29 @@ func listConversationsParams(c *gin.Context) (ListConversationsParams, error) {
 	return params, nil
 }
 
+func listMessagesParams(c *gin.Context) (ListMessagesParams, error) {
+	params := ListMessagesParams{}
+
+	if limitRaw := c.Query("limit"); limitRaw != "" {
+		limit, err := strconv.Atoi(limitRaw)
+		if err != nil {
+			return ListMessagesParams{}, errors.New("limit must be a number")
+		}
+		params.Limit = limit
+	}
+
+	if beforeIDRaw := c.Query("beforeId"); beforeIDRaw != "" {
+		beforeID, err := strconv.ParseUint(beforeIDRaw, 10, 64)
+		if err != nil {
+			return ListMessagesParams{}, errors.New("beforeId must be a number")
+		}
+		value := uint(beforeID)
+		params.BeforeID = &value
+	}
+
+	return params, nil
+}
+
 func conversationIDParam(c *gin.Context) (uint, error) {
 	rawID := c.Param("id")
 	id, err := strconv.ParseUint(rawID, 10, 64)
@@ -536,6 +576,8 @@ func ToConversationDTO(
 		Title:      conversation.Title,
 		IsPinned:   conversation.IsPinned,
 		IsArchived: conversation.IsArchived,
+		Folder:     conversation.Folder,
+		Tags:       append([]string(nil), conversation.Tags...),
 		Settings: ConversationSettingsDTO{
 			SystemPrompt:       settings.SystemPrompt,
 			Model:              settings.Model,

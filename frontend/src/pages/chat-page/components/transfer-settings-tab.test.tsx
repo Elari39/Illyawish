@@ -11,6 +11,8 @@ const conversation: Conversation = {
   title: 'Project notes',
   isPinned: false,
   isArchived: false,
+  folder: '',
+  tags: [],
   settings: {
     systemPrompt: 'You are a helpful assistant.',
     model: '',

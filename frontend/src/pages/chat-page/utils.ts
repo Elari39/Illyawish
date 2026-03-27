@@ -94,8 +94,10 @@ export function syncConversationList(
   const filtered = conversations.filter((item) => item.id !== conversation.id)
   if (
     conversation.isArchived !== showArchived ||
-    (search &&
-      !conversation.title.toLowerCase().includes(search.toLowerCase()))
+    !matchesConversationFilters(conversation, {
+      showArchived,
+      search,
+    })
   ) {
     return sortConversations(filtered)
   }
@@ -106,11 +108,44 @@ export function matchesConversationFilters(
   conversation: Conversation,
   { showArchived, search }: ConversationFilter,
 ) {
+  const normalizedSearch = search.trim().toLowerCase()
+
   return (
     conversation.isArchived === showArchived &&
-    (!search ||
-      conversation.title.toLowerCase().includes(search.trim().toLowerCase()))
+    (!normalizedSearch ||
+      conversation.title.toLowerCase().includes(normalizedSearch) ||
+      conversation.folder.toLowerCase().includes(normalizedSearch) ||
+      conversation.tags.some((tag) =>
+        tag.toLowerCase().includes(normalizedSearch),
+      ))
   )
+}
+
+export function parseConversationTagsInput(value: string) {
+  const seen = new Set<string>()
+  const tags: string[] = []
+
+  for (const item of value.split(',')) {
+    const tag = item.trim()
+    const normalizedTag = tag.toLowerCase()
+    if (!tag || seen.has(normalizedTag)) {
+      continue
+    }
+
+    seen.add(normalizedTag)
+    tags.push(tag)
+  }
+
+  return tags
+}
+
+export function dedupeMessages(messages: Message[]) {
+  const uniqueById = new Map<number, Message>()
+  for (const message of messages) {
+    uniqueById.set(message.id, message)
+  }
+
+  return Array.from(uniqueById.values()).sort((left, right) => left.id - right.id)
 }
 
 export function applyConversationSync(
@@ -488,7 +523,7 @@ export function createProviderForm(
     return {
       name: preset.name,
       baseURL: preset.baseURL,
-      apiKey: preset.apiKey,
+      apiKey: '',
       models: resolveProviderModelDraft(preset.models, preset.defaultModel),
       defaultModel: preset.defaultModel,
       errors: createProviderFormErrors(),

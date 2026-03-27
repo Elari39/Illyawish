@@ -2,7 +2,6 @@ package provider
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -25,7 +24,7 @@ type ProviderPresetDTO struct {
 	ID           uint     `json:"id"`
 	Name         string   `json:"name"`
 	BaseURL      string   `json:"baseURL"`
-	APIKey       string   `json:"apiKey"`
+	HasAPIKey    bool     `json:"hasApiKey"`
 	APIKeyHint   string   `json:"apiKeyHint"`
 	Models       []string `json:"models"`
 	DefaultModel string   `json:"defaultModel"`
@@ -269,16 +268,11 @@ func (h *Handler) toProviderStateDTO(state *State) (ProviderStateDTO, error) {
 func (h *Handler) toProviderPresetDTO(
 	preset *models.LLMProviderPreset,
 ) (ProviderPresetDTO, error) {
-	apiKey, err := h.service.crypter.Decrypt(preset.EncryptedAPIKey)
-	if err != nil {
-		return ProviderPresetDTO{}, fmt.Errorf("decrypt provider API key: %w", err)
-	}
-
 	return ProviderPresetDTO{
 		ID:           preset.ID,
 		Name:         preset.Name,
 		BaseURL:      preset.BaseURL,
-		APIKey:       apiKey,
+		HasAPIKey:    preset.EncryptedAPIKey != "",
 		APIKeyHint:   preset.APIKeyHint,
 		Models:       currentProviderModels(preset),
 		DefaultModel: preset.DefaultModel,

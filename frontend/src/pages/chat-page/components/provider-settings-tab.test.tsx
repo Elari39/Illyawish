@@ -12,7 +12,7 @@ describe('ProviderSettingsTab', () => {
       id: 7,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
-      apiKey: 'sk-openai-1234',
+      hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',
@@ -61,7 +61,7 @@ describe('ProviderSettingsTab', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByText('Key: sk-openai-1234')).toBeInTheDocument()
+    expect(screen.getByText('Key: sk-1...2345')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /openai/i }))
     expect(onEditProvider).toHaveBeenCalledWith(preset)
@@ -80,7 +80,7 @@ describe('ProviderSettingsTab', () => {
     expect(onEditProvider).not.toHaveBeenCalled()
   })
 
-  it('shows the full api key in the edit form', () => {
+  it('keeps the edit form empty and shows the stored key hint', () => {
     render(
       <TestProviders>
         <ProviderSettingsTab
@@ -97,13 +97,24 @@ describe('ProviderSettingsTab', () => {
           providerForm={{
             name: 'OpenAI',
             baseURL: 'https://api.openai.com/v1',
-            apiKey: 'sk-openai-1234',
+            apiKey: '',
             models: ['gpt-4.1-mini'],
             defaultModel: 'gpt-4.1-mini',
             errors: createProviderFormErrors(),
           }}
           providerState={{
-            presets: [],
+            presets: [{
+              id: 7,
+              name: 'OpenAI',
+              baseURL: 'https://api.openai.com/v1',
+              hasApiKey: true,
+              apiKeyHint: 'sk-1...2345',
+              models: ['gpt-4.1-mini'],
+              defaultModel: 'gpt-4.1-mini',
+              isActive: true,
+              createdAt: '2026-03-26T00:00:00Z',
+              updatedAt: '2026-03-26T00:00:00Z',
+            }],
             activePresetId: null,
             currentSource: 'none',
             fallback: {
@@ -118,7 +129,8 @@ describe('ProviderSettingsTab', () => {
     )
 
     expect(
-      screen.getByRole('textbox', { name: /^API key/i }),
-    ).toHaveValue('sk-openai-1234')
+      screen.getByLabelText(/^API key/i),
+    ).toHaveValue('')
+    expect(screen.getByText('Stored key: sk-1...2345')).toBeInTheDocument()
   })
 })

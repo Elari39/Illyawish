@@ -74,7 +74,7 @@ describe('useProviderSettings', () => {
       id: 7,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
-      apiKey: 'sk-openai-1234',
+      hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',
@@ -133,7 +133,7 @@ describe('useProviderSettings', () => {
       id: 9,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
-      apiKey: 'sk-created-9876',
+      hasApiKey: true,
       apiKeyHint: 'sk-c...9876',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',
@@ -185,8 +185,8 @@ describe('useProviderSettings', () => {
       defaultModel: 'gpt-4.1-mini',
     })
     expect(result.current.editingProviderId).toBe(9)
-    expect(result.current.providerForm.apiKey).toBe('sk-created-9876')
-    expect(result.current.providerState?.presets[0]?.apiKey).toBe('sk-created-9876')
+    expect(result.current.providerForm.apiKey).toBe('')
+    expect(result.current.providerState?.presets[0]?.hasApiKey).toBe(true)
   })
 
   it('keeps the new preset form when the initial provider request finishes later', async () => {
@@ -196,7 +196,7 @@ describe('useProviderSettings', () => {
           id: 3,
           name: 'Existing preset',
           baseURL: 'https://api.openai.com/v1',
-          apiKey: 'sk-existing-1234',
+          hasApiKey: true,
           apiKeyHint: 'sk-1...2345',
           models: ['gpt-4.1-mini'],
           defaultModel: 'gpt-4.1-mini',
@@ -266,7 +266,7 @@ describe('useProviderSettings', () => {
       id: 7,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
-      apiKey: 'sk-openai-1234',
+      hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',
@@ -326,7 +326,7 @@ describe('useProviderSettings', () => {
       id: 7,
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
-      apiKey: 'sk-openai-1234',
+      hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
       models: ['gpt-4.1-mini'],
       defaultModel: 'gpt-4.1-mini',

@@ -49,12 +49,13 @@ describe('I18nProvider', () => {
       </I18nProvider>,
     )
 
-    expect(screen.queryByTestId('message')).not.toBeInTheDocument()
+    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
+    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
 
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
       expect(screen.getByTestId('message')).toHaveTextContent('加载中...')
-    })
+    }, { timeout: 3000 })
 
     expect(document.documentElement.lang).toBe('zh-CN')
   })

@@ -60,6 +60,8 @@ function createConversation(
     title,
     isPinned: false,
     isArchived: false,
+    folder: '',
+    tags: [],
     settings: defaultSettings,
     createdAt: '2026-03-26T09:08:00Z',
     updatedAt: '2026-03-26T09:08:00Z',
@@ -352,6 +354,65 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Regenerate' })).toHaveLength(2)
+  })
+
+  it('loads older messages on demand from the pagination cursor', async () => {
+    const conversation = createConversation(9, 'Paged history')
+    const initialPage = [
+      createMessage(93, 9, 'user', 'Third message'),
+      createMessage(94, 9, 'assistant', 'Fourth message'),
+    ]
+    const olderPage = [
+      createMessage(91, 9, 'user', 'First message'),
+      createMessage(92, 9, 'assistant', 'Second message'),
+    ]
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+
+    const getConversationMessagesMock = vi
+      .spyOn(chatApi, 'getConversationMessages')
+      .mockImplementation(async (_conversationId: number, params?: { beforeId?: number; limit?: number }) => {
+        if (params?.beforeId === 93) {
+          return {
+            conversation,
+            messages: olderPage,
+            pagination: {
+              hasMore: false,
+              nextBeforeId: null,
+            },
+          }
+        }
+
+        return {
+          conversation,
+          messages: initialPage,
+          pagination: {
+            hasMore: true,
+            nextBeforeId: 93,
+          },
+        }
+      })
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Fourth message')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('First message')).toBeInTheDocument()
+    })
+
+    expect(getConversationMessagesMock).toHaveBeenCalledWith(9)
+    expect(getConversationMessagesMock).toHaveBeenCalledWith(9, {
+      beforeId: 93,
+      limit: 50,
+    })
   })
 
   it('uses the narrower desktop and mobile history sidebar widths', async () => {
@@ -745,6 +806,64 @@ describe('ChatPage conversation navigation', () => {
       expect(updateConversationMock).toHaveBeenCalledWith(9, {
         settings: expect.objectContaining({
           systemPrompt: 'Conversation-only prompt',
+        }),
+      })
+    })
+  })
+
+  it('saves folder and tags together with conversation settings', async () => {
+    const conversation = createConversation(9, 'Organized chat')
+
+    vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
+      ...createChatSettings({ globalPrompt: 'Existing global' }),
+    })
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Visible message')],
+      pagination: {
+        hasMore: false,
+        nextBeforeId: null,
+      },
+    })
+    vi.spyOn(chatApi, 'updateChatSettings').mockResolvedValue(
+      createChatSettings({ globalPrompt: 'Updated global prompt' }),
+    )
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockImplementation(async (conversationId, payload) => ({
+        ...conversation,
+        id: conversationId,
+        folder: payload.folder ?? conversation.folder,
+        tags: payload.tags ?? conversation.tags,
+        settings: payload.settings ?? conversation.settings,
+      }))
+
+    renderChatPage(['/chat/9'])
+
+    await waitFor(() => {
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+    fireEvent.change(await screen.findByLabelText('Folder'), {
+      target: { value: 'Work' },
+    })
+    fireEvent.change(screen.getByLabelText('Tags'), {
+      target: { value: 'urgent, planning' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith(9, {
+        folder: 'Work',
+        tags: ['urgent', 'planning'],
+        settings: expect.objectContaining({
+          systemPrompt: '',
         }),
       })
     })

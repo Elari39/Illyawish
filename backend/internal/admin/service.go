@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"backend/internal/audit"
 	"backend/internal/models"
@@ -14,10 +15,10 @@ import (
 )
 
 var (
-	ErrCannotDisableSelf       = errors.New("cannot disable your own account")
-	ErrCannotDemoteSelf        = errors.New("cannot change your own admin role")
-	ErrLastAdminRemoval        = errors.New("workspace must keep at least one admin")
-	ErrUserNotFound            = errors.New("user not found")
+	ErrCannotDisableSelf = errors.New("cannot disable your own account")
+	ErrCannotDemoteSelf  = errors.New("cannot change your own admin role")
+	ErrLastAdminRemoval  = errors.New("workspace must keep at least one admin")
+	ErrUserNotFound      = errors.New("user not found")
 )
 
 type requestError struct {
@@ -78,6 +79,24 @@ type WorkspacePolicyInput struct {
 	DefaultUserMaxConversations     *int   `json:"defaultUserMaxConversations"`
 	DefaultUserMaxAttachmentsPerMsg *int   `json:"defaultUserMaxAttachmentsPerMessage"`
 	DefaultUserDailyMessageLimit    *int   `json:"defaultUserDailyMessageLimit"`
+}
+
+type UsageStats struct {
+	TotalUsers                 int64
+	ActiveUsers                int64
+	RecentUsers                int64
+	TotalConversations         int64
+	TotalMessages              int64
+	TotalAttachments           int64
+	ConfiguredProviderPresets  int64
+	ActiveProviderPresets      int64
+	ActiveProviderDistribution []ProviderUsage
+}
+
+type ProviderUsage struct {
+	Name      string
+	BaseURL   string
+	UserCount int64
 }
 
 func NewService(db *gorm.DB, auditService *audit.Service) *Service {
@@ -300,10 +319,10 @@ func (s *Service) UpdateWorkspacePolicy(actor *models.User, input WorkspacePolic
 	policy.DefaultUserMaxAttachmentsPerMsg = maxAttachments
 	policy.DefaultUserDailyMessageLimit = dailyMessageLimit
 	if err := s.db.Model(policy).Updates(map[string]any{
-		"default_user_role":                      policy.DefaultUserRole,
-		"default_user_max_conversations":         policy.DefaultUserMaxConversations,
-		"default_user_max_attachments_per_msg":   policy.DefaultUserMaxAttachmentsPerMsg,
-		"default_user_daily_message_limit":       policy.DefaultUserDailyMessageLimit,
+		"default_user_role":                    policy.DefaultUserRole,
+		"default_user_max_conversations":       policy.DefaultUserMaxConversations,
+		"default_user_max_attachments_per_msg": policy.DefaultUserMaxAttachmentsPerMsg,
+		"default_user_daily_message_limit":     policy.DefaultUserDailyMessageLimit,
 	}).Error; err != nil {
 		return nil, fmt.Errorf("update workspace policy: %w", err)
 	}
@@ -319,6 +338,65 @@ func (s *Service) ListAuditLogs(params audit.ListParams) (*audit.ListResult, err
 		return &audit.ListResult{}, nil
 	}
 	return s.audit.List(params)
+}
+
+func (s *Service) GetUsageStats() (*UsageStats, error) {
+	recentSince := time.Now().Add(-7 * 24 * time.Hour).UTC()
+	stats := &UsageStats{}
+
+	counters := []struct {
+		model any
+		dest  *int64
+		query func(*gorm.DB) *gorm.DB
+	}{
+		{model: &models.User{}, dest: &stats.TotalUsers},
+		{
+			model: &models.User{},
+			dest:  &stats.ActiveUsers,
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("status = ?", models.UserStatusActive)
+			},
+		},
+		{
+			model: &models.User{},
+			dest:  &stats.RecentUsers,
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("last_login_at >= ?", recentSince)
+			},
+		},
+		{model: &models.Conversation{}, dest: &stats.TotalConversations},
+		{model: &models.Message{}, dest: &stats.TotalMessages},
+		{model: &models.StoredAttachment{}, dest: &stats.TotalAttachments},
+		{model: &models.LLMProviderPreset{}, dest: &stats.ConfiguredProviderPresets},
+		{
+			model: &models.LLMProviderPreset{},
+			dest:  &stats.ActiveProviderPresets,
+			query: func(db *gorm.DB) *gorm.DB {
+				return db.Where("is_active = ?", true)
+			},
+		},
+	}
+
+	for _, counter := range counters {
+		query := s.db.Model(counter.model)
+		if counter.query != nil {
+			query = counter.query(query)
+		}
+		if err := query.Count(counter.dest).Error; err != nil {
+			return nil, fmt.Errorf("count usage stats: %w", err)
+		}
+	}
+
+	if err := s.db.Model(&models.LLMProviderPreset{}).
+		Select("name, base_url, count(*) as user_count").
+		Where("is_active = ?", true).
+		Group("name, base_url").
+		Order("user_count desc, name asc, base_url asc").
+		Scan(&stats.ActiveProviderDistribution).Error; err != nil {
+		return nil, fmt.Errorf("list active provider distribution: %w", err)
+	}
+
+	return stats, nil
 }
 
 func (s *Service) ensureUsernameAvailable(username string) error {
