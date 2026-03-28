@@ -3,6 +3,7 @@ import type { Conversation } from '../../../types/chat'
 export interface SidebarContentProps {
   collapsed: boolean
   variant: 'desktop' | 'mobile'
+  interactionDisabled?: boolean
   currentConversationId: number | null
   conversations: Conversation[]
   hasMoreConversations: boolean

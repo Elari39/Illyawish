@@ -6,6 +6,7 @@ import { cn } from '../../../lib/utils'
 
 interface SidebarHeaderProps {
   collapsed: boolean
+  interactionDisabled: boolean
   searchValue: string
   showArchived: boolean
   appName: string
@@ -20,6 +21,7 @@ interface SidebarHeaderProps {
 
 export function SidebarHeader({
   collapsed,
+  interactionDisabled,
   searchValue,
   showArchived,
   appName,
@@ -54,6 +56,7 @@ export function SidebarHeader({
         </span>
         <button
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+          disabled={interactionDisabled}
           onClick={onCreateChat}
           title={newChatLabel}
           type="button"

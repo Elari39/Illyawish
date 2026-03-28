@@ -8,6 +8,7 @@ import { MobileConversationItem } from './mobile-conversation-item'
 
 interface SidebarConversationListProps {
   collapsed: boolean
+  interactionDisabled: boolean
   currentConversationId: number | null
   conversations: Conversation[]
   hasMoreConversations: boolean
@@ -48,6 +49,7 @@ interface SidebarConversationListProps {
 
 export function SidebarConversationList({
   collapsed,
+  interactionDisabled,
   currentConversationId,
   conversations,
   hasMoreConversations,
@@ -121,6 +123,7 @@ export function SidebarConversationList({
                 <MobileConversationItem
                   key={conversation.id}
                   conversation={conversation}
+                  interactionDisabled={interactionDisabled}
                   isActive={isActive}
                   isActionsOpen={isActionsOpen}
                   locale={locale}
@@ -149,6 +152,7 @@ export function SidebarConversationList({
                 key={conversation.id}
                 conversation={conversation}
                 collapsed={collapsed}
+                interactionDisabled={interactionDisabled}
                 isActive={isActive}
                 isMenuOpen={isActionsOpen}
                 desktopMenuDirection={desktopMenuDirection}

@@ -90,13 +90,29 @@ export function applyConversationSync(
     (item) => item.id !== conversation.id,
   )
   const wasVisible = previousConversations.length !== conversations.length
-  const isVisible = matchesConversationFilters(conversation, filter)
+  const matchesLocalFilters = matchesConversationFilters(conversation, filter)
 
-  if (!isVisible) {
+  if (conversation.isArchived !== filter.showArchived) {
     return {
       conversations: sortConversations(previousConversations),
       totalDelta: wasVisible ? -1 : 0,
       loadedDelta: wasVisible ? -1 : 0,
+    }
+  }
+
+  if (wasVisible) {
+    return {
+      conversations: sortConversations([conversation, ...previousConversations]),
+      totalDelta: 0,
+      loadedDelta: 0,
+    }
+  }
+
+  if (!matchesLocalFilters) {
+    return {
+      conversations: sortConversations(previousConversations),
+      totalDelta: 0,
+      loadedDelta: 0,
     }
   }
 

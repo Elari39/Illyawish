@@ -10,6 +10,7 @@ export type { SidebarContentProps } from './sidebar-content-types'
 export function SidebarContent({
   collapsed,
   variant,
+  interactionDisabled = false,
   currentConversationId,
   conversations,
   hasMoreConversations,
@@ -43,6 +44,7 @@ export function SidebarContent({
   } = useSidebarActionMenu({
     collapsed,
     variant,
+    interactionDisabled,
     conversations,
   })
 
@@ -50,6 +52,7 @@ export function SidebarContent({
     <div className="flex h-full flex-col overflow-hidden">
       <SidebarHeader
         collapsed={collapsed}
+        interactionDisabled={interactionDisabled}
         searchValue={searchValue}
         showArchived={showArchived}
         appName={t('app.name')}
@@ -64,6 +67,7 @@ export function SidebarContent({
 
       <SidebarConversationList
         collapsed={collapsed}
+        interactionDisabled={interactionDisabled}
         currentConversationId={currentConversationId}
         conversations={conversations}
         hasMoreConversations={hasMoreConversations}

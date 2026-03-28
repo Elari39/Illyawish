@@ -9,6 +9,7 @@ import { getConversationMonogram } from '../utils'
 interface DesktopConversationItemProps {
   conversation: Conversation
   collapsed: boolean
+  interactionDisabled: boolean
   isActive: boolean
   isMenuOpen: boolean
   desktopMenuDirection: 'up' | 'down'
@@ -37,6 +38,7 @@ interface DesktopConversationItemProps {
 export function DesktopConversationItem({
   conversation,
   collapsed,
+  interactionDisabled,
   isActive,
   isMenuOpen,
   desktopMenuDirection,
@@ -84,6 +86,7 @@ export function DesktopConversationItem({
         <button
           aria-label={conversation.title}
           className="flex w-full justify-center rounded-lg px-0 py-1.5 text-center"
+          disabled={interactionDisabled}
           onClick={() => onSelectConversation(conversation.id)}
           title={conversation.title}
           type="button"
@@ -107,6 +110,7 @@ export function DesktopConversationItem({
           <button
             aria-label={conversation.title}
             className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors"
+            disabled={interactionDisabled}
             onClick={() => {
               onSelectConversation(conversation.id)
               onCloseActions()
@@ -144,6 +148,7 @@ export function DesktopConversationItem({
                 ? 'border-[var(--line)] bg-white/85 text-[var(--foreground)] opacity-100 shadow-[0_6px_16px_rgba(26,26,24,0.08)]'
                 : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
             )}
+            disabled={interactionDisabled}
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -171,6 +176,7 @@ export function DesktopConversationItem({
             >
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onTogglePinned(conversation))
                 }
@@ -180,6 +186,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onRenameConversation(conversation))
                 }
@@ -189,6 +196,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onToggleArchivedConversation(conversation))
                 }
@@ -203,6 +211,7 @@ export function DesktopConversationItem({
               />
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,white_90%)] hover:text-[color-mix(in_srgb,var(--danger)_88%,black_12%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)]/20"
+                disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onDeleteConversation(conversation.id))
                 }

@@ -80,6 +80,7 @@ export function ChatPage() {
     setChatError,
     showToast: uiState.showToast,
   })
+  const interactionDisabled = chatSession.isSending
   const displayConversation =
     currentConversation ?? chatSession.pendingConversation
 
@@ -90,7 +91,7 @@ export function ChatPage() {
   }
 
   function handleCreateNewChat() {
-    if (chatSession.isSending) {
+    if (interactionDisabled) {
       return
     }
     conversationList.setSkipAutoResume(true)
@@ -101,6 +102,10 @@ export function ChatPage() {
   }
 
   function handleDeleteConversation(conversationId: number) {
+    if (interactionDisabled) {
+      return
+    }
+
     uiState.setConfirmation({
       title: t('common.delete'),
       description: t('confirm.deleteConversation'),
@@ -129,6 +134,10 @@ export function ChatPage() {
   }
 
   function handleRenameConversation(conversation: Conversation) {
+    if (interactionDisabled) {
+      return
+    }
+
     uiState.setPromptState({
       title: t('prompt.renameConversation'),
       initialValue: conversation.title,
@@ -152,6 +161,10 @@ export function ChatPage() {
   }
 
   async function handleTogglePinned(conversation: Conversation) {
+    if (interactionDisabled) {
+      return
+    }
+
     try {
       const updatedConversation = await chatApi.updateConversation(conversation.id, {
         isPinned: !conversation.isPinned,
@@ -171,6 +184,10 @@ export function ChatPage() {
   }
 
   async function handleToggleArchived(conversation: Conversation) {
+    if (interactionDisabled) {
+      return
+    }
+
     try {
       const nextArchived = !conversation.isArchived
       const updatedConversation = await chatApi.updateConversation(conversation.id, {
@@ -239,6 +256,7 @@ export function ChatPage() {
       <MobileSidebar
         isOpen={uiState.sidebarOpen}
         onClose={() => uiState.setSidebarOpen(false)}
+        interactionDisabled={interactionDisabled}
         currentConversationId={activeConversationId}
         conversations={conversationList.conversations}
         hasMoreConversations={conversationList.hasMoreConversations}
@@ -250,6 +268,9 @@ export function ChatPage() {
         onToggleArchived={conversationList.setShowArchived}
         onLoadMore={() => void conversationList.loadConversations({ append: true })}
         onSelectConversation={(conversationId) => {
+          if (interactionDisabled) {
+            return
+          }
           navigateToConversation(conversationId)
           uiState.setSidebarOpen(false)
         }}
@@ -272,6 +293,7 @@ export function ChatPage() {
           key={uiState.isDesktopSidebarCollapsed ? 'desktop-sidebar-collapsed' : 'desktop-sidebar-expanded'}
           collapsed={uiState.isDesktopSidebarCollapsed}
           variant="desktop"
+          interactionDisabled={interactionDisabled}
           currentConversationId={activeConversationId}
           conversations={conversationList.conversations}
           hasMoreConversations={conversationList.hasMoreConversations}
@@ -282,7 +304,12 @@ export function ChatPage() {
           onSearchChange={conversationList.setConversationSearch}
           onToggleArchived={conversationList.setShowArchived}
           onLoadMore={() => void conversationList.loadConversations({ append: true })}
-          onSelectConversation={navigateToConversation}
+          onSelectConversation={(conversationId) => {
+            if (interactionDisabled) {
+              return
+            }
+            navigateToConversation(conversationId)
+          }}
           onRenameConversation={handleRenameConversation}
           onTogglePinned={handleTogglePinned}
           onToggleArchivedConversation={handleToggleArchived}

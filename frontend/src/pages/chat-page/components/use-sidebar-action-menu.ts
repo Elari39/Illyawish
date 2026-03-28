@@ -7,12 +7,14 @@ import type { Conversation } from '../../../types/chat'
 interface UseSidebarActionMenuOptions {
   collapsed: boolean
   variant: 'desktop' | 'mobile'
+  interactionDisabled: boolean
   conversations: Conversation[]
 }
 
 export function useSidebarActionMenu({
   collapsed,
   variant,
+  interactionDisabled,
   conversations,
 }: UseSidebarActionMenuOptions) {
   const [expandedConversationId, setExpandedConversationId] = useState<number | null>(null)
@@ -23,6 +25,7 @@ export function useSidebarActionMenu({
   const isMobileVariant = variant === 'mobile' && !collapsed
   const isDesktopVariant = variant === 'desktop' && !collapsed
   const effectiveExpandedConversationId =
+    !interactionDisabled &&
     !collapsed &&
     conversations.some((conversation) => conversation.id === expandedConversationId)
       ? expandedConversationId
@@ -124,6 +127,10 @@ export function useSidebarActionMenu({
     conversationId: number,
     anchor?: HTMLButtonElement,
   ) {
+    if (interactionDisabled) {
+      return
+    }
+
     if (isDesktopVariant && anchor != null) {
       const nextConversationId =
         expandedConversationId === conversationId ? null : conversationId

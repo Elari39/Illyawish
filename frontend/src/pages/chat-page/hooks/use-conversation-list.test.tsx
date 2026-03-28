@@ -639,4 +639,5 @@ describe('useConversationList', () => {
     expect(result.current.conversations).toEqual([])
     expect(result.current.hasMoreConversations).toBe(false)
   })
+
 })

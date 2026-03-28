@@ -251,6 +251,10 @@ export function useChatGeneration({
     }
   }
 
+  function resolveSavedGenerationSettings() {
+    return currentConversation?.settings ?? settingsDraft
+  }
+
   async function handleSendSubmit(content: string, attachments: Attachment[]) {
     setChatError(null)
     setIsSending(true)
@@ -287,7 +291,7 @@ export function useChatGeneration({
       }
 
       const conversationSettings =
-        conversation?.settings ?? settingsDraft
+        conversation?.settings ?? resolveSavedGenerationSettings()
       generation = beginGeneration(conversationId, optimisticAssistantId)
       const optimisticUserMessage: Message = {
         id: -Date.now(),
@@ -411,7 +415,7 @@ export function useChatGeneration({
         {
           content,
           attachments,
-          options: settingsDraft,
+          options: resolveSavedGenerationSettings(),
         },
         async (eventData) => {
           handleStreamEvent(eventData, optimisticAssistantId)
@@ -482,7 +486,7 @@ export function useChatGeneration({
       await chatApi.retryMessage(
         message.conversationId,
         message.id,
-        settingsDraft,
+        resolveSavedGenerationSettings(),
         async (eventData) => {
           handleStreamEvent(eventData, message.id)
         },
@@ -552,7 +556,7 @@ export function useChatGeneration({
       await chatApi.regenerateMessage(
         message.conversationId,
         message.id,
-        settingsDraft,
+        resolveSavedGenerationSettings(),
         async (eventData) => {
           handleStreamEvent(eventData, message.id)
         },

@@ -114,11 +114,7 @@ export function useChatHistory({
     replaceMessages: boolean,
   ) => {
     syncConversationIntoListRef.current(
-      resolveConversationForList(
-        response.conversation,
-        showArchivedRef.current,
-        conversationSearchRef.current,
-      ),
+      resolveConversationForList(response.conversation),
     )
     setPendingConversation(response.conversation)
     if (replaceMessages) {
@@ -254,11 +250,7 @@ export function useChatHistory({
       ]))
       setPendingConversation(response.conversation)
       syncConversationIntoListRef.current(
-        resolveConversationForList(
-          response.conversation,
-          showArchivedRef.current,
-          conversationSearchRef.current,
-        ),
+        resolveConversationForList(response.conversation),
       )
       setHasMoreMessages(response.pagination?.hasMore ?? false)
       setNextBeforeMessageId(response.pagination?.nextBeforeId ?? null)

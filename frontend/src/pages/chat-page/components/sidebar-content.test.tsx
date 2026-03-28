@@ -60,6 +60,7 @@ function renderSidebarContent(variant: 'mobile' | 'desktop' = 'mobile') {
       <SidebarContent
         collapsed={false}
         variant={variant}
+        interactionDisabled={false}
         currentConversationId={1}
         conversations={conversations}
         hasMoreConversations={false}
@@ -226,6 +227,56 @@ describe('SidebarContent mobile actions', () => {
     )
 
     expect(handlers.onSelectConversation).toHaveBeenCalledWith(conversations[0]!.id)
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('disables mobile conversation interactions while a reply is streaming', () => {
+    const conversations = [
+      createConversation(1, 'First mobile chat'),
+      createConversation(2, 'Second mobile chat'),
+    ]
+    const handlers = createHandlers()
+
+    render(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="mobile"
+          interactionDisabled
+          currentConversationId={1}
+          conversations={conversations}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: conversations[0]!.title,
+      }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    ).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New chat' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: conversations[0]!.title,
+      }),
+    )
+
+    expect(handlers.onCreateChat).not.toHaveBeenCalled()
+    expect(handlers.onSelectConversation).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 })
@@ -554,5 +605,53 @@ describe('SidebarContent desktop actions', () => {
 
     expect(screen.getByRole('menu').className).toContain('bottom-full')
     expect(screen.getByRole('menu').className).not.toContain('top-full')
+  })
+
+  it('disables desktop conversation interactions while a reply is streaming', () => {
+    const conversations = [
+      createConversation(1, 'First desktop chat'),
+      createConversation(2, 'Second desktop chat'),
+    ]
+    const handlers = createHandlers()
+
+    render(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="desktop"
+          interactionDisabled
+          currentConversationId={1}
+          conversations={conversations}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: conversations[0]!.title,
+      }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    ).toBeDisabled()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: conversations[1]!.title,
+      }),
+    )
+
+    expect(handlers.onSelectConversation).not.toHaveBeenCalled()
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

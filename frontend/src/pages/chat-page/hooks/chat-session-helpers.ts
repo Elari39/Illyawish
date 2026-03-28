@@ -2,21 +2,7 @@ import type { Conversation } from '../../../types/chat'
 
 import { parseConversationTagsInput } from '../utils'
 
-export function resolveConversationForList(
-  conversation: Conversation,
-  showArchived: boolean,
-  search: string,
-) {
-  if (
-    conversation.isArchived !== showArchived ||
-    (search && !matchesConversationSearch(conversation, search))
-  ) {
-    return {
-      ...conversation,
-      isArchived: conversation.isArchived,
-    }
-  }
-
+export function resolveConversationForList(conversation: Conversation) {
   return conversation
 }
 
@@ -37,19 +23,4 @@ export function buildConversationMetadataUpdate(
     ...(folder ? { folder } : {}),
     ...(tags.length > 0 ? { tags } : {}),
   }
-}
-
-function matchesConversationSearch(conversation: Conversation, search: string) {
-  const normalizedSearch = search.trim().toLowerCase()
-  if (!normalizedSearch) {
-    return true
-  }
-
-  return (
-    conversation.title.toLowerCase().includes(normalizedSearch) ||
-    conversation.folder.toLowerCase().includes(normalizedSearch) ||
-    conversation.tags.some((tag) =>
-      tag.toLowerCase().includes(normalizedSearch),
-    )
-  )
 }
