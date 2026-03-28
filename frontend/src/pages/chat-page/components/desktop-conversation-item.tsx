@@ -12,6 +12,8 @@ interface DesktopConversationItemProps {
   interactionDisabled: boolean
   isActive: boolean
   isMenuOpen: boolean
+  isSelected: boolean
+  selectionMode: boolean
   desktopMenuDirection: 'up' | 'down'
   locale: string
   pinnedPrefix: string
@@ -23,12 +25,19 @@ interface DesktopConversationItemProps {
   archiveLabel: string
   restoreLabel: string
   deleteLabel: string
+  moveToFolderLabel: string
+  addTagsLabel: string
+  removeTagsLabel: string
   onSelectConversation: (conversationId: Conversation['id']) => void
+  onToggleConversationSelection: (conversationId: Conversation['id']) => void
   onToggleActions: (conversationId: Conversation['id'], anchor?: HTMLButtonElement) => void
   onTogglePinned: (conversation: Conversation) => void
   onRenameConversation: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
   onDeleteConversation: (conversationId: Conversation['id']) => void
+  onMoveConversationToFolder: (conversation: Conversation) => void
+  onAddConversationTags: (conversation: Conversation) => void
+  onRemoveConversationTags: (conversation: Conversation) => void
   onCloseActions: () => void
   onDesktopMenuBlur: (event: FocusEvent<HTMLDivElement>) => void
   registerDesktopTrigger: (conversationId: Conversation['id'], node: HTMLButtonElement | null) => void
@@ -41,6 +50,8 @@ export function DesktopConversationItem({
   interactionDisabled,
   isActive,
   isMenuOpen,
+  isSelected,
+  selectionMode,
   desktopMenuDirection,
   locale,
   pinnedPrefix,
@@ -52,18 +63,28 @@ export function DesktopConversationItem({
   archiveLabel,
   restoreLabel,
   deleteLabel,
+  moveToFolderLabel,
+  addTagsLabel,
+  removeTagsLabel,
   onSelectConversation,
+  onToggleConversationSelection,
   onToggleActions,
   onTogglePinned,
   onRenameConversation,
   onToggleArchivedConversation,
   onDeleteConversation,
+  onMoveConversationToFolder,
+  onAddConversationTags,
+  onRemoveConversationTags,
   onCloseActions,
   onDesktopMenuBlur,
   registerDesktopTrigger,
   desktopMenuRef,
 }: DesktopConversationItemProps) {
   const monogram = getConversationMonogram(conversation.title)
+  const folderLabel = conversation.folder.trim()
+  const visibleTags = conversation.tags.slice(0, 2)
+  const hiddenTagCount = Math.max(conversation.tags.length - visibleTags.length, 0)
 
   function handleConversationAction(action: () => void) {
     action()
@@ -112,56 +133,99 @@ export function DesktopConversationItem({
             className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors"
             disabled={interactionDisabled}
             onClick={() => {
-              onSelectConversation(conversation.id)
+              if (selectionMode) {
+                onToggleConversationSelection(conversation.id)
+              } else {
+                onSelectConversation(conversation.id)
+              }
               onCloseActions()
             }}
             title={conversation.title}
             type="button"
           >
-            <div
-              className={cn(
-                'truncate text-sm font-medium text-[var(--foreground)] transition-colors',
-                isMenuOpen && 'text-[color-mix(in_srgb,var(--foreground)_92%,black)]',
-              )}
-            >
-              {conversation.isPinned ? pinnedPrefix : ''}
-              {conversation.title}
-            </div>
-            <div
-              className={cn(
-                'mt-0.5 text-[11px] tracking-[0.01em] text-[color-mix(in_srgb,var(--muted-foreground)_88%,var(--foreground)_12%)]',
-                isMenuOpen &&
-                  'text-[color-mix(in_srgb,var(--muted-foreground)_72%,var(--foreground)_28%)]',
-              )}
-            >
-              {formatConversationDate(conversation.updatedAt, locale)}
+            <div className="flex items-start gap-2">
+              {selectionMode ? (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'mt-0.5 inline-flex h-4 w-4 shrink-0 rounded border',
+                    isSelected
+                      ? 'border-[var(--brand)] bg-[var(--brand)]'
+                      : 'border-[var(--line-strong)] bg-white',
+                  )}
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <div
+                  className={cn(
+                    'truncate text-sm font-medium text-[var(--foreground)] transition-colors',
+                    isMenuOpen && 'text-[color-mix(in_srgb,var(--foreground)_92%,black)]',
+                  )}
+                >
+                  {conversation.isPinned ? pinnedPrefix : ''}
+                  {conversation.title}
+                </div>
+                <div
+                  className={cn(
+                    'mt-0.5 text-[11px] tracking-[0.01em] text-[color-mix(in_srgb,var(--muted-foreground)_88%,var(--foreground)_12%)]',
+                    isMenuOpen &&
+                      'text-[color-mix(in_srgb,var(--muted-foreground)_72%,var(--foreground)_28%)]',
+                  )}
+                >
+                  {formatConversationDate(conversation.updatedAt, locale)}
+                </div>
+                {folderLabel || visibleTags.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {folderLabel ? (
+                      <span className="rounded-full border border-[var(--line)] bg-white/75 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                        {folderLabel}
+                      </span>
+                    ) : null}
+                    {visibleTags.map((tag) => (
+                      <span
+                        className="rounded-full bg-[var(--sidebar-accent)] px-2 py-0.5 text-[10px] font-medium text-[var(--foreground)]"
+                        key={tag}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {hiddenTagCount > 0 ? (
+                      <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                        +{hiddenTagCount}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </button>
 
-          <button
-            aria-expanded={isMenuOpen}
-            aria-haspopup="menu"
-            aria-label={isMenuOpen ? hideActionsLabel : moreActionsLabel}
-            className={cn(
-              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-[color-mix(in_srgb,var(--muted-foreground)_92%,var(--foreground)_8%)] transition-all duration-200 hover:border-[var(--line)] hover:bg-white/70 hover:text-[var(--foreground)] focus-visible:border-[var(--line-strong)] focus-visible:bg-white/80 focus-visible:text-[var(--foreground)] focus-visible:opacity-100',
-              isMenuOpen
-                ? 'border-[var(--line)] bg-white/85 text-[var(--foreground)] opacity-100 shadow-[0_6px_16px_rgba(26,26,24,0.08)]'
-                : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
-            )}
-            disabled={interactionDisabled}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onToggleActions(conversation.id, event.currentTarget)
-            }}
-            title={isMenuOpen ? hideActionsLabel : moreActionsLabel}
-            ref={(node) => registerDesktopTrigger(conversation.id, node)}
-            type="button"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
+          {!selectionMode ? (
+            <button
+              aria-expanded={isMenuOpen}
+              aria-haspopup="menu"
+              aria-label={isMenuOpen ? hideActionsLabel : moreActionsLabel}
+              className={cn(
+                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-[color-mix(in_srgb,var(--muted-foreground)_92%,var(--foreground)_8%)] transition-all duration-200 hover:border-[var(--line)] hover:bg-white/70 hover:text-[var(--foreground)] focus-visible:border-[var(--line-strong)] focus-visible:bg-white/80 focus-visible:text-[var(--foreground)] focus-visible:opacity-100',
+                isMenuOpen
+                  ? 'border-[var(--line)] bg-white/85 text-[var(--foreground)] opacity-100 shadow-[0_6px_16px_rgba(26,26,24,0.08)]'
+                  : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
+              )}
+              disabled={interactionDisabled}
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                onToggleActions(conversation.id, event.currentTarget)
+              }}
+              title={isMenuOpen ? hideActionsLabel : moreActionsLabel}
+              ref={(node) => registerDesktopTrigger(conversation.id, node)}
+              type="button"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          ) : null}
 
-          {isMenuOpen ? (
+          {isMenuOpen && !selectionMode ? (
             <div
               aria-label={moreActionsLabel}
               onBlur={onDesktopMenuBlur}
@@ -174,6 +238,36 @@ export function DesktopConversationItem({
                   : 'top-full mt-2',
               )}
             >
+              <button
+                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
+                onClick={() =>
+                  handleConversationAction(() => onMoveConversationToFolder(conversation))
+                }
+                role="menuitem"
+              >
+                {moveToFolderLabel}
+              </button>
+              <button
+                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
+                onClick={() =>
+                  handleConversationAction(() => onAddConversationTags(conversation))
+                }
+                role="menuitem"
+              >
+                {addTagsLabel}
+              </button>
+              <button
+                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                disabled={interactionDisabled}
+                onClick={() =>
+                  handleConversationAction(() => onRemoveConversationTags(conversation))
+                }
+                role="menuitem"
+              >
+                {removeTagsLabel}
+              </button>
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
                 disabled={interactionDisabled}

@@ -31,13 +31,16 @@ func (s *Service) StreamAssistantReply(
 		return err
 	}
 
-	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, "")
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	resolvedProvider, err := s.providers.ResolveForUser(userID, settings.ProviderPresetID)
 	if err != nil {
 		return err
+	}
+	if settings.Model == "" {
+		settings.Model = resolvedProvider.Config.DefaultModel
 	}
 	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
@@ -126,13 +129,16 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	settings, err := s.resolveSettings(userID, conversation, options, "")
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(userID, conversation, options, resolvedProvider.Config.DefaultModel)
+	resolvedProvider, err := s.providers.ResolveForUser(userID, settings.ProviderPresetID)
 	if err != nil {
 		return err
+	}
+	if settings.Model == "" {
+		settings.Model = resolvedProvider.Config.DefaultModel
 	}
 	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
@@ -188,13 +194,16 @@ func (s *Service) RegenerateAssistantMessage(
 		return err
 	}
 
-	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	settings, err := s.resolveSettings(userID, conversation, options, "")
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(userID, conversation, options, resolvedProvider.Config.DefaultModel)
+	resolvedProvider, err := s.providers.ResolveForUser(userID, settings.ProviderPresetID)
 	if err != nil {
 		return err
+	}
+	if settings.Model == "" {
+		settings.Model = resolvedProvider.Config.DefaultModel
 	}
 	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {
@@ -274,13 +283,16 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	resolvedProvider, err := s.providers.ResolveForUser(userID)
+	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, "")
 	if err != nil {
 		return err
 	}
-	settings, err := s.resolveSettings(userID, conversation, normalizedInput.Options, resolvedProvider.Config.DefaultModel)
+	resolvedProvider, err := s.providers.ResolveForUser(userID, settings.ProviderPresetID)
 	if err != nil {
 		return err
+	}
+	if settings.Model == "" {
+		settings.Model = resolvedProvider.Config.DefaultModel
 	}
 	systemPrompt, err := s.resolveSystemPrompt(userID, settings.SystemPrompt)
 	if err != nil {

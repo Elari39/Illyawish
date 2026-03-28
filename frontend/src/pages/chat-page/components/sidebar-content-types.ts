@@ -9,10 +9,26 @@ export interface SidebarContentProps {
   hasMoreConversations: boolean
   searchValue: string
   showArchived: boolean
+  availableFolders?: string[]
+  availableTags?: string[]
+  selectedFolder?: string | null
+  selectedTags?: string[]
+  selectionMode?: boolean
+  selectedConversationIds?: Conversation['id'][]
   isLoading: boolean
   isLoadingMore: boolean
   onSearchChange: (value: string) => void
   onToggleArchived: (value: boolean) => void
+  onSelectFolder?: (value: string | null) => void
+  onToggleTag?: (value: string) => void
+  onSetSelectionMode?: (value: boolean) => void
+  onToggleConversationSelection?: (conversationId: Conversation['id']) => void
+  onMoveConversationToFolder?: (conversation: Conversation) => void
+  onAddConversationTags?: (conversation: Conversation) => void
+  onRemoveConversationTags?: (conversation: Conversation) => void
+  onBulkMoveToFolder?: () => void
+  onBulkAddTags?: () => void
+  onBulkRemoveTags?: () => void
   onLoadMore: () => void
   onSelectConversation: (conversationId: Conversation['id']) => void
   onRenameConversation: (conversation: Conversation) => void

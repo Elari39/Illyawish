@@ -73,11 +73,13 @@ func (f *fakeChatModel) Stream(
 }
 
 type fakeProviderResolver struct {
-	resolved *provider.ResolvedProvider
-	err      error
+	resolved              *provider.ResolvedProvider
+	err                   error
+	lastPreferredPresetID *uint
 }
 
-func (f *fakeProviderResolver) ResolveForUser(uint) (*provider.ResolvedProvider, error) {
+func (f *fakeProviderResolver) ResolveForUser(_ uint, preferredPresetID *uint) (*provider.ResolvedProvider, error) {
+	f.lastPreferredPresetID = cloneUint(preferredPresetID)
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -568,8 +570,23 @@ func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 	temperature := float32(0.2)
 	maxTokens := 512
 	contextWindowTurns := 3
+	providerPresetID := uint(21)
+	providerPreset := models.LLMProviderPreset{
+		ID:              providerPresetID,
+		UserID:          user.ID,
+		Name:            "OpenAI",
+		BaseURL:         "https://api.openai.com/v1",
+		EncryptedAPIKey: "encrypted",
+		APIKeyHint:      "sk-***",
+		Models:          []string{"custom-model"},
+		DefaultModel:    "custom-model",
+	}
+	if err := db.Create(&providerPreset).Error; err != nil {
+		t.Fatalf("create provider preset: %v", err)
+	}
 	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
 		Settings: &ConversationSettings{
+			ProviderPresetID:   &providerPresetID,
 			SystemPrompt:       "Conversation prompt",
 			Model:              "custom-model",
 			Temperature:        &temperature,
@@ -583,6 +600,9 @@ func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 
 	if updatedConversation.SystemPrompt != "Conversation prompt" {
 		t.Fatalf("expected system prompt to update, got %q", updatedConversation.SystemPrompt)
+	}
+	if updatedConversation.ProviderPresetID == nil || *updatedConversation.ProviderPresetID != providerPresetID {
+		t.Fatalf("expected provider preset id to update, got %#v", updatedConversation.ProviderPresetID)
 	}
 	if updatedConversation.Model != "custom-model" {
 		t.Fatalf("expected model to update, got %q", updatedConversation.Model)
@@ -600,6 +620,9 @@ func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 	var stored models.Conversation
 	if err := db.First(&stored, conversation.ID).Error; err != nil {
 		t.Fatalf("load conversation: %v", err)
+	}
+	if stored.ProviderPresetID == nil || *stored.ProviderPresetID != providerPresetID {
+		t.Fatalf("expected provider preset id to persist, got %#v", stored.ProviderPresetID)
 	}
 	if stored.Model != "custom-model" {
 		t.Fatalf("expected model to persist, got %q", stored.Model)
@@ -691,6 +714,20 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	maxTokens := 1536
 	contextWindowTurns := 8
 	workflowPresetID := uint(11)
+	providerPresetID := uint(27)
+	providerPreset := models.LLMProviderPreset{
+		ID:              providerPresetID,
+		UserID:          user.ID,
+		Name:            "OpenAI",
+		BaseURL:         "https://api.openai.com/v1",
+		EncryptedAPIKey: "encrypted",
+		APIKeyHint:      "sk-***",
+		Models:          []string{"gpt-4.1-mini"},
+		DefaultModel:    "gpt-4.1-mini",
+	}
+	if err := db.Create(&providerPreset).Error; err != nil {
+		t.Fatalf("create provider preset: %v", err)
+	}
 
 	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{
 		Folder:            ptrString("  Work  "),
@@ -698,6 +735,7 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 		WorkflowPresetID:  &workflowPresetID,
 		KnowledgeSpaceIDs: &[]uint{3, 5},
 		Settings: &ConversationSettings{
+			ProviderPresetID:   &providerPresetID,
 			SystemPrompt:       "  Draft prompt  ",
 			Model:              "  gpt-4.1-mini  ",
 			Temperature:        &temperature,
@@ -720,6 +758,9 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	}
 	if createdConversation.WorkflowPresetID == nil || *createdConversation.WorkflowPresetID != workflowPresetID {
 		t.Fatalf("expected workflow preset id to persist, got %#v", createdConversation.WorkflowPresetID)
+	}
+	if createdConversation.ProviderPresetID == nil || *createdConversation.ProviderPresetID != providerPresetID {
+		t.Fatalf("expected provider preset id to persist, got %#v", createdConversation.ProviderPresetID)
 	}
 	if len(createdConversation.KnowledgeSpaceIDs) != 2 || createdConversation.KnowledgeSpaceIDs[0] != 3 || createdConversation.KnowledgeSpaceIDs[1] != 5 {
 		t.Fatalf("expected knowledge space ids to persist, got %#v", createdConversation.KnowledgeSpaceIDs)
@@ -1364,7 +1405,7 @@ func newChatTestContext(t *testing.T) (*gorm.DB, models.User, models.Conversatio
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.MessageAttachment{}, &models.StoredAttachment{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.MessageAttachment{}, &models.StoredAttachment{}, &models.LLMProviderPreset{}); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}
 

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '../components/auth/auth-context'
 import { I18nProvider } from '../i18n/provider'
 import { APP_LOCALE_STORAGE_KEY } from '../i18n/config'
-import { AUTH_UNAUTHORIZED_EVENT, chatApi } from '../lib/api'
+import { AUTH_UNAUTHORIZED_EVENT, chatApi, providerApi, ragApi, workflowApi } from '../lib/api'
 import { LAST_CONVERSATION_STORAGE_KEY } from './chat-page/types'
 import { ChatPage } from './chat-page'
 import type {
@@ -17,8 +17,9 @@ import type {
 
 const defaultSettings: ConversationSettings = {
   systemPrompt: '',
+  providerPresetId: null,
   model: '',
-  temperature: 1,
+  temperature: null,
   maxTokens: null,
   contextWindowTurns: null,
 }
@@ -28,6 +29,7 @@ function createChatSettings(
 ): ChatSettings {
   return {
     globalPrompt: '',
+    providerPresetId: null,
     model: '',
     temperature: 1,
     maxTokens: null,
@@ -143,6 +145,32 @@ describe('ChatPage conversation navigation', () => {
     vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
       ...createChatSettings(),
     })
+    vi.spyOn(providerApi, 'list').mockResolvedValue({
+      presets: [],
+      activePresetId: null,
+      currentSource: 'none',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    })
+    vi.spyOn(ragApi, 'getProviders').mockResolvedValue({
+      presets: [],
+      activePresetId: null,
+      currentSource: 'none',
+      fallback: {
+        available: false,
+        name: '',
+        baseURL: '',
+        embeddingModel: '',
+        rerankerModel: '',
+      },
+    })
+    vi.spyOn(ragApi, 'listKnowledgeSpaces').mockResolvedValue([])
+    vi.spyOn(workflowApi, 'listTemplates').mockResolvedValue([])
+    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -360,10 +388,6 @@ describe('ChatPage conversation navigation', () => {
       knowledgeSpaceIds: [],
       settings: {
         ...defaultSettings,
-        model: '',
-        temperature: null,
-        maxTokens: null,
-        contextWindowTurns: null,
       },
     })
     expect(streamMessageMock).toHaveBeenCalledTimes(1)
@@ -515,7 +539,8 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Language' })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const settingsButtons = screen.getAllByRole('button', { name: 'Settings' })
+    fireEvent.click(settingsButtons[settingsButtons.length - 1]!)
 
     expect(await screen.findByRole('button', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()
@@ -1033,6 +1058,7 @@ describe('ChatPage conversation navigation', () => {
     await waitFor(() => {
       expect(updateChatSettingsMock).toHaveBeenCalledWith({
         globalPrompt: 'Global instructions',
+        providerPresetId: null,
         model: '',
         temperature: 1,
         maxTokens: null,
@@ -1055,13 +1081,11 @@ describe('ChatPage conversation navigation', () => {
     })
     await waitFor(() => {
       expect(createConversationMock).toHaveBeenCalledWith(expect.objectContaining({
+        workflowPresetId: null,
+        knowledgeSpaceIds: [],
         settings: {
           ...defaultSettings,
           systemPrompt: 'Draft session prompt',
-          model: '',
-          temperature: null,
-          maxTokens: null,
-          contextWindowTurns: null,
         },
       }))
     })
@@ -1113,6 +1137,7 @@ describe('ChatPage conversation navigation', () => {
     await waitFor(() => {
       expect(updateChatSettingsMock).toHaveBeenCalledWith({
         globalPrompt: 'Updated global prompt',
+        providerPresetId: null,
         model: '',
         temperature: 1,
         maxTokens: null,
@@ -1121,10 +1146,10 @@ describe('ChatPage conversation navigation', () => {
     })
     await waitFor(() => {
       expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
+        workflowPresetId: null,
         settings: {
           ...defaultSettings,
           systemPrompt: 'Conversation-only prompt',
-          temperature: null,
         },
       }))
     })
@@ -1181,10 +1206,209 @@ describe('ChatPage conversation navigation', () => {
       expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
         folder: 'Work',
         tags: ['urgent', 'planning'],
+        workflowPresetId: null,
         settings: {
           ...defaultSettings,
           systemPrompt: '',
-          temperature: null,
+        },
+      }))
+    })
+  })
+
+  it('shows the top context bar and updates the current conversation provider-model immediately', async () => {
+    const conversation = createConversation(9, 'Context bar chat', {
+      workflowPresetId: 5,
+      knowledgeSpaceIds: [11, 12],
+      settings: {
+        ...defaultSettings,
+        providerPresetId: 7,
+        model: 'gpt-4.1-mini',
+      },
+    })
+
+    vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue(
+      createChatSettings({
+        providerPresetId: 7,
+        model: 'gpt-4.1-mini',
+      }),
+    )
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Visible message')],
+      pagination: {
+        hasMore: false,
+        nextBeforeId: null,
+      },
+    })
+    vi.spyOn(providerApi, 'list').mockResolvedValue({
+      presets: [
+        {
+          id: 13,
+          name: 'Anthropic',
+          baseURL: 'https://api.anthropic.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-ant-***',
+          models: ['claude-3.7-sonnet'],
+          defaultModel: 'claude-3.7-sonnet',
+          isActive: false,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+        {
+          id: 7,
+          name: 'OpenAI',
+          baseURL: 'https://api.openai.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-***',
+          models: ['gpt-4.1-mini'],
+          defaultModel: 'gpt-4.1-mini',
+          isActive: true,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+      ],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    })
+    vi.spyOn(ragApi, 'listKnowledgeSpaces').mockResolvedValue([
+      {
+        id: 11,
+        userId: 1,
+        name: 'Engineering',
+        description: 'Specs',
+        createdAt: '2026-03-26T00:00:00Z',
+        updatedAt: '2026-03-26T00:00:00Z',
+      },
+      {
+        id: 12,
+        userId: 1,
+        name: 'Support',
+        description: 'FAQ',
+        createdAt: '2026-03-26T00:00:00Z',
+        updatedAt: '2026-03-26T00:00:00Z',
+      },
+    ])
+    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([
+      {
+        id: 5,
+        userId: 1,
+        name: 'Knowledge Q&A',
+        templateKey: 'knowledge_qa',
+        defaultInputs: {},
+        knowledgeSpaceIds: [11, 12],
+        toolEnablements: {},
+        outputMode: 'markdown',
+        createdAt: '2026-03-26T00:00:00Z',
+        updatedAt: '2026-03-26T00:00:00Z',
+      },
+    ])
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockImplementation(async (conversationId, payload) => ({
+        ...conversation,
+        id: conversationId,
+        settings: {
+          ...conversation.settings,
+          ...payload.settings,
+        },
+      }))
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Knowledge enabled · 2 spaces')).toBeInTheDocument()
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Workflow enabled · Knowledge Q&A')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('Provider and model'), {
+      target: { value: '13::claude-3.7-sonnet' },
+    })
+
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith(
+        '9',
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            providerPresetId: 13,
+            model: 'claude-3.7-sonnet',
+          }),
+        }),
+      )
+    })
+  })
+
+  it('preserves the current conversation provider-model when saving session settings', async () => {
+    const conversation = createConversation(9, 'Context-preserving chat', {
+      settings: {
+        ...defaultSettings,
+        providerPresetId: 13,
+        model: 'claude-3.7-sonnet',
+      },
+    })
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Visible message')],
+      pagination: {
+        hasMore: false,
+        nextBeforeId: null,
+      },
+    })
+    vi.spyOn(chatApi, 'updateChatSettings').mockResolvedValue(
+      createChatSettings(),
+    )
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockImplementation(async (conversationId, payload) => ({
+        ...conversation,
+        id: conversationId,
+        settings: {
+          ...conversation.settings,
+          ...payload.settings,
+        },
+      }))
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Visible message')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    await screen.findByRole('dialog', { name: 'Settings' })
+    fireEvent.change(await screen.findByLabelText('Session prompt'), {
+      target: { value: 'Keep provider selection' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
+
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
+        workflowPresetId: null,
+        settings: {
+          ...defaultSettings,
+          providerPresetId: 13,
+          model: 'claude-3.7-sonnet',
+          systemPrompt: 'Keep provider selection',
         },
       }))
     })

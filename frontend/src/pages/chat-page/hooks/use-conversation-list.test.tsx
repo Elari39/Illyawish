@@ -157,6 +157,106 @@ describe('useConversationList', () => {
     })
   })
 
+  it('filters the loaded conversations by folder and tags without refetching', async () => {
+    listConversationsPageMock.mockResolvedValue({
+      conversations: [
+        createConversation(1, {
+          title: 'Roadmap',
+          folder: 'Work',
+          tags: ['urgent', 'planning'],
+          updatedAt: '2026-03-28T00:00:00Z',
+        }),
+        createConversation(2, {
+          title: 'Journal',
+          folder: 'Personal',
+          tags: ['reflection'],
+          updatedAt: '2026-03-27T00:00:00Z',
+        }),
+        createConversation(3, {
+          title: 'Inbox',
+          folder: '',
+          tags: ['planning'],
+          updatedAt: '2026-03-26T00:00:00Z',
+        }),
+      ],
+      total: 3,
+    })
+
+    const onError = vi.fn()
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: null,
+          onError,
+          navigateToConversation: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1', '2', '3'])
+    })
+
+    expect(result.current.availableFolders).toEqual(['Personal', 'Work'])
+
+    act(() => {
+      result.current.setSelectedFolder('Work')
+    })
+
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
+    expect(listConversationsPageMock).toHaveBeenCalledTimes(1)
+    expect(result.current.availableTags).toEqual(['planning', 'urgent'])
+
+    act(() => {
+      result.current.toggleSelectedTag('urgent')
+      result.current.toggleSelectedTag('planning')
+    })
+
+    expect(result.current.selectedTags).toEqual(['urgent', 'planning'])
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
+  })
+
+  it('tracks selection mode and selected conversations locally', async () => {
+    listConversationsPageMock.mockResolvedValue({
+      conversations: [
+        createConversation(1),
+        createConversation(2),
+      ],
+      total: 2,
+    })
+
+    const onError = vi.fn()
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: null,
+          onError,
+          navigateToConversation: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.conversations).toHaveLength(2)
+    })
+
+    act(() => {
+      result.current.setSelectionMode(true)
+      result.current.toggleConversationSelection('1')
+      result.current.toggleConversationSelection('2')
+    })
+
+    expect(result.current.selectionMode).toBe(true)
+    expect(result.current.selectedConversationIds).toEqual(['1', '2'])
+
+    act(() => {
+      result.current.setSelectionMode(false)
+    })
+
+    expect(result.current.selectionMode).toBe(false)
+    expect(result.current.selectedConversationIds).toEqual([])
+  })
+
   it('keeps a visible conversation during search when local metadata no longer matches', async () => {
     listConversationsPageMock.mockResolvedValue({
       conversations: [

@@ -405,6 +405,18 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, _ := newChatTestContext(t)
+	providerPreset := models.LLMProviderPreset{
+		UserID:          user.ID,
+		Name:            "OpenAI",
+		BaseURL:         "https://api.openai.com/v1",
+		EncryptedAPIKey: "encrypted",
+		APIKeyHint:      "sk-***",
+		Models:          []string{"gpt-4.1-mini"},
+		DefaultModel:    "gpt-4.1-mini",
+	}
+	if err := db.Create(&providerPreset).Error; err != nil {
+		t.Fatalf("create provider preset: %v", err)
+	}
 	service := NewService(
 		db,
 		&fakeChatModel{},
@@ -412,19 +424,20 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 		&fakeAttachmentStore{},
 	)
 
-	payload := bytes.NewReader([]byte(`{
+	payload := bytes.NewReader([]byte(fmt.Sprintf(`{
 		"folder":"Work",
 		"tags":["urgent","backend"],
 		"workflowPresetId":11,
 		"knowledgeSpaceIds":[3,5],
 		"settings":{
+			"providerPresetId":%d,
 			"systemPrompt":"Draft prompt",
 			"model":"gpt-4.1-mini",
 			"temperature":0.5,
 			"maxTokens":1024,
 			"contextWindowTurns":6
 		}
-	}`))
+	}`, providerPreset.ID)))
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -449,6 +462,9 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	}
 	if !strings.Contains(body, `"knowledgeSpaceIds":[3,5]`) {
 		t.Fatalf("expected knowledge space ids in response, got %s", body)
+	}
+	if !strings.Contains(body, fmt.Sprintf(`"providerPresetId":%d`, providerPreset.ID)) {
+		t.Fatalf("expected provider preset id in response, got %s", body)
 	}
 	if !strings.Contains(body, `"systemPrompt":"Draft prompt"`) {
 		t.Fatalf("expected system prompt in response, got %s", body)
@@ -494,6 +510,18 @@ func TestGetChatSettingsReturnsGlobalPrompt(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, _ := newChatTestContext(t)
+	providerPreset := models.LLMProviderPreset{
+		UserID:          user.ID,
+		Name:            "OpenAI",
+		BaseURL:         "https://api.openai.com/v1",
+		EncryptedAPIKey: "encrypted",
+		APIKeyHint:      "sk-***",
+		Models:          []string{"gpt-4.1-mini"},
+		DefaultModel:    "gpt-4.1-mini",
+	}
+	if err := db.Create(&providerPreset).Error; err != nil {
+		t.Fatalf("create provider preset: %v", err)
+	}
 	temperature := float32(0.8)
 	maxTokens := 1024
 	contextWindowTurns := 4
@@ -501,6 +529,7 @@ func TestGetChatSettingsReturnsGlobalPrompt(t *testing.T) {
 		Where("id = ?", user.ID).
 		Updates(map[string]any{
 			"global_prompt":                "Use global prompt",
+			"default_provider_preset_id":   providerPreset.ID,
 			"default_model":                "gpt-4.1-mini",
 			"default_temperature":          &temperature,
 			"default_max_tokens":           &maxTokens,
@@ -524,6 +553,9 @@ func TestGetChatSettingsReturnsGlobalPrompt(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "\"globalPrompt\":\"Use global prompt\"") {
 		t.Fatalf("expected global prompt in response, got %s", recorder.Body.String())
 	}
+	if !strings.Contains(recorder.Body.String(), fmt.Sprintf(`"providerPresetId":%d`, providerPreset.ID)) {
+		t.Fatalf("expected provider preset id in response, got %s", recorder.Body.String())
+	}
 	if !strings.Contains(recorder.Body.String(), "\"model\":\"gpt-4.1-mini\"") {
 		t.Fatalf("expected model in response, got %s", recorder.Body.String())
 	}
@@ -536,9 +568,21 @@ func TestUpdateChatSettingsPersistsGlobalPrompt(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, _ := newChatTestContext(t)
+	providerPreset := models.LLMProviderPreset{
+		UserID:          user.ID,
+		Name:            "OpenAI",
+		BaseURL:         "https://api.openai.com/v1",
+		EncryptedAPIKey: "encrypted",
+		APIKeyHint:      "sk-***",
+		Models:          []string{"gpt-4.1-mini"},
+		DefaultModel:    "gpt-4.1-mini",
+	}
+	if err := db.Create(&providerPreset).Error; err != nil {
+		t.Fatalf("create provider preset: %v", err)
+	}
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
 
-	payload := bytes.NewReader([]byte(`{"globalPrompt":"Use global prompt","model":"gpt-4.1-mini","temperature":0.6,"maxTokens":2048,"contextWindowTurns":8}`))
+	payload := bytes.NewReader([]byte(fmt.Sprintf(`{"globalPrompt":"Use global prompt","providerPresetId":%d,"model":"gpt-4.1-mini","temperature":0.6,"maxTokens":2048,"contextWindowTurns":8}`, providerPreset.ID)))
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
 	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/chat/settings", payload)
@@ -557,6 +601,9 @@ func TestUpdateChatSettingsPersistsGlobalPrompt(t *testing.T) {
 	}
 	if settings.GlobalPrompt != "Use global prompt" {
 		t.Fatalf("expected global prompt to be persisted, got %q", settings.GlobalPrompt)
+	}
+	if settings.ProviderPresetID == nil || *settings.ProviderPresetID != providerPreset.ID {
+		t.Fatalf("expected provider preset id to be persisted, got %#v", settings.ProviderPresetID)
 	}
 	if settings.Model != "gpt-4.1-mini" {
 		t.Fatalf("expected model to be persisted, got %q", settings.Model)

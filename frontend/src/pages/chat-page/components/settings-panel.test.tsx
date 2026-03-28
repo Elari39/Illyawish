@@ -12,6 +12,7 @@ import { SettingsPanel } from './settings-panel'
 
 const initialChatSettings: ChatSettings = {
   globalPrompt: '',
+  providerPresetId: null,
   model: '',
   temperature: 1,
   maxTokens: null,
@@ -20,8 +21,9 @@ const initialChatSettings: ChatSettings = {
 
 const initialSettings: ConversationSettings = {
   systemPrompt: '',
+  providerPresetId: null,
   model: '',
-  temperature: 1,
+  temperature: null,
   maxTokens: null,
   contextWindowTurns: null,
 }
@@ -104,6 +106,82 @@ function ProviderSettingsHarness() {
   )
 }
 
+function ChatSettingsHarness() {
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({
+    ...initialChatSettings,
+    providerPresetId: 7,
+    model: 'gpt-4.1-mini',
+  })
+  const [conversationFolder, setConversationFolder] = useState('')
+  const [conversationTags, setConversationTags] = useState('')
+  const [settings, setSettings] = useState(initialSettings)
+
+  return (
+    <SettingsPanel
+      activeTab="chat"
+      chatSettings={chatSettings}
+      conversationFolder={conversationFolder}
+      conversationTags={conversationTags}
+      editingProviderId={null}
+      isLoadingProviders={false}
+      isImporting={false}
+      isOpen
+      messageCount={0}
+      isSaving={false}
+      isSavingProvider={false}
+      isTestingProvider={false}
+      onActivateProvider={() => {}}
+      onClose={() => {}}
+      onDeleteProvider={() => {}}
+      onEditProvider={() => {}}
+      onExport={() => {}}
+      onImport={() => {}}
+      onProviderFieldChange={() => {}}
+      onProviderModelsChange={() => {}}
+      onProviderTabChange={() => {}}
+      onReset={() => {}}
+      onResetProvider={() => {}}
+      onSave={() => {}}
+      onSaveProvider={() => {}}
+      onStartNewProvider={() => {}}
+      onTestProvider={() => {}}
+      providerForm={{
+        name: '',
+        baseURL: '',
+        apiKey: '',
+        models: [''],
+        defaultModel: '',
+        errors: createProviderFormErrors(),
+      }}
+      providerState={{
+        ...providerState,
+        presets: [
+          {
+            id: 7,
+            name: 'OpenAI',
+            baseURL: 'https://api.openai.com/v1',
+            hasApiKey: true,
+            apiKeyHint: 'sk-***',
+            models: ['gpt-4.1-mini', 'gpt-4.1'],
+            defaultModel: 'gpt-4.1-mini',
+            isActive: true,
+            createdAt: '2026-03-26T00:00:00Z',
+            updatedAt: '2026-03-26T00:00:00Z',
+          },
+        ],
+        activePresetId: 7,
+        currentSource: 'preset',
+      }}
+      settings={settings}
+      setChatSettings={setChatSettings}
+      setConversationFolder={setConversationFolder}
+      setConversationTags={setConversationTags}
+      setSettings={setSettings}
+      transferConversation={null}
+    />
+  )
+}
+
 describe('SettingsPanel', () => {
   it('focuses the close button when the panel opens', () => {
     render(
@@ -151,5 +229,20 @@ describe('SettingsPanel', () => {
       target: { value: 'sk-test' },
     })
     expect(apiKeyInput).toHaveFocus()
+  })
+
+  it('renders provider and model controls for global chat defaults', () => {
+    render(
+      <TestProviders>
+        <ChatSettingsHarness />
+      </TestProviders>,
+    )
+
+    expect(screen.getByLabelText('Provider')).toBeInTheDocument()
+    expect(screen.getByLabelText('Model')).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'OpenAI' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'gpt-4.1-mini' }),
+    ).toBeInTheDocument()
   })
 })

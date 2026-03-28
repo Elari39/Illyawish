@@ -85,7 +85,9 @@ export function useProviderSettings({
         ),
       )
     }
+  }, [applyResolvedProviderEditor, isSettingsOpen])
 
+  useEffect(() => {
     let cancelled = false
 
     async function fetchProviderState() {

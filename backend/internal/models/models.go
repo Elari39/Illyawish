@@ -53,6 +53,7 @@ type User struct {
 	LastLoginAt               *time.Time
 	SessionVersion            uint   `gorm:"not null;default:1"`
 	GlobalPrompt              string `gorm:"type:text;not null;default:''"`
+	DefaultProviderPresetID   *uint
 	DefaultModel              string `gorm:"size:128;not null;default:''"`
 	DefaultTemperature        *float32
 	DefaultMaxTokens          *int
@@ -81,7 +82,8 @@ type Conversation struct {
 	Folder             string   `gorm:"size:120;not null;default:''"`
 	Tags               []string `gorm:"serializer:json;type:text"`
 	SystemPrompt       string   `gorm:"type:text;not null;default:''"`
-	Model              string   `gorm:"size:128;not null;default:''"`
+	ProviderPresetID   *uint
+	Model              string `gorm:"size:128;not null;default:''"`
 	Temperature        *float32
 	MaxTokens          *int
 	ContextWindowTurns *int

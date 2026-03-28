@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *Service) ResolveForUser(userID uint) (*ResolvedProvider, error) {
-	preset, err := s.activePreset(userID)
+func (s *Service) ResolveForUser(userID uint, preferredPresetID *uint) (*ResolvedProvider, error) {
+	preset, err := s.resolvePresetForUser(userID, preferredPresetID)
 	if err != nil {
 		return nil, err
 	}
@@ -45,6 +45,28 @@ func (s *Service) ResolveForUser(userID uint) (*ResolvedProvider, error) {
 	return nil, ErrNoProviderConfigured
 }
 
+func (s *Service) resolvePresetForUser(userID uint, preferredPresetID *uint) (*models.LLMProviderPreset, error) {
+	if preferredPresetID != nil && *preferredPresetID != 0 {
+		return s.getPreset(userID, *preferredPresetID)
+	}
+
+	defaultPresetID, err := s.defaultProviderPresetID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if defaultPresetID != nil {
+		preset, err := s.getPreset(userID, *defaultPresetID)
+		if err == nil {
+			return preset, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+
+	return s.activePreset(userID)
+}
+
 func (s *Service) getPreset(userID uint, presetID uint) (*models.LLMProviderPreset, error) {
 	var preset models.LLMProviderPreset
 	if err := s.db.
@@ -72,6 +94,23 @@ func (s *Service) activePreset(userID uint) (*models.LLMProviderPreset, error) {
 		return nil, nil
 	}
 	return nil, fmt.Errorf("get active provider preset: %w", err)
+}
+
+func (s *Service) defaultProviderPresetID(userID uint) (*uint, error) {
+	var user models.User
+	if err := s.db.
+		Select("default_provider_preset_id").
+		First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get user default provider preset: %w", err)
+	}
+
+	if user.DefaultProviderPresetID == nil {
+		return nil, nil
+	}
+	return cloneUint(user.DefaultProviderPresetID), nil
 }
 
 func (s *Service) resolveActivePresetAPIKey(userID uint) (string, error) {
@@ -106,4 +145,12 @@ func (s *Service) fallbackState() FallbackState {
 		Models:       fallbackModels,
 		DefaultModel: s.fallback.DefaultModel,
 	}
+}
+
+func cloneUint(value *uint) *uint {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }

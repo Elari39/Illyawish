@@ -4,6 +4,7 @@
 
 # Local assistant config
 .claude/*
+.superpowers/
 AGENTS.md
 
 # Frontend dependencies and build output

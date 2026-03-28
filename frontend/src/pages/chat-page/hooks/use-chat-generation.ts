@@ -402,7 +402,8 @@ export function useChatGeneration({
           ),
           settings: {
             ...settingsDraft,
-            model: '',
+            providerPresetId: settingsDraft.providerPresetId ?? null,
+            model: settingsDraft.model,
             temperature: null,
             maxTokens: null,
             contextWindowTurns: null,

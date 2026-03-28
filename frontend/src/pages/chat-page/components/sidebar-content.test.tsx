@@ -36,6 +36,16 @@ function createHandlers() {
   return {
     onSearchChange: vi.fn(),
     onToggleArchived: vi.fn(),
+    onSelectFolder: vi.fn(),
+    onToggleTag: vi.fn(),
+    onSetSelectionMode: vi.fn(),
+    onToggleConversationSelection: vi.fn(),
+    onMoveConversationToFolder: vi.fn(),
+    onAddConversationTags: vi.fn(),
+    onRemoveConversationTags: vi.fn(),
+    onBulkMoveToFolder: vi.fn(),
+    onBulkAddTags: vi.fn(),
+    onBulkRemoveTags: vi.fn(),
     onLoadMore: vi.fn(),
     onSelectConversation: vi.fn(),
     onRenameConversation: vi.fn(),
@@ -49,8 +59,13 @@ function createHandlers() {
 
 function renderSidebarContent(variant: 'mobile' | 'desktop' = 'mobile') {
   const conversations = [
-    createConversation(1, 'First mobile chat'),
-    createConversation(2, 'Second mobile chat'),
+    createConversation(1, 'First mobile chat', {
+      folder: 'Work',
+      tags: ['urgent', 'planning', 'ops'],
+    }),
+    createConversation(2, 'Second mobile chat', {
+      tags: ['planning'],
+    }),
   ]
 
   const handlers = createHandlers()
@@ -66,6 +81,53 @@ function renderSidebarContent(variant: 'mobile' | 'desktop' = 'mobile') {
         hasMoreConversations={false}
         searchValue=""
         showArchived={false}
+        availableFolders={['Work']}
+        availableTags={['ops', 'planning', 'urgent']}
+        selectedFolder={null}
+        selectedTags={[]}
+        selectionMode={false}
+        selectedConversationIds={[]}
+        isLoading={false}
+        isLoadingMore={false}
+        username="Elaina"
+        {...handlers}
+      />
+    </TestProviders>,
+  )
+
+  return { conversations, handlers }
+}
+
+function createDesktopSelectionModeSidebar() {
+  const conversations = [
+    createConversation(1, 'First mobile chat', {
+      folder: 'Work',
+      tags: ['urgent'],
+    }),
+    createConversation(2, 'Second mobile chat', {
+      folder: 'Work',
+      tags: ['planning'],
+    }),
+  ]
+  const handlers = createHandlers()
+
+  render(
+    <TestProviders>
+      <SidebarContent
+        collapsed={false}
+        variant="desktop"
+        interactionDisabled={false}
+        currentConversationId="1"
+        conversations={conversations}
+        hasMoreConversations={false}
+        searchValue=""
+        showArchived={false}
+        availableFolders={['Work']}
+        availableTags={['planning', 'urgent']}
+        selectedFolder={null}
+        selectedTags={[]}
+        selectionMode
+        selectedConversationIds={['1', '2']}
         isLoading={false}
         isLoadingMore={false}
         username="Elaina"
@@ -163,6 +225,12 @@ describe('SidebarContent mobile actions', () => {
           hasMoreConversations={false}
           searchValue=""
           showArchived={false}
+          availableFolders={[]}
+          availableTags={[]}
+          selectedFolder={null}
+          selectedTags={[]}
+          selectionMode={false}
+          selectedConversationIds={[]}
           isLoading={false}
           isLoadingMore={false}
           username="Elaina"
@@ -248,6 +316,12 @@ describe('SidebarContent mobile actions', () => {
           hasMoreConversations={false}
           searchValue=""
           showArchived={false}
+          availableFolders={[]}
+          availableTags={[]}
+          selectedFolder={null}
+          selectedTags={[]}
+          selectionMode={false}
+          selectedConversationIds={[]}
           isLoading={false}
           isLoadingMore={false}
           username="Elaina"
@@ -282,6 +356,21 @@ describe('SidebarContent mobile actions', () => {
 })
 
 describe('SidebarContent desktop actions', () => {
+  it('renders folder navigation and tag filters in the expanded desktop sidebar', () => {
+    const { handlers } = renderSidebarContent('desktop')
+
+    expect(screen.getByRole('button', { name: 'All folders' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Unfiled' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Work' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'planning' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+    fireEvent.click(screen.getByRole('button', { name: 'planning' }))
+
+    expect(handlers.onSelectFolder).toHaveBeenCalledWith('Work')
+    expect(handlers.onToggleTag).toHaveBeenCalledWith('planning')
+  })
+
   it('does not render inline action buttons before opening the menu', () => {
     renderSidebarContent('desktop')
 
@@ -316,6 +405,53 @@ describe('SidebarContent desktop actions', () => {
     expect(screen.queryByRole('menuitem', { name: 'Pin' })).not.toBeInTheDocument()
   })
 
+  it('offers conversation organization actions from the desktop menu', () => {
+    const { conversations, handlers } = renderSidebarContent('desktop')
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to folder' }))
+    expect(handlers.onMoveConversationToFolder).toHaveBeenCalledWith(conversations[0])
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add tags' }))
+    expect(handlers.onAddConversationTags).toHaveBeenCalledWith(conversations[0])
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove tags' }))
+    expect(handlers.onRemoveConversationTags).toHaveBeenCalledWith(conversations[0])
+  })
+
+  it('switches to selection mode and routes clicks to bulk selection', () => {
+    const { conversations, handlers } = createDesktopSelectionModeSidebar()
+
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: conversations[0]!.title }))
+    expect(handlers.onToggleConversationSelection).toHaveBeenCalledWith(conversations[0]!.id)
+    expect(handlers.onSelectConversation).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add tags to selected' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove tags from selected' }))
+
+    expect(handlers.onBulkMoveToFolder).toHaveBeenCalled()
+    expect(handlers.onBulkAddTags).toHaveBeenCalled()
+    expect(handlers.onBulkRemoveTags).toHaveBeenCalled()
+  })
+
   it('exposes desktop menu semantics and focuses the trigger again after escape', () => {
     const { conversations } = renderSidebarContent('desktop')
 
@@ -329,7 +465,7 @@ describe('SidebarContent desktop actions', () => {
     expect(screen.getByRole('menu')).toBeInTheDocument()
 
     const menuItems = screen.getAllByRole('menuitem')
-    expect(menuItems).toHaveLength(4)
+    expect(menuItems).toHaveLength(7)
 
     fireEvent.keyDown(window, { key: 'Escape' })
 

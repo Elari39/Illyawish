@@ -190,8 +190,23 @@ func (s *Service) DeletePreset(userID uint, presetID uint) error {
 		return err
 	}
 
-	if err := s.db.Delete(preset).Error; err != nil {
-		return fmt.Errorf("delete provider preset: %w", err)
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.User{}).
+			Where("id = ? AND default_provider_preset_id = ?", userID, presetID).
+			Update("default_provider_preset_id", nil).Error; err != nil {
+			return fmt.Errorf("clear user default provider preset: %w", err)
+		}
+		if err := tx.Model(&models.Conversation{}).
+			Where("user_id = ? AND provider_preset_id = ?", userID, presetID).
+			Update("provider_preset_id", nil).Error; err != nil {
+			return fmt.Errorf("clear conversation provider preset: %w", err)
+		}
+		if err := tx.Delete(preset).Error; err != nil {
+			return fmt.Errorf("delete provider preset: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	return nil

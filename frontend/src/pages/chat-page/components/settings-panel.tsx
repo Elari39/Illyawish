@@ -24,7 +24,7 @@ import type {
   WorkflowTemplate,
 } from '../../../types/chat'
 import type { ProviderFormState, SettingsTab } from '../types'
-import { canReuseActivePresetAPIKey, resolveChatModelOptions } from '../utils'
+import { canReuseActivePresetAPIKey } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
 import { KnowledgeSettingsTab } from './knowledge-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
@@ -255,7 +255,6 @@ export function SettingsPanel({
     return null
   }
 
-  const modelOptions = resolveChatModelOptions(providerState, chatSettings.model)
   const canReuseActiveAPIKey =
     editingProviderId == null && canReuseActivePresetAPIKey(providerState)
   const descriptionText =
@@ -415,7 +414,7 @@ export function SettingsPanel({
             chatSettings={chatSettings}
             conversationFolder={conversationFolder}
             conversationTags={conversationTags}
-            modelOptions={modelOptions}
+            providerState={providerState}
             settings={settings}
             setConversationFolder={setConversationFolder}
             setConversationTags={setConversationTags}

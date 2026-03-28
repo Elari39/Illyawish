@@ -4,13 +4,17 @@ import { Input } from '../../../components/ui/input'
 import { Select } from '../../../components/ui/select'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n/use-i18n'
-import type { ChatSettings, ConversationSettings } from '../../../types/chat'
+import type { ChatSettings, ConversationSettings, ProviderState } from '../../../types/chat'
+import {
+  findProviderPreset,
+  resolveModelsForProvider,
+} from '../provider-model-utils'
 
 interface ChatSettingsTabProps {
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
-  modelOptions: string[]
+  providerState: ProviderState | null
   settings: ConversationSettings
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
@@ -22,7 +26,7 @@ export function ChatSettingsTab({
   chatSettings,
   conversationFolder,
   conversationTags,
-  modelOptions,
+  providerState,
   settings,
   setConversationFolder,
   setConversationTags,
@@ -30,6 +34,16 @@ export function ChatSettingsTab({
   setSettings,
 }: ChatSettingsTabProps) {
   const { t } = useI18n()
+  const providerOptions = providerState?.presets ?? []
+  const selectedProviderPreset = findProviderPreset(
+    providerState,
+    chatSettings.providerPresetId ?? providerState?.activePresetId ?? null,
+  )
+  const modelOptions = resolveModelsForProvider(
+    providerState,
+    selectedProviderPreset?.id ?? null,
+    chatSettings.model,
+  )
   const hasModelOptions = modelOptions.length > 0
 
   return (
@@ -46,6 +60,40 @@ export function ChatSettingsTab({
 
         <label className="block space-y-2">
           <span className="text-sm font-medium text-[var(--foreground)]">
+            {t('chatContext.providerLabel')}
+          </span>
+          <Select
+            aria-label={t('chatContext.providerLabel')}
+            value={chatSettings.providerPresetId ?? ''}
+            onChange={(event) => {
+              const nextProviderPresetId = event.target.value
+                ? Number(event.target.value)
+                : null
+              const nextPreset = findProviderPreset(
+                providerState,
+                nextProviderPresetId,
+              )
+
+              setChatSettings((previous) => ({
+                ...previous,
+                providerPresetId: nextProviderPresetId,
+                model: nextPreset?.defaultModel ?? previous.model,
+              }))
+            }}
+          >
+            {providerOptions.length === 0 ? (
+              <option value="">{t('chatContext.noProviderOptions')}</option>
+            ) : null}
+            {providerOptions.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-medium text-[var(--foreground)]">
             {t('settings.model')}
           </span>
           {hasModelOptions ? (
@@ -58,7 +106,11 @@ export function ChatSettingsTab({
                 }))
               }
             >
-              <option value="">{t('settings.modelDefaultOption')}</option>
+              <option value="">
+                {selectedProviderPreset
+                  ? t('settings.modelDefaultOption')
+                  : t('chatContext.selectProviderFirst')}
+              </option>
               {modelOptions.map((model) => (
                 <option key={model} value={model}>
                   {model}
@@ -178,18 +230,18 @@ export function ChatSettingsTab({
             <span className="text-sm font-medium text-[var(--foreground)]">
               {t('settings.sessionPrompt')}
             </span>
-          <Textarea
-            aria-describedby="session-prompt-help"
-            className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
-            placeholder={t('settings.sessionPromptPlaceholder')}
-            value={settings.systemPrompt}
-            onChange={(event) =>
-              setSettings((previous) => ({
-                ...previous,
-                systemPrompt: event.target.value,
-              }))
-            }
-          />
+            <Textarea
+              aria-describedby="session-prompt-help"
+              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+              placeholder={t('settings.sessionPromptPlaceholder')}
+              value={settings.systemPrompt}
+              onChange={(event) =>
+                setSettings((previous) => ({
+                  ...previous,
+                  systemPrompt: event.target.value,
+                }))
+              }
+            />
           </label>
           <p
             className="text-sm leading-6 text-[var(--muted-foreground)]"

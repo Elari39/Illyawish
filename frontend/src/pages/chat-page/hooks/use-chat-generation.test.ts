@@ -217,7 +217,8 @@ describe('useChatGeneration saved settings behavior', () => {
       knowledgeSpaceIds: [],
       settings: {
         ...draftSettings,
-        model: '',
+        providerPresetId: null,
+        model: 'draft-model',
         temperature: null,
         maxTokens: null,
         contextWindowTurns: null,

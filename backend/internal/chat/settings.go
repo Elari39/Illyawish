@@ -7,8 +7,9 @@ func sanitizeConversationSettings(settings *ConversationSettings) (ConversationS
 		return ConversationSettings{}, nil
 	}
 	normalized := ConversationSettings{
-		SystemPrompt: strings.TrimSpace(settings.SystemPrompt),
-		Model:        strings.TrimSpace(settings.Model),
+		SystemPrompt:     strings.TrimSpace(settings.SystemPrompt),
+		ProviderPresetID: cloneUint(settings.ProviderPresetID),
+		Model:            strings.TrimSpace(settings.Model),
 	}
 
 	if settings.Temperature != nil {
@@ -41,8 +42,9 @@ func sanitizeConversationSettings(settings *ConversationSettings) (ConversationS
 
 func sanitizeChatSettings(settings ChatSettings) (ChatSettings, error) {
 	normalized := ChatSettings{
-		GlobalPrompt: strings.TrimSpace(settings.GlobalPrompt),
-		Model:        strings.TrimSpace(settings.Model),
+		GlobalPrompt:     strings.TrimSpace(settings.GlobalPrompt),
+		ProviderPresetID: cloneUint(settings.ProviderPresetID),
+		Model:            strings.TrimSpace(settings.Model),
 	}
 
 	if settings.Temperature != nil {
@@ -96,6 +98,14 @@ func cloneInt(value *int) *int {
 	return &copy
 }
 
+func cloneUint(value *uint) *uint {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
+}
+
 func ptrFloat32(value float32) *float32 {
 	return &value
 }
@@ -126,6 +136,15 @@ func firstNonNilInt(values ...*int) *int {
 	for _, value := range values {
 		if value != nil {
 			return cloneInt(value)
+		}
+	}
+	return nil
+}
+
+func firstNonNilUint(values ...*uint) *uint {
+	for _, value := range values {
+		if value != nil {
+			return cloneUint(value)
 		}
 	}
 	return nil

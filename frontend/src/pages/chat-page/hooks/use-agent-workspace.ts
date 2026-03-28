@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '../../../i18n/use-i18n'
 import { ragApi, workflowApi } from '../../../lib/api'
@@ -27,12 +27,22 @@ export function useAgentWorkspace({
   setChatError,
 }: UseAgentWorkspaceOptions) {
   const { t } = useI18n()
+  const setChatErrorRef = useRef(setChatError)
+  const tRef = useRef(t)
   const [ragProviders, setRAGProviders] = useState<RAGProviderState | null>(null)
   const [knowledgeSpaces, setKnowledgeSpaces] = useState<KnowledgeSpace[]>([])
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<Record<number, KnowledgeDocument[]>>({})
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
   const [workflowPresets, setWorkflowPresets] = useState<WorkflowPreset[]>([])
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    setChatErrorRef.current = setChatError
+  }, [setChatError])
+
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
 
   const mergeDocumentIntoState = useCallback((spaceId: number, document: KnowledgeDocument) => {
     setKnowledgeDocuments((previous) => {
@@ -60,18 +70,19 @@ export function useAgentWorkspace({
       setKnowledgeSpaces(spaces)
       setWorkflowTemplates(templates)
       setWorkflowPresets(presets)
-      setChatError(null)
+      setChatErrorRef.current(null)
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.loadAgentWorkspace'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.loadAgentWorkspace'),
+      )
     } finally {
       setIsLoading(false)
     }
-  }, [setChatError, t])
+  }, [])
 
   useEffect(() => {
-    if (!isSettingsOpen) {
-      return
-    }
     void loadWorkspace()
   }, [isSettingsOpen, loadWorkspace])
 
@@ -82,43 +93,57 @@ export function useAgentWorkspace({
         ...previous,
         [spaceId]: documents,
       }))
-      setChatError(null)
+      setChatErrorRef.current(null)
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.loadKnowledgeDocuments'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.loadKnowledgeDocuments'),
+      )
     }
-  }, [setChatError, t])
+  }, [])
 
   const createRAGProvider = useCallback(async (payload: CreateRAGProviderPayload) => {
     try {
       const state = await ragApi.createProvider(payload)
       setRAGProviders(state)
-      setChatError(null)
+      setChatErrorRef.current(null)
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.saveRagProvider'))
+      setChatErrorRef.current(
+        error instanceof Error ? error.message : tRef.current('error.saveRagProvider'),
+      )
     }
-  }, [setChatError, t])
+  }, [])
 
   const activateRAGProvider = useCallback(async (providerId: number) => {
     try {
       const state = await ragApi.activateProvider(providerId)
       setRAGProviders(state)
-      setChatError(null)
+      setChatErrorRef.current(null)
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.activateRagProvider'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.activateRagProvider'),
+      )
     }
-  }, [setChatError, t])
+  }, [])
 
   const createKnowledgeSpace = useCallback(async (payload: CreateKnowledgeSpacePayload) => {
     try {
       const space = await ragApi.createKnowledgeSpace(payload)
       setKnowledgeSpaces((previous) => [space, ...previous])
-      setChatError(null)
+      setChatErrorRef.current(null)
       return space
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.createKnowledgeSpace'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.createKnowledgeSpace'),
+      )
       return null
     }
-  }, [setChatError, t])
+  }, [])
 
   const updateKnowledgeSpace = useCallback(async (spaceId: number, payload: UpdateKnowledgeSpacePayload) => {
     try {
@@ -126,13 +151,17 @@ export function useAgentWorkspace({
       setKnowledgeSpaces((previous) =>
         previous.map((entry) => (entry.id === spaceId ? space : entry)),
       )
-      setChatError(null)
+      setChatErrorRef.current(null)
       return space
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.updateKnowledgeSpace'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.updateKnowledgeSpace'),
+      )
       return null
     }
-  }, [setChatError, t])
+  }, [])
 
   const deleteKnowledgeSpace = useCallback(async (spaceId: number) => {
     try {
@@ -143,25 +172,33 @@ export function useAgentWorkspace({
         delete next[spaceId]
         return next
       })
-      setChatError(null)
+      setChatErrorRef.current(null)
       return true
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.deleteKnowledgeSpace'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.deleteKnowledgeSpace'),
+      )
       return false
     }
-  }, [setChatError, t])
+  }, [])
 
   const createKnowledgeDocument = useCallback(async (spaceId: number, payload: CreateKnowledgeDocumentPayload) => {
     try {
       const document = await ragApi.createKnowledgeDocument(spaceId, payload)
       mergeDocumentIntoState(spaceId, document)
-      setChatError(null)
+      setChatErrorRef.current(null)
       return document
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.createKnowledgeDocument'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.createKnowledgeDocument'),
+      )
       return null
     }
-  }, [mergeDocumentIntoState, setChatError, t])
+  }, [mergeDocumentIntoState])
 
   const updateKnowledgeDocument = useCallback(async (
     spaceId: number,
@@ -171,13 +208,17 @@ export function useAgentWorkspace({
     try {
       const document = await ragApi.updateKnowledgeDocument(spaceId, documentId, payload)
       mergeDocumentIntoState(spaceId, document)
-      setChatError(null)
+      setChatErrorRef.current(null)
       return document
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.updateKnowledgeDocument'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.updateKnowledgeDocument'),
+      )
       return null
     }
-  }, [mergeDocumentIntoState, setChatError, t])
+  }, [mergeDocumentIntoState])
 
   const deleteKnowledgeDocument = useCallback(async (spaceId: number, documentId: number) => {
     try {
@@ -186,13 +227,17 @@ export function useAgentWorkspace({
         ...previous,
         [spaceId]: (previous[spaceId] ?? []).filter((entry) => entry.id !== documentId),
       }))
-      setChatError(null)
+      setChatErrorRef.current(null)
       return true
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.deleteKnowledgeDocument'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.deleteKnowledgeDocument'),
+      )
       return false
     }
-  }, [setChatError, t])
+  }, [])
 
   const uploadKnowledgeDocuments = useCallback(async (spaceId: number, files: File[]) => {
     try {
@@ -201,13 +246,17 @@ export function useAgentWorkspace({
         ...previous,
         [spaceId]: [...documents, ...(previous[spaceId] ?? [])],
       }))
-      setChatError(null)
+      setChatErrorRef.current(null)
       return documents
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.uploadKnowledgeDocuments'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.uploadKnowledgeDocuments'),
+      )
       return null
     }
-  }, [setChatError, t])
+  }, [])
 
   const replaceKnowledgeDocumentFile = useCallback(async (
     spaceId: number,
@@ -218,25 +267,33 @@ export function useAgentWorkspace({
     try {
       const document = await ragApi.replaceKnowledgeDocumentFile(spaceId, documentId, file, title)
       mergeDocumentIntoState(spaceId, document)
-      setChatError(null)
+      setChatErrorRef.current(null)
       return document
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.replaceKnowledgeDocumentFile'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.replaceKnowledgeDocumentFile'),
+      )
       return null
     }
-  }, [mergeDocumentIntoState, setChatError, t])
+  }, [mergeDocumentIntoState])
 
   const createWorkflowPreset = useCallback(async (payload: CreateWorkflowPresetPayload) => {
     try {
       const preset = await workflowApi.createPreset(payload)
       setWorkflowPresets((previous) => [preset, ...previous])
-      setChatError(null)
+      setChatErrorRef.current(null)
       return preset
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.createWorkflowPreset'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.createWorkflowPreset'),
+      )
       return null
     }
-  }, [setChatError, t])
+  }, [])
 
   const updateWorkflowPreset = useCallback(async (presetId: number, payload: UpdateWorkflowPresetPayload) => {
     try {
@@ -244,25 +301,33 @@ export function useAgentWorkspace({
       setWorkflowPresets((previous) =>
         previous.map((entry) => (entry.id === presetId ? preset : entry)),
       )
-      setChatError(null)
+      setChatErrorRef.current(null)
       return preset
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.updateWorkflowPreset'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.updateWorkflowPreset'),
+      )
       return null
     }
-  }, [setChatError, t])
+  }, [])
 
   const deleteWorkflowPreset = useCallback(async (presetId: number) => {
     try {
       await workflowApi.deletePreset(presetId)
       setWorkflowPresets((previous) => previous.filter((entry) => entry.id !== presetId))
-      setChatError(null)
+      setChatErrorRef.current(null)
       return true
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : t('error.deleteWorkflowPreset'))
+      setChatErrorRef.current(
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.deleteWorkflowPreset'),
+      )
       return false
     }
-  }, [setChatError, t])
+  }, [])
 
   return {
     ragProviders,

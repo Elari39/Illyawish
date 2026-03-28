@@ -49,7 +49,7 @@ func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 		t.Fatal("expected API key hint to be stored")
 	}
 
-	resolved, err := service.ResolveForUser(1)
+	resolved, err := service.ResolveForUser(1, nil)
 	if err != nil {
 		t.Fatalf("ResolveForUser() error = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestUpdatePresetRetainsAPIKeyWhenNotProvided(t *testing.T) {
 		t.Fatalf("expected updated model %q, got %q", newModel, updated.DefaultModel)
 	}
 
-	resolved, err := service.ResolveForUser(1)
+	resolved, err := service.ResolveForUser(1, nil)
 	if err != nil {
 		t.Fatalf("ResolveForUser() error = %v", err)
 	}
@@ -166,7 +166,7 @@ func TestResolveFallsBackToServerConfig(t *testing.T) {
 		SessionSecret: "session-secret",
 	})
 
-	resolved, err := service.ResolveForUser(1)
+	resolved, err := service.ResolveForUser(1, nil)
 	if err != nil {
 		t.Fatalf("ResolveForUser() error = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestResolveRequiresProviderOrCompleteFallback(t *testing.T) {
 		SessionSecret: "session-secret",
 	})
 
-	_, err := service.ResolveForUser(1)
+	_, err := service.ResolveForUser(1, nil)
 	if err == nil {
 		t.Fatal("expected missing provider error, got nil")
 	}
@@ -350,7 +350,7 @@ func TestCreatePresetReusesActivePresetAPIKeyWhenRequested(t *testing.T) {
 		t.Fatalf("CreatePreset(secondary) error = %v", err)
 	}
 
-	resolved, err := service.ResolveForUser(1)
+	resolved, err := service.ResolveForUser(1, nil)
 	if err != nil {
 		t.Fatalf("ResolveForUser() error = %v", err)
 	}
@@ -439,7 +439,7 @@ func newTestServiceWithTester(t *testing.T, cfg *config.Config, tester providerT
 		t.Fatalf("open db: %v", err)
 	}
 
-	if err := db.AutoMigrate(&models.User{}, &models.LLMProviderPreset{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.LLMProviderPreset{}, &models.Conversation{}); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}
 
@@ -457,4 +457,124 @@ func newTestServiceWithTester(t *testing.T, cfg *config.Config, tester providerT
 	}
 
 	return service
+}
+
+func TestResolveForUserUsesPreferredPresetBeforeUserDefaultOrActivePreset(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preferred, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Preferred",
+		BaseURL:      "https://preferred.example.com/v1",
+		APIKey:       "preferred-key",
+		Models:       []string{"preferred-model"},
+		DefaultModel: "preferred-model",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(preferred) error = %v", err)
+	}
+
+	userDefault, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "User Default",
+		BaseURL:      "https://default.example.com/v1",
+		APIKey:       "default-key",
+		Models:       []string{"default-model"},
+		DefaultModel: "default-model",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(user default) error = %v", err)
+	}
+
+	active, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Active",
+		BaseURL:      "https://active.example.com/v1",
+		APIKey:       "active-key",
+		Models:       []string{"active-model"},
+		DefaultModel: "active-model",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset(active) error = %v", err)
+	}
+
+	if err := service.db.Model(&models.User{}).
+		Where("id = ?", 1).
+		Update("default_provider_preset_id", userDefault.ID).Error; err != nil {
+		t.Fatalf("set user default provider preset: %v", err)
+	}
+
+	resolved, err := service.ResolveForUser(1, &preferred.ID)
+	if err != nil {
+		t.Fatalf("ResolveForUser(preferred) error = %v", err)
+	}
+
+	if resolved.ActivePresetID == nil || *resolved.ActivePresetID != preferred.ID {
+		t.Fatalf("expected preferred preset to resolve, got %#v", resolved.ActivePresetID)
+	}
+	if resolved.Config.BaseURL != preferred.BaseURL {
+		t.Fatalf("expected preferred base URL %q, got %q", preferred.BaseURL, resolved.Config.BaseURL)
+	}
+	if resolved.Config.DefaultModel != preferred.DefaultModel {
+		t.Fatalf("expected preferred model %q, got %q", preferred.DefaultModel, resolved.Config.DefaultModel)
+	}
+
+	resolvedDefault, err := service.ResolveForUser(1, nil)
+	if err != nil {
+		t.Fatalf("ResolveForUser(user default) error = %v", err)
+	}
+	if resolvedDefault.ActivePresetID == nil || *resolvedDefault.ActivePresetID != userDefault.ID {
+		t.Fatalf("expected user default preset to resolve before active preset %d, got %#v (active preset %d)", userDefault.ID, resolvedDefault.ActivePresetID, active.ID)
+	}
+}
+
+func TestDeletePresetClearsUserAndConversationProviderReferences(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Preset",
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "key",
+		Models:       []string{"model"},
+		DefaultModel: "model",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	conversation := models.Conversation{
+		UserID:           1,
+		Title:            "Chat",
+		ProviderPresetID: &preset.ID,
+	}
+	if err := service.db.Create(&conversation).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	if err := service.db.Model(&models.User{}).
+		Where("id = ?", 1).
+		Update("default_provider_preset_id", preset.ID).Error; err != nil {
+		t.Fatalf("set default provider preset: %v", err)
+	}
+
+	if err := service.DeletePreset(1, preset.ID); err != nil {
+		t.Fatalf("DeletePreset() error = %v", err)
+	}
+
+	var user models.User
+	if err := service.db.First(&user, 1).Error; err != nil {
+		t.Fatalf("load user: %v", err)
+	}
+	if user.DefaultProviderPresetID != nil {
+		t.Fatalf("expected user default provider preset to be cleared, got %#v", user.DefaultProviderPresetID)
+	}
+
+	var storedConversation models.Conversation
+	if err := service.db.First(&storedConversation, conversation.ID).Error; err != nil {
+		t.Fatalf("load conversation: %v", err)
+	}
+	if storedConversation.ProviderPresetID != nil {
+		t.Fatalf("expected conversation provider preset to be cleared, got %#v", storedConversation.ProviderPresetID)
+	}
 }

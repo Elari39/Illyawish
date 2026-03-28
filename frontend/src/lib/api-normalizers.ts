@@ -2,6 +2,7 @@ import type { Conversation, ConversationSettings } from '../types/chat'
 
 const defaultConversationSettings: ConversationSettings = {
   systemPrompt: '',
+  providerPresetId: null,
   model: '',
   temperature: null,
   maxTokens: null,
@@ -16,6 +17,10 @@ export function normalizeConversationSettings(
       typeof settings?.systemPrompt === 'string'
         ? settings.systemPrompt
         : defaultConversationSettings.systemPrompt,
+    providerPresetId:
+      typeof settings?.providerPresetId === 'number'
+        ? settings.providerPresetId
+        : defaultConversationSettings.providerPresetId,
     model:
       typeof settings?.model === 'string'
         ? settings.model

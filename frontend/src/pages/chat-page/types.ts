@@ -82,6 +82,7 @@ export interface PromptState {
 
 export const defaultConversationSettings: ConversationSettings = {
   systemPrompt: '',
+  providerPresetId: null,
   model: '',
   temperature: null,
   maxTokens: null,
@@ -98,6 +99,7 @@ export const defaultAgentRunSummary: AgentRunSummary = {
 
 export const defaultChatSettings: ChatSettings = {
   globalPrompt: '',
+  providerPresetId: null,
   model: '',
   temperature: 1,
   maxTokens: null,

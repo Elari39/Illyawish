@@ -56,7 +56,7 @@ type Service struct {
 }
 
 type providerResolver interface {
-	ResolveForUser(userID uint) (*provider.ResolvedProvider, error)
+	ResolveForUser(userID uint, preferredPresetID *uint) (*provider.ResolvedProvider, error)
 }
 
 type attachmentStore interface {
@@ -99,6 +99,7 @@ type ConversationListResult struct {
 
 type ConversationSettings struct {
 	SystemPrompt       string   `json:"systemPrompt"`
+	ProviderPresetID   *uint    `json:"providerPresetId"`
 	Model              string   `json:"model"`
 	Temperature        *float32 `json:"temperature"`
 	MaxTokens          *int     `json:"maxTokens"`
@@ -107,6 +108,7 @@ type ConversationSettings struct {
 
 type ChatSettings struct {
 	GlobalPrompt       string   `json:"globalPrompt"`
+	ProviderPresetID   *uint    `json:"providerPresetId"`
 	Model              string   `json:"model"`
 	Temperature        *float32 `json:"temperature"`
 	MaxTokens          *int     `json:"maxTokens"`
@@ -224,6 +226,7 @@ func (s *Service) GetChatSettings(userID uint) (ChatSettings, error) {
 	if err := s.db.
 		Select(
 			"global_prompt",
+			"default_provider_preset_id",
 			"default_model",
 			"default_temperature",
 			"default_max_tokens",
@@ -235,6 +238,7 @@ func (s *Service) GetChatSettings(userID uint) (ChatSettings, error) {
 
 	return applyChatSettingsDefaults(ChatSettings{
 		GlobalPrompt:       strings.TrimSpace(user.GlobalPrompt),
+		ProviderPresetID:   cloneUint(user.DefaultProviderPresetID),
 		Model:              strings.TrimSpace(user.DefaultModel),
 		Temperature:        cloneFloat32(user.DefaultTemperature),
 		MaxTokens:          cloneInt(user.DefaultMaxTokens),
@@ -247,11 +251,15 @@ func (s *Service) UpdateChatSettings(userID uint, input ChatSettings) (ChatSetti
 	if err != nil {
 		return ChatSettings{}, err
 	}
+	if err := s.validateProviderPresetOwnership(userID, settings.ProviderPresetID); err != nil {
+		return ChatSettings{}, err
+	}
 
 	if err := s.db.Model(&models.User{}).
 		Where("id = ?", userID).
 		Updates(map[string]any{
 			"global_prompt":                settings.GlobalPrompt,
+			"default_provider_preset_id":   settings.ProviderPresetID,
 			"default_model":                settings.Model,
 			"default_temperature":          settings.Temperature,
 			"default_max_tokens":           settings.MaxTokens,
@@ -282,6 +290,9 @@ func (s *Service) resolveSettings(
 		settings.SystemPrompt = normalizedOverride.SystemPrompt
 		if normalizedOverride.Model != "" {
 			settings.Model = normalizedOverride.Model
+		}
+		if normalizedOverride.ProviderPresetID != nil {
+			settings.ProviderPresetID = cloneUint(normalizedOverride.ProviderPresetID)
 		}
 		if normalizedOverride.Temperature != nil {
 			settings.Temperature = cloneFloat32(normalizedOverride.Temperature)
@@ -592,9 +603,28 @@ func (s *Service) effectiveConversationSettings(
 
 	return ConversationSettings{
 		SystemPrompt:       strings.TrimSpace(conversation.SystemPrompt),
+		ProviderPresetID:   firstNonNilUint(conversation.ProviderPresetID, chatSettings.ProviderPresetID),
 		Model:              firstNonEmptyString(strings.TrimSpace(conversation.Model), strings.TrimSpace(chatSettings.Model)),
 		Temperature:        firstNonNilFloat32(conversation.Temperature, chatSettings.Temperature),
 		MaxTokens:          firstNonNilInt(conversation.MaxTokens, chatSettings.MaxTokens),
 		ContextWindowTurns: firstNonNilInt(conversation.ContextWindowTurns, chatSettings.ContextWindowTurns),
 	}, nil
+}
+
+func (s *Service) validateProviderPresetOwnership(userID uint, providerPresetID *uint) error {
+	if providerPresetID == nil || *providerPresetID == 0 {
+		return nil
+	}
+
+	var count int64
+	if err := s.db.Model(&models.LLMProviderPreset{}).
+		Where("id = ? AND user_id = ?", *providerPresetID, userID).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("validate provider preset: %w", err)
+	}
+	if count == 0 {
+		return requestError{message: "provider preset not found"}
+	}
+
+	return nil
 }

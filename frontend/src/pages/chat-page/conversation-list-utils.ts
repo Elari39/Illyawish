@@ -8,6 +8,8 @@ import {
 interface ConversationFilter {
   showArchived: boolean
   search: string
+  selectedFolder?: string | null
+  selectedTags?: string[]
 }
 
 interface ConversationMutationResult {
@@ -15,6 +17,8 @@ interface ConversationMutationResult {
   totalDelta: number
   loadedDelta: number
 }
+
+export const SIDEBAR_UNFILED_FOLDER_KEY = '__sidebar_unfiled__'
 
 export function dedupeConversations(conversations: Conversation[]) {
   const unique = new Map<Conversation['id'], Conversation>()
@@ -45,12 +49,34 @@ export function syncConversationList(
 
 export function matchesConversationFilters(
   conversation: Conversation,
-  { showArchived, search }: ConversationFilter,
+  {
+    showArchived,
+    search,
+    selectedFolder = null,
+    selectedTags = [],
+  }: ConversationFilter,
 ) {
   const normalizedSearch = search.trim().toLowerCase()
+  const normalizedFolder = conversation.folder.trim()
+  const matchesFolder =
+    selectedFolder == null
+      ? true
+      : selectedFolder === SIDEBAR_UNFILED_FOLDER_KEY
+        ? normalizedFolder === ''
+        : normalizedFolder === selectedFolder
+  const matchesTags =
+    selectedTags.length === 0 ||
+    selectedTags.some((tag) =>
+      conversation.tags.some(
+        (conversationTag) =>
+          conversationTag.toLowerCase() === tag.toLowerCase(),
+      ),
+    )
 
   return (
     conversation.isArchived === showArchived &&
+    matchesFolder &&
+    matchesTags &&
     (!normalizedSearch ||
       conversation.title.toLowerCase().includes(normalizedSearch) ||
       conversation.folder.toLowerCase().includes(normalizedSearch) ||
@@ -58,6 +84,56 @@ export function matchesConversationFilters(
         tag.toLowerCase().includes(normalizedSearch),
       ))
   )
+}
+
+export function applyConversationFilters(
+  conversations: Conversation[],
+  filter: ConversationFilter,
+) {
+  return sortConversations(
+    conversations.filter((conversation) =>
+      matchesConversationFilters(conversation, filter),
+    ),
+  )
+}
+
+export function getAvailableConversationFolders(conversations: Conversation[]) {
+  return Array.from(
+    new Set(
+      conversations
+        .map((conversation) => conversation.folder.trim())
+        .filter((folder) => folder !== ''),
+    ),
+  ).sort((left, right) => left.localeCompare(right))
+}
+
+export function getAvailableConversationTags(
+  conversations: Conversation[],
+  selectedFolder: string | null = null,
+) {
+  const tags = new Set<string>()
+  for (const conversation of conversations) {
+    const folder = conversation.folder.trim()
+    const matchesFolder =
+      selectedFolder == null
+        ? true
+        : selectedFolder === SIDEBAR_UNFILED_FOLDER_KEY
+          ? folder === ''
+          : folder === selectedFolder
+
+    if (!matchesFolder) {
+      continue
+    }
+
+    for (const tag of conversation.tags) {
+      const normalizedTag = tag.trim()
+      if (normalizedTag !== '') {
+        tags.add(normalizedTag)
+      }
+    }
+  }
+
+  return Array.from(tags).sort((left, right) => left.localeCompare(right))
 }
 
 export function parseConversationTagsInput(value: string) {

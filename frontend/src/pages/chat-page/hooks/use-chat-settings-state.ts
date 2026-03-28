@@ -122,6 +122,8 @@ export function useChatSettingsState({
           ...metadataUpdate,
           settings: {
             ...defaultConversationSettings,
+            providerPresetId: settingsDraft.providerPresetId ?? null,
+            model: settingsDraft.model,
             systemPrompt: settingsDraft.systemPrompt,
           },
         },
@@ -186,6 +188,17 @@ export function useChatSettingsState({
     setPendingConversation(null)
   }, [])
 
+  const applyChatSettings = useCallback((nextChatSettings: ChatSettings) => {
+    setChatSettings(nextChatSettings)
+    setChatSettingsDraft(nextChatSettings)
+
+    if (!currentConversation && !activeConversationId) {
+      setSettingsDraft(
+        buildDraftConversationSettings(nextChatSettings, newChatSystemPrompt),
+      )
+    }
+  }, [activeConversationId, currentConversation, newChatSystemPrompt])
+
   const resetForNewChatSettings = useCallback(() => {
     setPendingConversation(null)
     setSettingsDraft(
@@ -217,6 +230,7 @@ export function useChatSettingsState({
     setKnowledgeSpaceIdsDraft,
     setPendingConversation,
     setSettingsDraft,
+    applyChatSettings,
     handleSaveSettings,
     resetForNewChatSettings,
     resetPendingConversation,
@@ -281,6 +295,7 @@ function buildDraftConversationSettings(
 ): ConversationSettings {
   return {
     systemPrompt,
+    providerPresetId: chatSettings.providerPresetId ?? null,
     model: chatSettings.model,
     temperature: chatSettings.temperature,
     maxTokens: chatSettings.maxTokens,

@@ -12,6 +12,7 @@ export interface Attachment {
 
 export interface ConversationSettings {
   systemPrompt: string
+  providerPresetId?: number | null
   model: string
   temperature: number | null
   maxTokens: number | null
@@ -20,6 +21,7 @@ export interface ConversationSettings {
 
 export interface ChatSettings {
   globalPrompt: string
+  providerPresetId?: number | null
   model: string
   temperature: number | null
   maxTokens: number | null

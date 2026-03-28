@@ -18,6 +18,7 @@ type ConversationDTO struct {
 
 type ConversationSettingsDTO struct {
 	SystemPrompt       string   `json:"systemPrompt"`
+	ProviderPresetID   *uint    `json:"providerPresetId"`
 	Model              string   `json:"model"`
 	Temperature        *float32 `json:"temperature"`
 	MaxTokens          *int     `json:"maxTokens"`
@@ -26,6 +27,7 @@ type ConversationSettingsDTO struct {
 
 type ChatSettingsDTO struct {
 	GlobalPrompt       string   `json:"globalPrompt"`
+	ProviderPresetID   *uint    `json:"providerPresetId"`
 	Model              string   `json:"model"`
 	Temperature        *float32 `json:"temperature"`
 	MaxTokens          *int     `json:"maxTokens"`
@@ -76,6 +78,7 @@ func ToConversationDTO(
 		KnowledgeSpaceIDs: cloneUintSlice(conversation.KnowledgeSpaceIDs),
 		Settings: ConversationSettingsDTO{
 			SystemPrompt:       settings.SystemPrompt,
+			ProviderPresetID:   cloneUint(settings.ProviderPresetID),
 			Model:              settings.Model,
 			Temperature:        cloneFloat32(settings.Temperature),
 			MaxTokens:          cloneInt(settings.MaxTokens),
@@ -89,6 +92,7 @@ func ToConversationDTO(
 func ToChatSettingsDTO(settings ChatSettings) ChatSettingsDTO {
 	return ChatSettingsDTO{
 		GlobalPrompt:       settings.GlobalPrompt,
+		ProviderPresetID:   cloneUint(settings.ProviderPresetID),
 		Model:              settings.Model,
 		Temperature:        cloneFloat32(settings.Temperature),
 		MaxTokens:          cloneInt(settings.MaxTokens),

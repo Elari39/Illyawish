@@ -31,12 +31,21 @@ interface SidebarConversationListProps {
   archiveLabel: string
   restoreLabel: string
   deleteLabel: string
+  moveToFolderLabel: string
+  addTagsLabel: string
+  removeTagsLabel: string
+  selectionMode: boolean
+  selectedConversationIds: Conversation['id'][]
   onLoadMore: () => void
   onSelectConversation: (conversationId: Conversation['id']) => void
+  onToggleConversationSelection: (conversationId: Conversation['id']) => void
   onTogglePinned: (conversation: Conversation) => void
   onRenameConversation: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
   onDeleteConversation: (conversationId: Conversation['id']) => void
+  onMoveConversationToFolder: (conversation: Conversation) => void
+  onAddConversationTags: (conversation: Conversation) => void
+  onRemoveConversationTags: (conversation: Conversation) => void
   effectiveExpandedConversationId: Conversation['id'] | null
   desktopMenuDirection: 'up' | 'down'
   scrollContainerRef: RefObject<HTMLDivElement | null>
@@ -72,12 +81,21 @@ export function SidebarConversationList({
   archiveLabel,
   restoreLabel,
   deleteLabel,
+  moveToFolderLabel,
+  addTagsLabel,
+  removeTagsLabel,
+  selectionMode = false,
+  selectedConversationIds = [],
   onLoadMore,
   onSelectConversation,
+  onToggleConversationSelection,
   onTogglePinned,
   onRenameConversation,
   onToggleArchivedConversation,
   onDeleteConversation,
+  onMoveConversationToFolder,
+  onAddConversationTags,
+  onRemoveConversationTags,
   effectiveExpandedConversationId,
   desktopMenuDirection,
   scrollContainerRef,
@@ -136,12 +154,21 @@ export function SidebarConversationList({
                   archiveLabel={archiveLabel}
                   restoreLabel={restoreLabel}
                   deleteLabel={deleteLabel}
+                  moveToFolderLabel={moveToFolderLabel}
+                  addTagsLabel={addTagsLabel}
+                  removeTagsLabel={removeTagsLabel}
+                  selectionMode={selectionMode}
+                  isSelected={selectedConversationIds.includes(conversation.id)}
                   onSelectConversation={onSelectConversation}
+                  onToggleConversationSelection={onToggleConversationSelection}
                   onToggleActions={onToggleConversationActions}
                   onTogglePinned={onTogglePinned}
                   onRenameConversation={onRenameConversation}
                   onToggleArchivedConversation={onToggleArchivedConversation}
                   onDeleteConversation={onDeleteConversation}
+                  onMoveConversationToFolder={onMoveConversationToFolder}
+                  onAddConversationTags={onAddConversationTags}
+                  onRemoveConversationTags={onRemoveConversationTags}
                   onCloseActions={onCloseActions}
                 />
               )
@@ -166,12 +193,21 @@ export function SidebarConversationList({
                 archiveLabel={archiveLabel}
                 restoreLabel={restoreLabel}
                 deleteLabel={deleteLabel}
+                moveToFolderLabel={moveToFolderLabel}
+                addTagsLabel={addTagsLabel}
+                removeTagsLabel={removeTagsLabel}
+                selectionMode={selectionMode}
+                isSelected={selectedConversationIds.includes(conversation.id)}
                 onSelectConversation={onSelectConversation}
+                onToggleConversationSelection={onToggleConversationSelection}
                 onToggleActions={onToggleConversationActions}
                 onTogglePinned={onTogglePinned}
                 onRenameConversation={onRenameConversation}
                 onToggleArchivedConversation={onToggleArchivedConversation}
                 onDeleteConversation={onDeleteConversation}
+                onMoveConversationToFolder={onMoveConversationToFolder}
+                onAddConversationTags={onAddConversationTags}
+                onRemoveConversationTags={onRemoveConversationTags}
                 onCloseActions={onCloseActions}
                 onDesktopMenuBlur={onDesktopMenuBlur}
                 registerDesktopTrigger={registerDesktopTrigger}

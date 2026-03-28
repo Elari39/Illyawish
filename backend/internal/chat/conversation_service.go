@@ -91,6 +91,9 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 		if err != nil {
 			return nil, err
 		}
+		if err := s.validateProviderPresetOwnership(userID, settings.ProviderPresetID); err != nil {
+			return nil, err
+		}
 	}
 
 	folder := ""
@@ -117,6 +120,7 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 		WorkflowPresetID:   input.WorkflowPresetID,
 		KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
 		SystemPrompt:       settings.SystemPrompt,
+		ProviderPresetID:   cloneUint(settings.ProviderPresetID),
 		Model:              settings.Model,
 		Temperature:        cloneFloat32(settings.Temperature),
 		MaxTokens:          cloneInt(settings.MaxTokens),
@@ -157,14 +161,18 @@ func (s *Service) ImportConversation(
 			if err != nil {
 				return err
 			}
+			if err := s.validateProviderPresetOwnership(userID, settings.ProviderPresetID); err != nil {
+				return err
+			}
 		}
 
-			conversation = &models.Conversation{
-				UserID:             userID,
-				Title:              title,
-				WorkflowPresetID:   input.WorkflowPresetID,
-				KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
-				SystemPrompt:       settings.SystemPrompt,
+		conversation = &models.Conversation{
+			UserID:             userID,
+			Title:              title,
+			WorkflowPresetID:   input.WorkflowPresetID,
+			KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
+			SystemPrompt:       settings.SystemPrompt,
+			ProviderPresetID:   cloneUint(settings.ProviderPresetID),
 			Model:              settings.Model,
 			Temperature:        cloneFloat32(settings.Temperature),
 			MaxTokens:          cloneInt(settings.MaxTokens),
@@ -295,7 +303,11 @@ func (s *Service) UpdateConversation(
 		if err != nil {
 			return nil, err
 		}
+		if err := s.validateProviderPresetOwnership(userID, settings.ProviderPresetID); err != nil {
+			return nil, err
+		}
 		updates["system_prompt"] = settings.SystemPrompt
+		updates["provider_preset_id"] = settings.ProviderPresetID
 		updates["model"] = settings.Model
 		updates["temperature"] = settings.Temperature
 		updates["max_tokens"] = settings.MaxTokens

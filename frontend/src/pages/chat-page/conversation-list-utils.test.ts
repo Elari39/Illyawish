@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Conversation, ConversationSettings } from '../../types/chat'
-import { applyConversationSync } from './conversation-list-utils'
+import {
+  applyConversationFilters,
+  applyConversationSync,
+  SIDEBAR_UNFILED_FOLDER_KEY,
+} from './conversation-list-utils'
 
 const defaultSettings: ConversationSettings = {
   systemPrompt: '',
@@ -106,5 +110,73 @@ describe('applyConversationSync', () => {
     expect(result.conversations.map((conversation) => conversation.id)).toEqual(['14'])
     expect(result.totalDelta).toBe(1)
     expect(result.loadedDelta).toBe(0)
+  })
+})
+
+describe('applyConversationFilters', () => {
+  it('filters by selected folder before applying search', () => {
+    const conversations = [
+      createConversation(1, 'Alpha notes', {
+        folder: 'Work',
+        updatedAt: '2026-03-28T09:08:00Z',
+      }),
+      createConversation(2, 'Alpha draft', {
+        folder: 'Personal',
+        updatedAt: '2026-03-27T09:08:00Z',
+      }),
+    ]
+
+    const result = applyConversationFilters(conversations, {
+      showArchived: false,
+      selectedFolder: 'Work',
+      selectedTags: [],
+      search: 'alpha',
+    })
+
+    expect(result.map((conversation) => conversation.id)).toEqual(['1'])
+  })
+
+  it('filters unfiled conversations using the special folder key', () => {
+    const conversations = [
+      createConversation(1, 'Filed', {
+        folder: 'Work',
+      }),
+      createConversation(2, 'Loose note'),
+    ]
+
+    const result = applyConversationFilters(conversations, {
+      showArchived: false,
+      selectedFolder: SIDEBAR_UNFILED_FOLDER_KEY,
+      selectedTags: [],
+      search: '',
+    })
+
+    expect(result.map((conversation) => conversation.id)).toEqual(['2'])
+  })
+
+  it('matches any selected tag when multiple tags are active', () => {
+    const conversations = [
+      createConversation(1, 'First', {
+        tags: ['urgent'],
+        updatedAt: '2026-03-28T09:08:00Z',
+      }),
+      createConversation(2, 'Second', {
+        tags: ['ops'],
+        updatedAt: '2026-03-27T09:08:00Z',
+      }),
+      createConversation(3, 'Third', {
+        tags: ['docs'],
+        updatedAt: '2026-03-26T09:08:00Z',
+      }),
+    ]
+
+    const result = applyConversationFilters(conversations, {
+      showArchived: false,
+      selectedFolder: null,
+      selectedTags: ['urgent', 'ops'],
+      search: '',
+    })
+
+    expect(result.map((conversation) => conversation.id)).toEqual(['1', '2'])
   })
 })

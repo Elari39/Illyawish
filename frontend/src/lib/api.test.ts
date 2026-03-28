@@ -98,6 +98,7 @@ describe('chatApi response normalization', () => {
         knowledgeSpaceIds: [],
         settings: {
           systemPrompt: '',
+          providerPresetId: null,
           model: '',
           temperature: null,
           maxTokens: null,
@@ -153,6 +154,7 @@ describe('chatApi response normalization', () => {
       knowledgeSpaceIds: [],
       settings: {
         systemPrompt: '',
+        providerPresetId: null,
         model: 'gpt-4.1-mini',
         temperature: null,
         maxTokens: null,
