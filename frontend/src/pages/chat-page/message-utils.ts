@@ -1,7 +1,7 @@
 import type { Attachment, Message } from '../../types/chat'
 
 interface StreamingMessageTarget {
-  conversationId: number
+  conversationId: Message['conversationId']
   placeholderId: number
   messageId: number | null
 }

@@ -2,9 +2,12 @@ package database
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"backend/internal/config"
 	"backend/internal/models"
 
 	"gorm.io/driver/sqlite"
@@ -69,6 +72,33 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasColumn(&models.Conversation{}, "context_window_turns") {
 		t.Fatal("expected conversations.context_window_turns column to exist")
 	}
+	if !db.Migrator().HasColumn(&models.Conversation{}, "workflow_preset_id") {
+		t.Fatal("expected conversations.workflow_preset_id column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.Conversation{}, "knowledge_space_ids") {
+		t.Fatal("expected conversations.knowledge_space_ids column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.Conversation{}, "public_id") {
+		t.Fatal("expected conversations.public_id column to exist")
+	}
+	if !db.Migrator().HasColumn(&models.Message{}, "run_summary") {
+		t.Fatal("expected messages.run_summary column to exist")
+	}
+	if !db.Migrator().HasTable(&models.RAGProviderPreset{}) {
+		t.Fatal("expected rag_provider_presets table to exist")
+	}
+	if !db.Migrator().HasTable(&models.KnowledgeSpace{}) {
+		t.Fatal("expected knowledge_spaces table to exist")
+	}
+	if !db.Migrator().HasTable(&models.KnowledgeDocument{}) {
+		t.Fatal("expected knowledge_documents table to exist")
+	}
+	if !db.Migrator().HasTable(&models.KnowledgeChunk{}) {
+		t.Fatal("expected knowledge_chunks table to exist")
+	}
+	if !db.Migrator().HasTable(&models.WorkflowPreset{}) {
+		t.Fatal("expected workflow_presets table to exist")
+	}
 }
 
 func TestProviderActiveIndexAllowsOnlyOneActivePresetPerUser(t *testing.T) {
@@ -103,6 +133,58 @@ func TestProviderActiveIndexAllowsOnlyOneActivePresetPerUser(t *testing.T) {
 	}
 }
 
+func TestOpenRejectsLegacyConversationSchemaWithoutPublicID(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+
+	if err := db.Exec(`
+		CREATE TABLE conversations (
+			id INTEGER PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			title TEXT NOT NULL DEFAULT "New chat",
+			is_pinned numeric NOT NULL DEFAULT false,
+			is_archived numeric NOT NULL DEFAULT false,
+			system_prompt TEXT NOT NULL DEFAULT "",
+			model TEXT NOT NULL DEFAULT "",
+			temperature REAL,
+			max_tokens INTEGER,
+			created_at datetime,
+			updated_at datetime
+		)
+	`).Error; err != nil {
+		t.Fatalf("create legacy conversations table: %v", err)
+	}
+	if err := db.Exec(`
+		INSERT INTO conversations (
+			id, user_id, title, is_pinned, is_archived, system_prompt, model, created_at, updated_at
+		) VALUES (1, 1, 'Legacy chat', false, false, '', '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+	`).Error; err != nil {
+		t.Fatalf("insert legacy conversation row: %v", err)
+	}
+
+	_, err = Open(&config.Config{
+		SQLitePath: dbPath,
+		UploadDir:  filepath.Join(t.TempDir(), "uploads"),
+	})
+	if err == nil {
+		t.Fatal("expected legacy schema check to fail")
+	}
+
+	if !strings.Contains(err.Error(), dbPath) {
+		t.Fatalf("expected error to include db path %q, got %v", dbPath, err)
+	}
+	if !strings.Contains(err.Error(), "delete") || !strings.Contains(err.Error(), "restart") {
+		t.Fatalf("expected delete-and-restart guidance, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "public_id") {
+		t.Fatalf("expected error to mention public_id, got %v", err)
+	}
+}
+
 func openDatabaseTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -118,7 +200,12 @@ func openDatabaseTestDB(t *testing.T) *gorm.DB {
 		&models.Message{},
 		&models.MessageAttachment{},
 		&models.LLMProviderPreset{},
+		&models.RAGProviderPreset{},
 		&models.StoredAttachment{},
+		&models.KnowledgeSpace{},
+		&models.KnowledgeDocument{},
+		&models.KnowledgeChunk{},
+		&models.WorkflowPreset{},
 	); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}

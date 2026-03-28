@@ -19,7 +19,7 @@ const STOP_RECONCILE_DELAY_MS = 150
 const MESSAGE_PAGE_SIZE = 50
 
 interface UseChatHistoryOptions {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   search: string
   showArchived: boolean
   setChatError: (value: string | null) => void
@@ -30,8 +30,8 @@ interface UseChatHistoryOptions {
   navigateHome: (replace?: boolean) => void
   setSkipAutoResume: (value: boolean) => void
   t: I18nContextValue['t']
-  activeConversationIdRef: MutableRefObject<number | null>
-  activeGenerationRef: MutableRefObject<{ conversationId: number } | null>
+  activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
+  activeGenerationRef: MutableRefObject<{ conversationId: Conversation['id'] } | null>
   messageViewportRef: MutableRefObject<HTMLDivElement | null>
   clearEditingMessage: () => void
   resetForNewChatSettings: () => void
@@ -198,7 +198,7 @@ export function useChatHistory({
   ])
 
   async function reconcileConversationState(
-    conversationId: number,
+    conversationId: Conversation['id'],
     { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
   ) {
     try {
@@ -279,7 +279,7 @@ export function useChatHistory({
   }
 
   async function waitForConversationToSettle(
-    conversationId: number,
+    conversationId: Conversation['id'],
     { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
   ) {
     let latestResponse: Awaited<ReturnType<typeof reconcileConversationState>> = null

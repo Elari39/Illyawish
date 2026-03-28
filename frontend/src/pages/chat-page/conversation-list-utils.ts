@@ -17,7 +17,7 @@ interface ConversationMutationResult {
 }
 
 export function dedupeConversations(conversations: Conversation[]) {
-  const unique = new Map<number, Conversation>()
+  const unique = new Map<Conversation['id'], Conversation>()
   for (const conversation of conversations) {
     unique.set(conversation.id, conversation)
   }
@@ -156,7 +156,7 @@ export function applyConversationSync(
 
 export function applyConversationRemoval(
   conversations: Conversation[],
-  conversationId: number,
+  conversationId: Conversation['id'],
 ): ConversationMutationResult {
   const nextConversations = conversations.filter(
     (conversation) => conversation.id !== conversationId,
@@ -200,13 +200,10 @@ export function readLastConversationId() {
   }
 
   const rawValue = window.localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY)
-  const conversationId = Number(rawValue)
-  return Number.isInteger(conversationId) && conversationId > 0
-    ? conversationId
-    : null
+  return rawValue && rawValue.trim() !== '' ? rawValue : null
 }
 
-export function writeLastConversationId(conversationId: number) {
+export function writeLastConversationId(conversationId: Conversation['id']) {
   if (typeof window === 'undefined') {
     return
   }
@@ -217,14 +214,14 @@ export function writeLastConversationId(conversationId: number) {
   )
 }
 
-export function clearLastConversationId(conversationId?: number) {
+export function clearLastConversationId(conversationId?: Conversation['id']) {
   if (typeof window === 'undefined') {
     return
   }
 
   const storedConversationId = readLastConversationId()
   if (
-    typeof conversationId === 'number' &&
+    typeof conversationId === 'string' &&
     storedConversationId != null &&
     storedConversationId !== conversationId
   ) {
@@ -236,7 +233,7 @@ export function clearLastConversationId(conversationId?: number) {
 
 export function resolveRestorableConversationId(
   conversations: Conversation[],
-  lastConversationId: number | null,
+  lastConversationId: Conversation['id'] | null,
   showArchived: boolean,
   search: string,
 ) {

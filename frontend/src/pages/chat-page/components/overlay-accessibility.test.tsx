@@ -31,7 +31,7 @@ const chatSettings: ChatSettings = {
 }
 
 const conversation: Conversation = {
-  id: 1,
+  id: '1',
   title: 'Imported conversation',
   isPinned: false,
   isArchived: false,

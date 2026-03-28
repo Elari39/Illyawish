@@ -28,7 +28,7 @@ export type ConversationListAction =
       }
       append: boolean
       loadedCount: number
-      activeConversationId: number | null
+      activeConversationId: Conversation['id'] | null
       search: string
       showArchived: boolean
     }

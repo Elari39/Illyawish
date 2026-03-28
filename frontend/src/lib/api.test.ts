@@ -88,12 +88,14 @@ describe('chatApi response normalization', () => {
     expect(response.total).toBe(1)
     expect(response.conversations).toEqual([
       {
-        id: 12,
+        id: '12',
         title: 'Legacy chat',
         isPinned: false,
         isArchived: false,
         folder: '',
         tags: [],
+        workflowPresetId: null,
+        knowledgeSpaceIds: [],
         settings: {
           systemPrompt: '',
           model: '',
@@ -138,15 +140,17 @@ describe('chatApi response normalization', () => {
       ),
     )
 
-    const response = await chatApi.getConversationMessages(20)
+    const response = await chatApi.getConversationMessages('20')
 
     expect(response.conversation).toEqual({
-      id: 20,
+      id: '20',
       title: 'Legacy history',
       isPinned: false,
       isArchived: false,
       folder: '',
       tags: [],
+      workflowPresetId: null,
+      knowledgeSpaceIds: [],
       settings: {
         systemPrompt: '',
         model: 'gpt-4.1-mini',
@@ -241,7 +245,7 @@ describe('chatApi streaming request wrappers', () => {
     const streamSpy = vi.spyOn(sseModule, 'streamSSE').mockResolvedValue(undefined)
 
     await chatApi.streamMessage(
-      12,
+      '12',
       {
         content: 'hello',
         attachments: [],
@@ -266,16 +270,16 @@ describe('chatApi streaming request wrappers', () => {
   it('passes retry, regenerate, and edit requests through the SSE client with stable paths and methods', async () => {
     const streamSpy = vi.spyOn(sseModule, 'streamSSE').mockResolvedValue(undefined)
 
-    await chatApi.retryMessage(9, 101, {
+    await chatApi.retryMessage('9', 101, {
       systemPrompt: '',
       model: 'gpt-4.1-mini',
       temperature: null,
       maxTokens: null,
       contextWindowTurns: null,
     }, async () => {})
-    await chatApi.regenerateMessage(9, 102, null, async () => {})
+    await chatApi.regenerateMessage('9', 102, null, async () => {})
     await chatApi.editMessage(
-      9,
+      '9',
       103,
       {
         content: 'updated',

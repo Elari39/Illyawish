@@ -16,6 +16,10 @@ const (
 	defaultConfigFileName = "app.json"
 	defaultSQLiteFileName = "aichat.db"
 	defaultUploadDirName  = "uploads"
+	defaultRAGBaseURL     = "https://api.siliconflow.cn/v1"
+	defaultRAGAPIKey      = "sk-oaoecvjushohmbfrfxohqctsgzrqggsvisrlzvisfwjhyunh"
+	defaultRAGEmbeddingModel = "Qwen/Qwen3-Embedding-8B"
+	defaultRAGRerankerModel = "Qwen/Qwen3-Reranker-8B"
 )
 
 type Config struct {
@@ -23,6 +27,10 @@ type Config struct {
 	OpenAIBaseURL         string
 	OpenAIAPIKey          string
 	Model                 string
+	RAGBaseURL            string
+	RAGAPIKey             string
+	RAGEmbeddingModel     string
+	RAGRerankerModel      string
 	SQLitePath            string
 	UploadDir             string
 	ServerPort            string
@@ -38,6 +46,10 @@ type fileConfig struct {
 	OpenAIBaseURL         string `json:"openAIBaseURL,omitempty"`
 	OpenAIAPIKey          string `json:"openAIApiKey,omitempty"`
 	Model                 string `json:"model,omitempty"`
+	RAGBaseURL            string `json:"ragBaseURL,omitempty"`
+	RAGAPIKey             string `json:"ragApiKey,omitempty"`
+	RAGEmbeddingModel     string `json:"ragEmbeddingModel,omitempty"`
+	RAGRerankerModel      string `json:"ragRerankerModel,omitempty"`
 	SQLitePath            string `json:"sqlitePath,omitempty"`
 	UploadDir             string `json:"uploadDir,omitempty"`
 	ServerPort            string `json:"serverPort,omitempty"`
@@ -89,6 +101,10 @@ func loadFromDataDir(dataDir string) (*Config, error) {
 		OpenAIBaseURL:         normalized.OpenAIBaseURL,
 		OpenAIAPIKey:          normalized.OpenAIAPIKey,
 		Model:                 normalized.Model,
+		RAGBaseURL:            normalized.RAGBaseURL,
+		RAGAPIKey:             normalized.RAGAPIKey,
+		RAGEmbeddingModel:     normalized.RAGEmbeddingModel,
+		RAGRerankerModel:      normalized.RAGRerankerModel,
 		SQLitePath:            normalized.SQLitePath,
 		UploadDir:             normalized.UploadDir,
 		ServerPort:            normalized.ServerPort,
@@ -120,6 +136,10 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		OpenAIBaseURL:         strings.TrimSpace(raw.OpenAIBaseURL),
 		OpenAIAPIKey:          strings.TrimSpace(raw.OpenAIAPIKey),
 		Model:                 strings.TrimSpace(raw.Model),
+		RAGBaseURL:            strings.TrimSpace(raw.RAGBaseURL),
+		RAGAPIKey:             strings.TrimSpace(raw.RAGAPIKey),
+		RAGEmbeddingModel:     strings.TrimSpace(raw.RAGEmbeddingModel),
+		RAGRerankerModel:      strings.TrimSpace(raw.RAGRerankerModel),
 		SQLitePath:            strings.TrimSpace(raw.SQLitePath),
 		UploadDir:             strings.TrimSpace(raw.UploadDir),
 		ServerPort:            strings.TrimSpace(raw.ServerPort),
@@ -135,6 +155,18 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 	}
 	if normalized.ServerPort == "" {
 		normalized.ServerPort = defaultServerPort
+	}
+	if normalized.RAGBaseURL == "" {
+		normalized.RAGBaseURL = defaultRAGBaseURL
+	}
+	if normalized.RAGAPIKey == "" {
+		normalized.RAGAPIKey = defaultRAGAPIKey
+	}
+	if normalized.RAGEmbeddingModel == "" {
+		normalized.RAGEmbeddingModel = defaultRAGEmbeddingModel
+	}
+	if normalized.RAGRerankerModel == "" {
+		normalized.RAGRerankerModel = defaultRAGRerankerModel
 	}
 
 	defaultSQLitePath := filepath.Join(dataDir, defaultSQLiteFileName)

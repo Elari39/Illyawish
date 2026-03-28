@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { vi } from 'vitest'
 
 import { I18nProvider } from '../../../i18n/provider'
+import { LAST_CONVERSATION_STORAGE_KEY } from '../types'
 import { useConversationList } from './use-conversation-list'
 
 const listConversationsPageMock = vi.fn()
@@ -17,9 +18,9 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <I18nProvider>{children}</I18nProvider>
 )
 
-function createConversation(id: number, overrides: Record<string, unknown> = {}) {
+function createConversation(id: number | string, overrides: Record<string, unknown> = {}) {
   return {
-    id,
+    id: String(id),
     title: `Conversation ${id}`,
     isPinned: false,
     isArchived: false,
@@ -51,41 +52,18 @@ describe('useConversationList', () => {
       params?.offset === 1
         ? {
             conversations: [
-              {
-                id: 2,
+              createConversation(2, {
                 title: 'Beta',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
-                createdAt: '2026-03-26T00:00:00Z',
-                updatedAt: '2026-03-27T00:00:00Z',
-              },
+              }),
             ],
             total: 2,
           }
         : {
             conversations: [
-              {
-                id: 1,
+              createConversation(1, {
                 title: 'Alpha',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
-                createdAt: '2026-03-26T00:00:00Z',
                 updatedAt: '2026-03-26T00:00:00Z',
-              },
+              }),
             ],
             total: 2,
           }
@@ -117,7 +95,7 @@ describe('useConversationList', () => {
       expect(result.current.conversations).toHaveLength(2)
     })
 
-    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([2, 1])
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['2', '1'])
     expect(result.current.hasMoreConversations).toBe(false)
     expect(listConversationsPageMock).toHaveBeenCalledWith({
       search: undefined,
@@ -226,7 +204,7 @@ describe('useConversationList', () => {
       }))
     })
 
-    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([7])
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['7'])
     expect(result.current.hasMoreConversations).toBe(false)
   })
 
@@ -278,29 +256,17 @@ describe('useConversationList', () => {
       }))
     })
 
-    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
     expect(result.current.hasMoreConversations).toBe(true)
   })
 
   it('restores the last conversation only once when it is still available', async () => {
-    window.localStorage.setItem('aichat:last-conversation-id', '7')
+    window.localStorage.setItem(LAST_CONVERSATION_STORAGE_KEY, '7')
     listConversationsPageMock.mockResolvedValue({
       conversations: [
-        {
-          id: 7,
+        createConversation(7, {
           title: 'Resume me',
-          isPinned: false,
-          isArchived: false,
-          settings: {
-            systemPrompt: 'You are a helpful assistant.',
-            model: '',
-            temperature: 1,
-            maxTokens: null,
-  contextWindowTurns: null,
-          },
-          createdAt: '2026-03-26T00:00:00Z',
-          updatedAt: '2026-03-27T00:00:00Z',
-        },
+        }),
       ],
       total: 1,
     })
@@ -319,7 +285,7 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(navigateToConversation).toHaveBeenCalledWith(7, true)
+      expect(navigateToConversation).toHaveBeenCalledWith('7', true)
     })
 
     rerender()
@@ -336,41 +302,20 @@ describe('useConversationList', () => {
       params?.offset === 1
         ? {
             conversations: [
-              {
-                id: 2,
+              createConversation(2, {
                 title: 'Second page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
-                createdAt: '2026-03-26T00:00:00Z',
                 updatedAt: '2026-03-26T00:00:00Z',
-              },
+              }),
             ],
             total: 2,
           }
         : {
             conversations: [
-              {
-                id: 1,
+              createConversation(1, {
                 title: 'First page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
                 createdAt: '2026-03-26T00:00:00Z',
                 updatedAt: '2026-03-25T00:00:00Z',
-              },
+              }),
             ],
             total: 2,
           }
@@ -381,7 +326,7 @@ describe('useConversationList', () => {
     const { result } = renderHook(
       () =>
         useConversationList({
-          activeConversationId: 99,
+          activeConversationId: '99',
           onError,
           navigateToConversation,
         }),
@@ -389,12 +334,12 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
     })
 
     act(() => {
       result.current.syncConversationIntoList({
-        id: 99,
+        id: '99',
         title: 'Local active chat',
         isPinned: false,
         isArchived: false,
@@ -413,7 +358,7 @@ describe('useConversationList', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99, 1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['99', '1'])
     })
     expect(result.current.hasMoreConversations).toBe(true)
 
@@ -433,10 +378,12 @@ describe('useConversationList', () => {
   it('ignores an older fetch after syncing a local active conversation', async () => {
     let resolveListRequest: ((value: {
       conversations: Array<{
-        id: number
+        id: string
         title: string
         isPinned: boolean
         isArchived: boolean
+        folder: string
+        tags: string[]
         settings: {
           systemPrompt: string
           model: string
@@ -463,7 +410,7 @@ describe('useConversationList', () => {
     const { result } = renderHook(
       () =>
         useConversationList({
-          activeConversationId: 99,
+          activeConversationId: '99',
           onError,
           navigateToConversation,
         }),
@@ -472,7 +419,7 @@ describe('useConversationList', () => {
 
     act(() => {
       result.current.syncConversationIntoList({
-        id: 99,
+        id: '99',
         title: 'Fresh chat',
         isPinned: false,
         isArchived: false,
@@ -491,34 +438,23 @@ describe('useConversationList', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['99'])
     })
 
     await act(async () => {
       resolveListRequest?.({
         conversations: [
-          {
-            id: 1,
+          createConversation(1, {
             title: 'Older chat',
-            isPinned: false,
-            isArchived: false,
-            settings: {
-              systemPrompt: 'You are a helpful assistant.',
-              model: '',
-              temperature: 1,
-              maxTokens: null,
-  contextWindowTurns: null,
-            },
-            createdAt: '2026-03-26T00:00:00Z',
             updatedAt: '2026-03-26T00:00:00Z',
-          },
+          }),
         ],
         total: 1,
       })
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['99'])
     })
   })
 
@@ -541,7 +477,7 @@ describe('useConversationList', () => {
     const { result } = renderHook(
       () =>
         useConversationList({
-          activeConversationId: 1,
+          activeConversationId: '1',
           onError,
           navigateToConversation,
         }),
@@ -556,7 +492,7 @@ describe('useConversationList', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([2])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['2'])
     })
 
     await act(async () => {
@@ -576,7 +512,7 @@ describe('useConversationList', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.find((conversation) => conversation.id === 2)?.title).toBe('Fresh title')
+      expect(result.current.conversations.find((conversation) => conversation.id === '2')?.title).toBe('Fresh title')
     })
   })
 
@@ -587,41 +523,20 @@ describe('useConversationList', () => {
       params?.offset === 0
         ? {
             conversations: [
-              {
-                id: 1,
+              createConversation(1, {
                 title: 'First page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
-                createdAt: '2026-03-26T00:00:00Z',
                 updatedAt: '2026-03-26T00:00:00Z',
-              },
+              }),
             ],
             total: 1,
           }
         : {
             conversations: [
-              {
-                id: 2,
+              createConversation(2, {
                 title: 'Second page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
                 createdAt: '2026-03-27T00:00:00Z',
                 updatedAt: '2026-03-27T00:00:00Z',
-              },
+              }),
             ],
             total: 1,
           }
@@ -640,11 +555,11 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
     })
 
     act(() => {
-      result.current.removeConversationFromList(1)
+      result.current.removeConversationFromList('1')
     })
 
     expect(result.current.conversations).toEqual([])
@@ -669,41 +584,20 @@ describe('useConversationList', () => {
       params?.offset === 1
         ? {
             conversations: [
-              {
-                id: 2,
+              createConversation(2, {
                 title: 'Second page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
-                createdAt: '2026-03-26T00:00:00Z',
                 updatedAt: '2026-03-26T00:00:00Z',
-              },
+              }),
             ],
             total: 3,
           }
         : {
             conversations: [
-              {
-                id: 1,
+              createConversation(1, {
                 title: 'First page',
-                isPinned: false,
-                isArchived: false,
-                settings: {
-                  systemPrompt: 'You are a helpful assistant.',
-                  model: '',
-                  temperature: 1,
-                  maxTokens: null,
-  contextWindowTurns: null,
-                },
                 createdAt: '2026-03-25T00:00:00Z',
                 updatedAt: '2026-03-25T00:00:00Z',
-              },
+              }),
             ],
             total: 2,
           }
@@ -714,7 +608,7 @@ describe('useConversationList', () => {
     const { result } = renderHook(
       () =>
         useConversationList({
-          activeConversationId: 99,
+          activeConversationId: '99',
           onError,
           navigateToConversation,
         }),
@@ -722,12 +616,12 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
     })
 
     act(() => {
       result.current.insertCreatedConversation({
-        id: 99,
+        id: '99',
         title: 'Brand new chat',
         isPinned: false,
         isArchived: false,
@@ -745,7 +639,7 @@ describe('useConversationList', () => {
       })
     })
 
-    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99, 1])
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['99', '1'])
     expect(result.current.hasMoreConversations).toBe(true)
 
     await act(async () => {
@@ -763,21 +657,10 @@ describe('useConversationList', () => {
   it('updates counters when a conversation is archived out of the current filter', async () => {
     listConversationsPageMock.mockResolvedValue({
       conversations: [
-        {
-          id: 1,
+        createConversation(1, {
           title: 'Visible chat',
-          isPinned: false,
-          isArchived: false,
-          settings: {
-            systemPrompt: 'You are a helpful assistant.',
-            model: '',
-            temperature: 1,
-            maxTokens: null,
-  contextWindowTurns: null,
-          },
-          createdAt: '2026-03-26T00:00:00Z',
           updatedAt: '2026-03-26T00:00:00Z',
-        },
+        }),
       ],
       total: 1,
     })
@@ -795,12 +678,12 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
     })
 
     act(() => {
       result.current.syncConversationIntoList({
-        id: 1,
+        id: '1',
         title: 'Visible chat',
         isPinned: false,
         isArchived: true,

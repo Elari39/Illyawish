@@ -9,7 +9,7 @@ import { MobileConversationItem } from './mobile-conversation-item'
 interface SidebarConversationListProps {
   collapsed: boolean
   interactionDisabled: boolean
-  currentConversationId: number | null
+  currentConversationId: Conversation['id'] | null
   conversations: Conversation[]
   hasMoreConversations: boolean
   showArchived: boolean
@@ -32,18 +32,18 @@ interface SidebarConversationListProps {
   restoreLabel: string
   deleteLabel: string
   onLoadMore: () => void
-  onSelectConversation: (conversationId: number) => void
+  onSelectConversation: (conversationId: Conversation['id']) => void
   onTogglePinned: (conversation: Conversation) => void
   onRenameConversation: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
-  onDeleteConversation: (conversationId: number) => void
-  effectiveExpandedConversationId: number | null
+  onDeleteConversation: (conversationId: Conversation['id']) => void
+  effectiveExpandedConversationId: Conversation['id'] | null
   desktopMenuDirection: 'up' | 'down'
   scrollContainerRef: RefObject<HTMLDivElement | null>
   desktopMenuRef: RefObject<HTMLDivElement | null>
-  registerDesktopTrigger: (conversationId: number, node: HTMLButtonElement | null) => void
+  registerDesktopTrigger: (conversationId: Conversation['id'], node: HTMLButtonElement | null) => void
   onDesktopMenuBlur: (event: FocusEvent<HTMLDivElement>) => void
-  onToggleConversationActions: (conversationId: number, anchor?: HTMLButtonElement) => void
+  onToggleConversationActions: (conversationId: Conversation['id'], anchor?: HTMLButtonElement) => void
   onCloseActions: () => void
 }
 

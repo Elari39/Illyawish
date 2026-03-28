@@ -19,12 +19,12 @@ interface MobileConversationItemProps {
   archiveLabel: string
   restoreLabel: string
   deleteLabel: string
-  onSelectConversation: (conversationId: number) => void
-  onToggleActions: (conversationId: number, anchor?: HTMLButtonElement) => void
+  onSelectConversation: (conversationId: Conversation['id']) => void
+  onToggleActions: (conversationId: Conversation['id'], anchor?: HTMLButtonElement) => void
   onTogglePinned: (conversation: Conversation) => void
   onRenameConversation: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
-  onDeleteConversation: (conversationId: number) => void
+  onDeleteConversation: (conversationId: Conversation['id']) => void
   onCloseActions: () => void
 }
 

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func listConversationsParams(c *gin.Context) (ListConversationsParams, error) {
@@ -63,13 +64,13 @@ func listMessagesParams(c *gin.Context) (ListMessagesParams, error) {
 	return params, nil
 }
 
-func conversationIDParam(c *gin.Context) (uint, error) {
+func conversationIDParam(c *gin.Context) (string, error) {
 	rawID := c.Param("id")
-	id, err := strconv.ParseUint(rawID, 10, 64)
+	parsed, err := uuid.Parse(rawID)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
-	return uint(id), nil
+	return parsed.String(), nil
 }
 
 func messageIDParam(c *gin.Context) (uint, error) {

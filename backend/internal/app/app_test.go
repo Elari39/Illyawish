@@ -3,6 +3,8 @@ package app
 import (
 	"crypto/tls"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -71,5 +73,47 @@ func TestSessionOptionsForRequestLeavesLocalHTTPInsecure(t *testing.T) {
 	options := sessionOptionsForRequest(request, false)
 	if options.Secure {
 		t.Fatal("expected local HTTP request to keep secure cookies disabled")
+	}
+}
+
+func TestNewRegistersKnowledgeSpaceRoutesWithoutConflict(t *testing.T) {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	tempBackendDir := filepath.Join(t.TempDir(), "backend")
+	if err := os.MkdirAll(tempBackendDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.Chdir(tempBackendDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(workingDir); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+
+	application, err := New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	expectedRoutes := map[string]bool{
+		"PATCH /api/knowledge/spaces/:spaceId":  false,
+		"DELETE /api/knowledge/spaces/:spaceId": false,
+	}
+	for _, route := range application.router.Routes() {
+		key := route.Method + " " + route.Path
+		if _, ok := expectedRoutes[key]; ok {
+			expectedRoutes[key] = true
+		}
+	}
+
+	for route, found := range expectedRoutes {
+		if !found {
+			t.Fatalf("expected route %s to be registered", route)
+		}
 	}
 }

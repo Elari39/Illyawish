@@ -1,6 +1,11 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 const (
 	RoleSystem    = "system"
@@ -59,12 +64,16 @@ type User struct {
 	UpdatedAt                 time.Time
 	Conversations             []Conversation
 	LLMProviderPresets        []LLMProviderPreset
+	RAGProviderPresets        []RAGProviderPreset
+	KnowledgeSpaces           []KnowledgeSpace
+	WorkflowPresets           []WorkflowPreset
 	Attachments               []StoredAttachment
 	AuditLogs                 []AuditLog `gorm:"foreignKey:ActorID"`
 }
 
 type Conversation struct {
 	ID                 uint     `gorm:"primaryKey"`
+	PublicID           string   `gorm:"size:36;not null;uniqueIndex"`
 	UserID             uint     `gorm:"not null;index:idx_conversations_user_view,priority:1"`
 	Title              string   `gorm:"size:255;not null;default:New chat"`
 	IsPinned           bool     `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
@@ -76,9 +85,18 @@ type Conversation struct {
 	Temperature        *float32
 	MaxTokens          *int
 	ContextWindowTurns *int
+	WorkflowPresetID   *uint
+	KnowledgeSpaceIDs  []uint `gorm:"serializer:json;type:text"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time `gorm:"index:idx_conversations_user_view,priority:4"`
 	Messages           []Message
+}
+
+func (c *Conversation) BeforeCreate(_ *gorm.DB) error {
+	if c.PublicID == "" {
+		c.PublicID = uuid.NewString()
+	}
+	return nil
 }
 
 type Message struct {
@@ -90,6 +108,7 @@ type Message struct {
 	Attachments       []Attachment        `gorm:"-" json:"attachments"`
 	AttachmentLinks   []MessageAttachment `gorm:"foreignKey:MessageID;constraint:OnDelete:CASCADE" json:"-"`
 	Status            string              `gorm:"size:32;not null;default:completed"`
+	RunSummary        AgentRunSummary     `gorm:"serializer:json;type:text"`
 	CreatedAt         time.Time
 }
 

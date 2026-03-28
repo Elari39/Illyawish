@@ -36,7 +36,7 @@ export default function App() {
               />
               <Route element={<ProtectedRoute />}>
                 <Route path="/chat" element={<ChatPage />} />
-                <Route path="/chat/:conversationId" element={<ChatPage />} />
+                <Route path="/chat/s/:conversationId" element={<ChatPage />} />
               </Route>
               <Route element={<ProtectedRoute requiredRole="admin" />}>
                 <Route path="/admin" element={<AdminPage />} />

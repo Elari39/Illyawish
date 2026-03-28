@@ -7,7 +7,7 @@ import { EmptyState } from './empty-state'
 import { MessageBubble } from './message-bubble'
 
 interface MessageListProps {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   hasConversationShell: boolean
   hasMoreMessages: boolean
   isLoadingMessages: boolean
@@ -17,8 +17,9 @@ interface MessageListProps {
   isSending: boolean
   editingMessageId: number | null
   conversations: Conversation[]
-  restorableConversationId: number | null
+  restorableConversationId: Conversation['id'] | null
   viewportRef: RefObject<HTMLDivElement | null>
+  onShowToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   onContinueLast: () => void
   onEditMessage: (message: Message) => void
   onLoadMore: () => void
@@ -39,6 +40,7 @@ export function MessageList({
   conversations,
   restorableConversationId,
   viewportRef,
+  onShowToast,
   onContinueLast,
   onEditMessage,
   onLoadMore,
@@ -92,6 +94,7 @@ export function MessageList({
               }
               isEditing={editingMessageId === message.id}
               message={message}
+              onCopySuccessToast={onShowToast}
               onEdit={() => onEditMessage(message)}
               onRegenerate={() => onRegenerateMessage(message)}
               onRetry={() => onRetryMessage(message)}

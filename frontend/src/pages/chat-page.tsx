@@ -17,11 +17,14 @@ import { cn } from '../lib/utils'
 import type { Conversation } from '../types/chat'
 import { ChatComposer } from './chat-page/components/chat-composer'
 import { ChatOverlays } from './chat-page/components/chat-overlays'
+import { ExecutionPanel } from './chat-page/components/execution-panel'
+import { buildExecutionPanelModel } from './chat-page/components/execution-panel-model'
 import { MessageList } from './chat-page/components/message-list'
 import { MobileSidebar } from './chat-page/components/mobile-sidebar'
 import { SidebarContent } from './chat-page/components/sidebar-content'
 import { useChatSession } from './chat-page/hooks/use-chat-session'
 import { useConversationList } from './chat-page/hooks/use-conversation-list'
+import { useAgentWorkspace } from './chat-page/hooks/use-agent-workspace'
 import { useProviderSettings } from './chat-page/hooks/use-provider-settings'
 import { useChatUIState } from './chat-page/hooks/use-chat-ui-state'
 import {
@@ -33,11 +36,9 @@ export function ChatPage() {
   const { locale, t } = useI18n()
   const navigate = useNavigate()
   const params = useParams()
-  const activeConversationId = params.conversationId
-    ? Number(params.conversationId)
-    : null
-  const navigateToConversation = useCallback((conversationId: number, replace = false) => {
-    navigate(`/chat/${conversationId}`, { replace })
+  const activeConversationId = params.conversationId ?? null
+  const navigateToConversation = useCallback((conversationId: Conversation['id'], replace = false) => {
+    navigate(`/chat/s/${conversationId}`, { replace })
   }, [navigate])
   const navigateHome = useCallback((replace = false) => {
     navigate('/chat', { replace })
@@ -80,9 +81,17 @@ export function ChatPage() {
     setChatError,
     showToast: uiState.showToast,
   })
+  const agentWorkspace = useAgentWorkspace({
+    isSettingsOpen: uiState.isSettingsOpen,
+    setChatError,
+  })
   const interactionDisabled = chatSession.isSending
   const displayConversation =
     currentConversation ?? chatSession.pendingConversation
+  const executionPanelModel = buildExecutionPanelModel(
+    chatSession.executionEvents,
+    chatSession.pendingConfirmationId,
+  )
 
   function handleOpenSettings() {
     uiState.setActiveSettingsTab('chat')
@@ -101,7 +110,7 @@ export function ChatPage() {
     navigateHome()
   }
 
-  function handleDeleteConversation(conversationId: number) {
+  function handleDeleteConversation(conversationId: Conversation['id']) {
     if (interactionDisabled) {
       return
     }
@@ -246,6 +255,47 @@ export function ChatPage() {
     })
   }
 
+  async function handleDeleteWorkflowPreset(presetId: number) {
+    const preset = agentWorkspace.workflowPresets.find((entry) => entry.id === presetId)
+    if (!preset) {
+      return false
+    }
+
+    uiState.setConfirmation({
+      title: t('common.delete'),
+      description: t('confirm.deleteWorkflowPreset', { name: preset.name }),
+      confirmLabel: t('common.delete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const deleted = await agentWorkspace.deleteWorkflowPreset(presetId)
+        if (!deleted) {
+          return
+        }
+
+        if (chatSession.workflowPresetIdDraft === presetId) {
+          chatSession.setWorkflowPresetIdDraft(null)
+        }
+
+        if (currentConversation?.workflowPresetId === presetId) {
+          try {
+            const updatedConversation = await chatApi.updateConversation(currentConversation.id, {
+              workflowPresetId: null,
+            })
+            conversationList.syncConversationIntoList(updatedConversation)
+          } catch (error) {
+            setChatError(
+              error instanceof Error
+                ? error.message
+                : t('error.updateWorkflowPresetSelection'),
+            )
+          }
+        }
+      },
+    })
+
+    return false
+  }
+
   async function handleImportConversation(file: File) {
     await chatSession.handleImportConversation(file)
     uiState.setIsSettingsOpen(false)
@@ -388,6 +438,11 @@ export function ChatPage() {
           </div>
         </header>
 
+        <ExecutionPanel
+          model={executionPanelModel}
+          onConfirmToolCall={chatSession.handleConfirmToolCall}
+        />
+
         <MessageList
           activeConversationId={activeConversationId}
           hasMoreMessages={chatSession.hasMoreMessages}
@@ -401,6 +456,7 @@ export function ChatPage() {
           conversations={conversationList.conversations}
           restorableConversationId={conversationList.restorableConversationId}
           viewportRef={chatSession.messageViewportRef}
+          onShowToast={uiState.showToast}
           onContinueLast={() => {
             if (conversationList.restorableConversationId) {
               navigateToConversation(conversationList.restorableConversationId)
@@ -438,6 +494,8 @@ export function ChatPage() {
         confirmation={uiState.confirmation}
         conversationFolder={chatSession.conversationFolderDraft}
         conversationTags={chatSession.conversationTagsDraft}
+        workflowPresetId={chatSession.workflowPresetIdDraft}
+        knowledgeSpaceIds={chatSession.knowledgeSpaceIdsDraft}
         editingProviderId={providerSettings.editingProviderId}
         isLoadingProviders={providerSettings.isLoadingProviders}
         isOpen={uiState.isSettingsOpen}
@@ -449,6 +507,20 @@ export function ChatPage() {
         onExport={chatSession.handleExportConversation}
         onImport={(file) => void handleImportConversation(file)}
         onActivateProvider={providerSettings.handleActivateProvider}
+        onCreateRAGProvider={agentWorkspace.createRAGProvider}
+        onActivateRAGProvider={agentWorkspace.activateRAGProvider}
+        onLoadKnowledgeDocuments={agentWorkspace.loadKnowledgeDocuments}
+        onCreateKnowledgeSpace={agentWorkspace.createKnowledgeSpace}
+        onUpdateKnowledgeSpace={agentWorkspace.updateKnowledgeSpace}
+        onDeleteKnowledgeSpace={agentWorkspace.deleteKnowledgeSpace}
+        onCreateKnowledgeDocument={agentWorkspace.createKnowledgeDocument}
+        onUpdateKnowledgeDocument={agentWorkspace.updateKnowledgeDocument}
+        onDeleteKnowledgeDocument={agentWorkspace.deleteKnowledgeDocument}
+        onUploadKnowledgeDocuments={agentWorkspace.uploadKnowledgeDocuments}
+        onReplaceKnowledgeDocumentFile={agentWorkspace.replaceKnowledgeDocumentFile}
+        onCreateWorkflowPreset={agentWorkspace.createWorkflowPreset}
+        onUpdateWorkflowPreset={agentWorkspace.updateWorkflowPreset}
+        onDeleteWorkflowPreset={handleDeleteWorkflowPreset}
         onCloseConfirmation={() => uiState.setConfirmation(null)}
         onClosePrompt={() => uiState.setPromptState(null)}
         onCloseSettings={() => uiState.setIsSettingsOpen(false)}
@@ -471,11 +543,18 @@ export function ChatPage() {
         promptState={uiState.promptState}
         providerForm={providerSettings.providerForm}
         providerState={providerSettings.providerState}
+        ragProviderState={agentWorkspace.ragProviders}
+        knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+        knowledgeDocuments={agentWorkspace.knowledgeDocuments}
+        workflowTemplates={agentWorkspace.workflowTemplates}
+        workflowPresets={agentWorkspace.workflowPresets}
         transferConversation={displayConversation}
         settings={chatSession.settingsDraft}
         setChatSettings={chatSession.setChatSettingsDraft}
         setConversationFolder={chatSession.setConversationFolderDraft}
         setConversationTags={chatSession.setConversationTagsDraft}
+        setWorkflowPresetId={chatSession.setWorkflowPresetIdDraft}
+        setKnowledgeSpaceIds={chatSession.setKnowledgeSpaceIdsDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}
       />

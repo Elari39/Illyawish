@@ -1,10 +1,28 @@
-import { render, screen } from '@testing-library/react'
-import { vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import { TestProviders } from '../../../test/test-providers'
 import { MessageBubble } from './message-bubble'
 
 describe('MessageBubble', () => {
+  const writeText = vi.fn<(_: string) => Promise<void>>()
+  const showToast = vi.fn()
+
+  beforeEach(() => {
+    writeText.mockReset()
+    showToast.mockReset()
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('renders mixed user attachments as image previews and file links', () => {
     render(
       <TestProviders>
@@ -15,7 +33,7 @@ describe('MessageBubble', () => {
           isEditing={false}
           message={{
             id: 1,
-            conversationId: 1,
+            conversationId: '1',
             role: 'user',
             content: 'Please review the file.',
             attachments: [
@@ -38,6 +56,7 @@ describe('MessageBubble', () => {
             createdAt: '2026-03-26T00:00:00Z',
           }}
           onEdit={vi.fn()}
+          onCopySuccessToast={showToast}
           onRegenerate={vi.fn()}
           onRetry={vi.fn()}
         />
@@ -50,7 +69,60 @@ describe('MessageBubble', () => {
     expect(screen.getByText('application/pdf · 2 KB')).toBeInTheDocument()
   })
 
-  it('shows regenerate for completed assistant replies and retry for stopped replies', () => {
+  it('copies only the user message content and shows copied feedback', async () => {
+    vi.useFakeTimers()
+    writeText.mockResolvedValue(undefined)
+
+    render(
+      <TestProviders>
+        <MessageBubble
+          canEdit
+          canRegenerate={false}
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 11,
+            conversationId: '1',
+            role: 'user',
+            content: 'Please review the file.',
+            attachments: [
+              {
+                id: 'image-1',
+                name: 'diagram.png',
+                mimeType: 'image/png',
+                size: 512,
+                url: '/api/attachments/image-1/file',
+              },
+            ],
+            status: 'completed',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onEdit={vi.fn()}
+          onCopySuccessToast={showToast}
+          onRegenerate={vi.fn()}
+          onRetry={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith('Please review the file.')
+    expect(showToast).toHaveBeenCalledWith('Copied', 'success')
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
+
+    await act(async () => {
+      vi.advanceTimersByTime(1200)
+    })
+
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+  })
+
+  it('shows copy with regenerate for completed assistant replies and copy with retry for stopped replies', () => {
     const regenerateSpy = vi.fn()
     const retrySpy = vi.fn()
 
@@ -63,7 +135,7 @@ describe('MessageBubble', () => {
           isEditing={false}
           message={{
             id: 2,
-            conversationId: 1,
+            conversationId: '1',
             role: 'assistant',
             content: 'Completed answer',
             attachments: [],
@@ -71,12 +143,14 @@ describe('MessageBubble', () => {
             createdAt: '2026-03-26T00:00:00Z',
           }}
           onEdit={vi.fn()}
+          onCopySuccessToast={showToast}
           onRegenerate={regenerateSpy}
           onRetry={retrySpy}
         />
       </TestProviders>,
     )
 
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
     screen.getByRole('button', { name: 'Regenerate' }).click()
     expect(regenerateSpy).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
@@ -90,7 +164,7 @@ describe('MessageBubble', () => {
           isEditing={false}
           message={{
             id: 3,
-            conversationId: 1,
+            conversationId: '1',
             role: 'assistant',
             content: 'Stopped answer',
             attachments: [],
@@ -98,12 +172,14 @@ describe('MessageBubble', () => {
             createdAt: '2026-03-26T00:00:00Z',
           }}
           onEdit={vi.fn()}
+          onCopySuccessToast={showToast}
           onRegenerate={regenerateSpy}
           onRetry={retrySpy}
         />
       </TestProviders>,
     )
 
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
     screen.getByRole('button', { name: 'Retry' }).click()
     expect(retrySpy).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()

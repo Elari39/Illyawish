@@ -3,15 +3,17 @@ package chat
 import "backend/internal/models"
 
 type ConversationDTO struct {
-	ID         uint                    `json:"id"`
-	Title      string                  `json:"title"`
-	IsPinned   bool                    `json:"isPinned"`
-	IsArchived bool                    `json:"isArchived"`
-	Folder     string                  `json:"folder"`
-	Tags       []string                `json:"tags"`
-	Settings   ConversationSettingsDTO `json:"settings"`
-	CreatedAt  string                  `json:"createdAt"`
-	UpdatedAt  string                  `json:"updatedAt"`
+	ID                string                  `json:"id"`
+	Title             string                  `json:"title"`
+	IsPinned          bool                    `json:"isPinned"`
+	IsArchived        bool                    `json:"isArchived"`
+	Folder            string                  `json:"folder"`
+	Tags              []string                `json:"tags"`
+	WorkflowPresetID  *uint                   `json:"workflowPresetId,omitempty"`
+	KnowledgeSpaceIDs []uint                  `json:"knowledgeSpaceIds"`
+	Settings          ConversationSettingsDTO `json:"settings"`
+	CreatedAt         string                  `json:"createdAt"`
+	UpdatedAt         string                  `json:"updatedAt"`
 }
 
 type ConversationSettingsDTO struct {
@@ -39,13 +41,14 @@ type AttachmentDTO struct {
 }
 
 type MessageDTO struct {
-	ID             uint            `json:"id"`
-	ConversationID uint            `json:"conversationId"`
-	Role           string          `json:"role"`
-	Content        string          `json:"content"`
-	Attachments    []AttachmentDTO `json:"attachments"`
-	Status         string          `json:"status"`
-	CreatedAt      string          `json:"createdAt"`
+	ID             uint                   `json:"id"`
+	ConversationID string                 `json:"conversationId"`
+	Role           string                 `json:"role"`
+	Content        string                 `json:"content"`
+	Attachments    []AttachmentDTO        `json:"attachments"`
+	Status         string                 `json:"status"`
+	RunSummary     models.AgentRunSummary `json:"runSummary"`
+	CreatedAt      string                 `json:"createdAt"`
 }
 
 type MessagePaginationDTO struct {
@@ -63,12 +66,14 @@ func ToConversationDTO(
 	}
 
 	return ConversationDTO{
-		ID:         conversation.ID,
-		Title:      conversation.Title,
-		IsPinned:   conversation.IsPinned,
-		IsArchived: conversation.IsArchived,
-		Folder:     conversation.Folder,
-		Tags:       tags,
+		ID:                conversation.PublicID,
+		Title:             conversation.Title,
+		IsPinned:          conversation.IsPinned,
+		IsArchived:        conversation.IsArchived,
+		Folder:            conversation.Folder,
+		Tags:              tags,
+		WorkflowPresetID:  conversation.WorkflowPresetID,
+		KnowledgeSpaceIDs: cloneUintSlice(conversation.KnowledgeSpaceIDs),
 		Settings: ConversationSettingsDTO{
 			SystemPrompt:       settings.SystemPrompt,
 			Model:              settings.Model,
@@ -91,7 +96,7 @@ func ToChatSettingsDTO(settings ChatSettings) ChatSettingsDTO {
 	}
 }
 
-func ToMessageDTO(message *models.Message) *MessageDTO {
+func ToMessageDTO(message *models.Message, conversationPublicID string) *MessageDTO {
 	attachments := make([]AttachmentDTO, 0, len(message.Attachments))
 	for _, attachment := range message.Attachments {
 		attachments = append(attachments, AttachmentDTO{
@@ -105,11 +110,12 @@ func ToMessageDTO(message *models.Message) *MessageDTO {
 
 	return &MessageDTO{
 		ID:             message.ID,
-		ConversationID: message.ConversationID,
+		ConversationID: conversationPublicID,
 		Role:           message.Role,
 		Content:        message.Content,
 		Attachments:    attachments,
 		Status:         message.Status,
+		RunSummary:     message.RunSummary,
 		CreatedAt:      message.CreatedAt.Format(timeFormat),
 	}
 }

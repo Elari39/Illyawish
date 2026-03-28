@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"backend/internal/admin"
+	"backend/internal/agent"
 	"backend/internal/attachment"
 	"backend/internal/audit"
 	"backend/internal/auth"
@@ -21,6 +22,8 @@ import (
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
+	"backend/internal/rag"
+	"backend/internal/workflow"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -74,9 +77,30 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	ragProviderService, err := rag.NewProviderService(db, cfg)
+	if err != nil {
+		return nil, err
+	}
+	ragClient := llm.NewRAGClient()
+	knowledgeSpaceService := rag.NewKnowledgeSpaceService(db)
+	knowledgeDocumentService := rag.NewKnowledgeDocumentService(
+		db,
+		knowledgeSpaceService,
+		ragProviderService,
+		rag.NewLLMEmbedder(ragClient),
+	)
+	workflowService := workflow.NewService(db)
+	confirmationManager := agent.NewConfirmationManager()
+	toolExecutor := agent.NewToolExecutor(nil)
+	agentRuntime := agent.NewRuntime(model, knowledgeDocumentService, toolExecutor, confirmationManager)
+	agentHandler := agent.NewHandler(confirmationManager)
+	ragHandler := rag.NewHandler(ragProviderService, knowledgeSpaceService, knowledgeDocumentService, toolExecutor)
+	workflowHandler := workflow.NewHandler(workflowService)
 
 	authHandler := auth.NewHandler(db, auditService)
-	chatService := chat.NewService(db, model, providerService, attachmentService)
+	chatService := chat.NewService(db, model, providerService, attachmentService).
+		WithAgentRuntime(agentRuntime).
+		WithWorkflowPresets(workflowService)
 	chatHandler := chat.NewHandler(chatService)
 	providerHandler := provider.NewHandler(providerService, auditService)
 	attachmentHandler := attachment.NewHandler(attachmentService)
@@ -124,6 +148,31 @@ func New() (*App, error) {
 		api.PATCH("/ai/providers/:id", limitRequestBody(mediumJSONBodyLimit), providerHandler.UpdateProvider)
 		api.POST("/ai/providers/:id/activate", providerHandler.ActivateProvider)
 		api.DELETE("/ai/providers/:id", providerHandler.DeleteProvider)
+
+		api.GET("/rag/providers", ragHandler.ListProviders)
+		api.POST("/rag/providers", limitRequestBody(mediumJSONBodyLimit), ragHandler.CreateProvider)
+		api.PATCH("/rag/providers/:id", limitRequestBody(mediumJSONBodyLimit), ragHandler.UpdateProvider)
+		api.POST("/rag/providers/:id/activate", ragHandler.ActivateProvider)
+		api.DELETE("/rag/providers/:id", ragHandler.DeleteProvider)
+
+		api.GET("/knowledge/spaces", ragHandler.ListKnowledgeSpaces)
+		api.POST("/knowledge/spaces", limitRequestBody(mediumJSONBodyLimit), ragHandler.CreateKnowledgeSpace)
+		api.PATCH("/knowledge/spaces/:spaceId", limitRequestBody(mediumJSONBodyLimit), ragHandler.UpdateKnowledgeSpace)
+		api.DELETE("/knowledge/spaces/:spaceId", ragHandler.DeleteKnowledgeSpace)
+		api.GET("/knowledge/spaces/:spaceId/documents", ragHandler.ListKnowledgeDocuments)
+		api.POST("/knowledge/spaces/:spaceId/documents", limitRequestBody(chatJSONBodyLimit), ragHandler.CreateKnowledgeDocument)
+		api.PATCH("/knowledge/spaces/:spaceId/documents/:documentId", limitRequestBody(chatJSONBodyLimit), ragHandler.UpdateKnowledgeDocument)
+		api.DELETE("/knowledge/spaces/:spaceId/documents/:documentId", ragHandler.DeleteKnowledgeDocument)
+		api.POST("/knowledge/spaces/:spaceId/documents/upload", limitRequestBody(uploadBodyLimit), ragHandler.UploadKnowledgeDocuments)
+		api.POST("/knowledge/spaces/:spaceId/documents/:documentId/replace", limitRequestBody(uploadBodyLimit), ragHandler.ReplaceKnowledgeDocumentFile)
+
+		api.GET("/workflows/templates", workflowHandler.ListBuiltIns)
+		api.GET("/workflows/presets", workflowHandler.ListPresets)
+		api.POST("/workflows/presets", limitRequestBody(mediumJSONBodyLimit), workflowHandler.CreatePreset)
+		api.PATCH("/workflows/presets/:id", limitRequestBody(mediumJSONBodyLimit), workflowHandler.UpdatePreset)
+		api.DELETE("/workflows/presets/:id", workflowHandler.DeletePreset)
+
+		api.POST("/agent/tool-confirmations/:id", limitRequestBody(smallJSONBodyLimit), agentHandler.ConfirmToolCall)
 
 		api.GET("/chat/settings", chatHandler.GetChatSettings)
 		api.PATCH("/chat/settings", limitRequestBody(mediumJSONBodyLimit), chatHandler.UpdateChatSettings)

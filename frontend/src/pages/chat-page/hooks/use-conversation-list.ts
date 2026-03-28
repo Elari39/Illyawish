@@ -26,9 +26,9 @@ import {
 } from './conversation-list-reducer'
 
 interface UseConversationListOptions {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   onError: (message: string) => void
-  navigateToConversation: (conversationId: number, replace?: boolean) => void
+  navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
 }
 
 export function useConversationList({
@@ -47,9 +47,9 @@ export function useConversationList({
     initialConversationListState,
   )
   const stateRef = useRef<ConversationListState>(state)
-  const activeConversationIdRef = useRef<number | null>(activeConversationId)
+  const activeConversationIdRef = useRef<Conversation['id'] | null>(activeConversationId)
   const conversationQueryKeyRef = useRef('')
-  const localOnlyConversationIdsRef = useRef(new Set<number>())
+  const localOnlyConversationIdsRef = useRef(new Set<Conversation['id']>())
   const requestVersionRef = useRef(0)
   const skipAutoResumeRef = useRef(false)
 
@@ -383,7 +383,7 @@ export function useConversationList({
   )
 
   const removeConversationFromList = useCallback(
-    (conversationId: number) => {
+    (conversationId: Conversation['id']) => {
       applyConversationMutation((previous) => {
         const result = applyConversationRemoval(previous, conversationId)
 

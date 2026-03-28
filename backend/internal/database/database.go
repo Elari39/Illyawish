@@ -22,14 +22,23 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 
+	if err := rejectLegacyConversationSchema(db, cfg.SQLitePath); err != nil {
+		return nil, err
+	}
+
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Conversation{},
 		&models.Message{},
 		&models.MessageAttachment{},
 		&models.LLMProviderPreset{},
+		&models.RAGProviderPreset{},
 		&models.StoredAttachment{},
+		&models.KnowledgeSpace{},
+		&models.KnowledgeDocument{},
+		&models.KnowledgeChunk{},
 		&models.AuditLog{},
+		&models.WorkflowPreset{},
 		&models.WorkspacePolicy{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate database: %w", err)
@@ -43,6 +52,25 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func rejectLegacyConversationSchema(db *gorm.DB, sqlitePath string) error {
+	if !db.Migrator().HasTable(&models.Conversation{}) {
+		return nil
+	}
+	if db.Migrator().HasColumn(&models.Conversation{}, "public_id") {
+		return nil
+	}
+
+	absolutePath, err := filepath.Abs(sqlitePath)
+	if err != nil {
+		absolutePath = sqlitePath
+	}
+
+	return fmt.Errorf(
+		"legacy conversations schema detected in %s: conversations.public_id is missing; delete this SQLite file and restart the backend to recreate the database with UUID conversation URLs",
+		absolutePath,
+	)
 }
 
 func migrateUsersAndWorkspacePolicy(db *gorm.DB) error {

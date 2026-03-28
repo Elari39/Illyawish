@@ -11,20 +11,20 @@ import { useChatSettingsState } from './use-chat-settings-state'
 import { useChatTransfer } from './use-chat-transfer'
 
 interface UseChatSessionOptions {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   currentConversation: Conversation | null
   search: string
   showArchived: boolean
   setChatError: (value: string | null) => void
   showToast: (message: string, variant?: ToastVariant) => void
   insertCreatedConversation: (conversation: Conversation) => void
-  removeConversationFromList: (conversationId: number) => void
+  removeConversationFromList: (conversationId: Conversation['id']) => void
   syncConversationIntoList: (
     conversation: Conversation,
     options?: { updateCountsForVisibilityChange?: boolean },
   ) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
-  navigateToConversation: (conversationId: number, replace?: boolean) => void
+  navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
   navigateHome: (replace?: boolean) => void
   setSkipAutoResume: (value: boolean) => void
   t: I18nContextValue['t']
@@ -50,7 +50,7 @@ export function useChatSession({
 }: UseChatSessionOptions) {
   const activeGenerationRef = useRef<ActiveGenerationState | null>(null)
   const nextGenerationIdRef = useRef(0)
-  const activeConversationIdRef = useRef<number | null>(null)
+  const activeConversationIdRef = useRef<Conversation['id'] | null>(null)
 
   const {
     composerFormRef,
@@ -88,11 +88,15 @@ export function useChatSession({
     chatSettingsDraft,
     conversationFolderDraft,
     conversationTagsDraft,
+    workflowPresetIdDraft,
+    knowledgeSpaceIdsDraft,
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
+    setWorkflowPresetIdDraft,
+    setKnowledgeSpaceIdsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -162,6 +166,8 @@ export function useChatSession({
     editingMessageId,
     conversationFolderDraft,
     conversationTagsDraft,
+    workflowPresetIdDraft,
+    knowledgeSpaceIdsDraft,
     settingsDraft,
     setChatError,
     t,
@@ -195,6 +201,8 @@ export function useChatSession({
     chatSettingsDraft,
     conversationFolderDraft,
     conversationTagsDraft,
+    workflowPresetIdDraft,
+    knowledgeSpaceIdsDraft,
     selectedAttachments,
     settingsDraft,
     pendingConversation,
@@ -202,6 +210,8 @@ export function useChatSession({
     isLoadingMessages,
     isSending,
     isImporting: transfer.isImporting,
+    executionEvents: generation.executionEvents,
+    pendingConfirmationId: generation.pendingConfirmationId,
     hasMoreMessages: history.hasMoreMessages,
     nextBeforeMessageId: history.nextBeforeMessageId,
     isLoadingOlderMessages: history.isLoadingOlderMessages,
@@ -213,6 +223,8 @@ export function useChatSession({
     setChatSettingsDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
+    setWorkflowPresetIdDraft,
+    setKnowledgeSpaceIdsDraft,
     setSettingsDraft,
     resetSettingsDraft,
     syncSettingsDraft,
@@ -222,6 +234,7 @@ export function useChatSession({
     handleFilesSelected,
     handleRegenerateAssistant: generation.handleRegenerateAssistant,
     handleRetryAssistant: generation.handleRetryAssistant,
+    handleConfirmToolCall: generation.handleConfirmToolCall,
     handleSaveSettings,
     handleStopGeneration: generation.handleStopGeneration,
     handleSubmit: generation.handleSubmit,

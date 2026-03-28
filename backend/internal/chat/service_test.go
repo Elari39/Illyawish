@@ -8,10 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/agent"
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
+	"backend/internal/workflow"
 
+	"github.com/google/uuid"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -116,6 +119,38 @@ func (f *fakeAttachmentStore) CleanupUnreferenced(attachments []models.Attachmen
 	return nil
 }
 
+type fakeAgentRunner struct {
+	result    *agent.RunResult
+	events    []agent.Event
+	err       error
+	lastInput agent.RunInput
+}
+
+func (f *fakeAgentRunner) Execute(_ context.Context, input agent.RunInput, emit func(agent.Event) error) (*agent.RunResult, error) {
+	f.lastInput = input
+	for _, event := range f.events {
+		if err := emit(event); err != nil {
+			return nil, err
+		}
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.result, nil
+}
+
+type fakeWorkflowPresetResolver struct {
+	preset *models.WorkflowPreset
+	err    error
+}
+
+func (f *fakeWorkflowPresetResolver) GetPreset(_ uint, _ uint) (*models.WorkflowPreset, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.preset, nil
+}
+
 func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 
@@ -153,6 +188,128 @@ func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
 	}
 	if messages[1].Content != "partial" {
 		t.Fatalf("expected partial content to be saved, got %q", messages[1].Content)
+	}
+}
+
+func TestStreamAssistantReplyUsesAgentRuntimeWhenKnowledgeSpacesSelected(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	conversation.KnowledgeSpaceIDs = []uint{9}
+	if err := db.Save(&conversation).Error; err != nil {
+		t.Fatalf("save conversation defaults: %v", err)
+	}
+
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{}).WithAgentRuntime(&fakeAgentRunner{
+		events: []agent.Event{
+			{Type: agent.EventTypeRunStarted},
+			{Type: agent.EventTypeMessageDelta, Content: "agent answer"},
+			{Type: agent.EventTypeRunCompleted},
+		},
+		result: &agent.RunResult{
+			Content: "agent answer",
+			RunSummary: models.AgentRunSummary{
+				WorkflowTemplateKey: "knowledge_qa",
+				KnowledgeSpaceIDs:   []uint{9},
+				Citations: []models.AgentCitation{
+					{DocumentID: 1, DocumentName: "Spec", ChunkID: 7, Snippet: "retrieved"},
+				},
+			},
+		},
+	})
+
+	var seenRunEvent bool
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "what is stored",
+	}, func(event StreamEvent) error {
+		if event.Type == agent.EventTypeRunStarted {
+			seenRunEvent = true
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	if !seenRunEvent {
+		t.Fatal("expected agent runtime events to be forwarded")
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[1].Content != "agent answer" {
+		t.Fatalf("expected agent response to persist, got %q", messages[1].Content)
+	}
+	if len(messages[1].RunSummary.Citations) != 1 {
+		t.Fatalf("expected run summary to persist, got %#v", messages[1].RunSummary)
+	}
+}
+
+func TestStreamAssistantReplyResolvesWorkflowPresetDefaultsForAgentRuntime(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	presetID := uint(11)
+	runner := &fakeAgentRunner{
+		result: &agent.RunResult{
+			Content: "agent answer",
+			RunSummary: models.AgentRunSummary{
+				WorkflowTemplateKey: workflow.TemplateWebpageDigest,
+				WorkflowPresetID:    &presetID,
+				KnowledgeSpaceIDs:   []uint{3, 5},
+			},
+		},
+	}
+
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{}).
+		WithAgentRuntime(runner).
+		WithWorkflowPresets(&fakeWorkflowPresetResolver{
+			preset: &models.WorkflowPreset{
+				ID:                presetID,
+				UserID:            user.ID,
+				Name:              "Digest",
+				TemplateKey:       workflow.TemplateWebpageDigest,
+				DefaultInputs:     map[string]any{"url": "https://default.example"},
+				KnowledgeSpaceIDs: []uint{3, 5},
+			},
+		})
+
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content:          "Summarize this page",
+		WorkflowPresetID: &presetID,
+		WorkflowInputs: map[string]any{
+			"url": "https://override.example",
+		},
+	}, func(StreamEvent) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	if runner.lastInput.WorkflowTemplateKey != workflow.TemplateWebpageDigest {
+		t.Fatalf("expected workflow template key from preset, got %q", runner.lastInput.WorkflowTemplateKey)
+	}
+	if len(runner.lastInput.KnowledgeSpaceIDs) != 2 || runner.lastInput.KnowledgeSpaceIDs[0] != 3 || runner.lastInput.KnowledgeSpaceIDs[1] != 5 {
+		t.Fatalf("expected preset knowledge spaces, got %#v", runner.lastInput.KnowledgeSpaceIDs)
+	}
+	if got := runner.lastInput.WorkflowInputs["url"]; got != "https://override.example" {
+		t.Fatalf("expected workflow input override to win, got %#v", got)
 	}
 }
 
@@ -478,6 +635,54 @@ func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
 	}
 }
 
+func TestCreateConversationGeneratesConversationPublicID(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{})
+	if err != nil {
+		t.Fatalf("CreateConversation() error = %v", err)
+	}
+
+	var publicID string
+	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", createdConversation.ID).Scan(&publicID).Error; err != nil {
+		t.Fatalf("load conversation public id: %v", err)
+	}
+	if publicID == "" {
+		t.Fatal("expected conversation public id to be persisted")
+	}
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid UUID public id, got %q: %v", publicID, err)
+	}
+}
+
+func TestImportConversationGeneratesConversationPublicID(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	importedConversation, err := service.ImportConversation(user.ID, ImportConversationInput{
+		Title: "Imported chat",
+		Messages: []ImportMessageInput{
+			{Role: models.RoleUser, Content: "Hello"},
+			{Role: models.RoleAssistant, Content: "Hi"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportConversation() error = %v", err)
+	}
+
+	var publicID string
+	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", importedConversation.ID).Scan(&publicID).Error; err != nil {
+		t.Fatalf("load imported conversation public id: %v", err)
+	}
+	if publicID == "" {
+		t.Fatal("expected imported conversation public id to be persisted")
+	}
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid UUID public id, got %q: %v", publicID, err)
+	}
+}
+
 func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	db, user, _ := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
@@ -485,10 +690,13 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	temperature := float32(0.6)
 	maxTokens := 1536
 	contextWindowTurns := 8
+	workflowPresetID := uint(11)
 
 	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{
-		Folder: ptrString("  Work  "),
-		Tags:   &[]string{" urgent ", "backend", "URGENT"},
+		Folder:            ptrString("  Work  "),
+		Tags:              &[]string{" urgent ", "backend", "URGENT"},
+		WorkflowPresetID:  &workflowPresetID,
+		KnowledgeSpaceIDs: &[]uint{3, 5},
 		Settings: &ConversationSettings{
 			SystemPrompt:       "  Draft prompt  ",
 			Model:              "  gpt-4.1-mini  ",
@@ -509,6 +717,12 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	}
 	if len(createdConversation.Tags) != 3 || createdConversation.Tags[0] != "urgent" || createdConversation.Tags[1] != "backend" || createdConversation.Tags[2] != "URGENT" {
 		t.Fatalf("expected tags to be sanitized, got %#v", createdConversation.Tags)
+	}
+	if createdConversation.WorkflowPresetID == nil || *createdConversation.WorkflowPresetID != workflowPresetID {
+		t.Fatalf("expected workflow preset id to persist, got %#v", createdConversation.WorkflowPresetID)
+	}
+	if len(createdConversation.KnowledgeSpaceIDs) != 2 || createdConversation.KnowledgeSpaceIDs[0] != 3 || createdConversation.KnowledgeSpaceIDs[1] != 5 {
+		t.Fatalf("expected knowledge space ids to persist, got %#v", createdConversation.KnowledgeSpaceIDs)
 	}
 	if createdConversation.SystemPrompt != "Draft prompt" {
 		t.Fatalf("expected system prompt to be sanitized, got %q", createdConversation.SystemPrompt)

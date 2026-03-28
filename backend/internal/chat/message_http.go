@@ -14,13 +14,7 @@ type regenerateRequest struct {
 
 func (h *Handler) ListMessages(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
-		return
-	}
-
-	conversation, err := h.service.GetConversation(user.ID, conversationID)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
 		handleChatError(c, err)
 		return
@@ -32,7 +26,7 @@ func (h *Handler) ListMessages(c *gin.Context) {
 		return
 	}
 
-	messagePage, err := h.service.ListMessagesPage(user.ID, conversationID, params)
+	messagePage, err := h.service.ListMessagesPage(user.ID, conversation.ID, params)
 	if err != nil {
 		handleChatError(c, err)
 		return
@@ -40,7 +34,7 @@ func (h *Handler) ListMessages(c *gin.Context) {
 
 	messageDTOs := make([]MessageDTO, 0, len(messagePage.Messages))
 	for _, message := range messagePage.Messages {
-		messageDTOs = append(messageDTOs, *ToMessageDTO(&message))
+		messageDTOs = append(messageDTOs, *ToMessageDTO(&message, conversation.PublicID))
 	}
 
 	effectiveSettings, err := h.service.effectiveConversationSettings(user.ID, conversation)
@@ -61,13 +55,13 @@ func (h *Handler) ListMessages(c *gin.Context) {
 
 func (h *Handler) CancelGeneration(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 
-	if err := h.service.CancelGeneration(user.ID, conversationID); err != nil {
+	if err := h.service.CancelGeneration(user.ID, conversation.ID); err != nil {
 		handleChatError(c, err)
 		return
 	}
@@ -77,9 +71,9 @@ func (h *Handler) CancelGeneration(c *gin.Context) {
 
 func (h *Handler) StreamMessage(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 
@@ -93,7 +87,7 @@ func (h *Handler) StreamMessage(c *gin.Context) {
 		return h.service.StreamAssistantReply(
 			c.Request.Context(),
 			user.ID,
-			conversationID,
+			conversation.ID,
 			req,
 			writeEvent,
 		)
@@ -102,9 +96,9 @@ func (h *Handler) StreamMessage(c *gin.Context) {
 
 func (h *Handler) RetryMessage(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 	messageID, err := messageIDParam(c)
@@ -123,7 +117,7 @@ func (h *Handler) RetryMessage(c *gin.Context) {
 		return h.service.RetryAssistantMessage(
 			c.Request.Context(),
 			user.ID,
-			conversationID,
+			conversation.ID,
 			messageID,
 			req.Options,
 			writeEvent,
@@ -133,9 +127,9 @@ func (h *Handler) RetryMessage(c *gin.Context) {
 
 func (h *Handler) RegenerateMessage(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 
@@ -149,7 +143,7 @@ func (h *Handler) RegenerateMessage(c *gin.Context) {
 		return h.service.RegenerateLastAssistantReply(
 			c.Request.Context(),
 			user.ID,
-			conversationID,
+			conversation.ID,
 			req.Options,
 			writeEvent,
 		)
@@ -158,9 +152,9 @@ func (h *Handler) RegenerateMessage(c *gin.Context) {
 
 func (h *Handler) RegenerateMessageByID(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 	messageID, err := messageIDParam(c)
@@ -179,7 +173,7 @@ func (h *Handler) RegenerateMessageByID(c *gin.Context) {
 		return h.service.RegenerateAssistantMessage(
 			c.Request.Context(),
 			user.ID,
-			conversationID,
+			conversation.ID,
 			messageID,
 			req.Options,
 			writeEvent,
@@ -189,9 +183,9 @@ func (h *Handler) RegenerateMessageByID(c *gin.Context) {
 
 func (h *Handler) EditMessage(c *gin.Context) {
 	user := auth.CurrentUser(c)
-	conversationID, err := conversationIDParam(c)
+	conversation, err := h.conversationParam(c, user.ID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		handleChatError(c, err)
 		return
 	}
 	messageID, err := messageIDParam(c)
@@ -210,7 +204,7 @@ func (h *Handler) EditMessage(c *gin.Context) {
 		return h.service.EditUserMessageAndRegenerate(
 			c.Request.Context(),
 			user.ID,
-			conversationID,
+			conversation.ID,
 			messageID,
 			req,
 			writeEvent,

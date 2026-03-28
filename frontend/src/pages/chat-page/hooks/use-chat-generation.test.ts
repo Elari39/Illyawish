@@ -38,11 +38,11 @@ const draftSettings: ConversationSettings = {
 }
 
 function createConversation(
-  id: number,
+  id: number | string,
   overrides: Partial<Conversation> = {},
 ): Conversation {
   return {
-    id,
+    id: String(id) as Conversation['id'],
     title: `Conversation ${id}`,
     isPinned: false,
     isArchived: false,
@@ -62,7 +62,7 @@ function createMessage(
 ): Message {
   return {
     id,
-    conversationId: 7,
+    conversationId: '7',
     role,
     content: `${role}-${status}`,
     attachments: [],
@@ -106,6 +106,7 @@ function createOptions(
 
 describe('useChatGeneration saved settings behavior', () => {
   beforeEach(() => {
+    window.sessionStorage.clear()
     for (const mockFn of Object.values(chatApiMock)) {
       mockFn.mockReset()
     }
@@ -135,7 +136,7 @@ describe('useChatGeneration saved settings behavior', () => {
     })
 
     expect(chatApiMock.retryMessage).toHaveBeenCalledWith(
-      7,
+      '7',
       31,
       savedSettings,
       expect.any(Function),
@@ -153,7 +154,7 @@ describe('useChatGeneration saved settings behavior', () => {
     })
 
     expect(chatApiMock.regenerateMessage).toHaveBeenCalledWith(
-      7,
+      '7',
       41,
       savedSettings,
       expect.any(Function),
@@ -175,7 +176,7 @@ describe('useChatGeneration saved settings behavior', () => {
     })
 
     expect(chatApiMock.editMessage).toHaveBeenCalledWith(
-      7,
+      '7',
       51,
       expect.objectContaining({
         content: 'Edited content',
@@ -212,6 +213,8 @@ describe('useChatGeneration saved settings behavior', () => {
     })
 
     expect(chatApiMock.createConversation).toHaveBeenCalledWith({
+      workflowPresetId: null,
+      knowledgeSpaceIds: [],
       settings: {
         ...draftSettings,
         model: '',
@@ -221,7 +224,7 @@ describe('useChatGeneration saved settings behavior', () => {
       },
     })
     expect(chatApiMock.streamMessage).toHaveBeenCalledWith(
-      21,
+      '21',
       expect.objectContaining({
         content: 'First message',
         options: createdConversation.settings,
@@ -232,11 +235,11 @@ describe('useChatGeneration saved settings behavior', () => {
   })
 
   it('ignores stream events after the user switches to another conversation', async () => {
-    const activeConversationIdRef = { current: 7 }
+    const activeConversationIdRef = { current: '7' }
     const setMessages = vi.fn()
     const initialOptions = createOptions({
       composerValue: 'First message',
-      activeConversationId: 7,
+      activeConversationId: '7',
       currentConversation: createConversation(7),
       activeConversationIdRef,
       setMessages,
@@ -259,10 +262,10 @@ describe('useChatGeneration saved settings behavior', () => {
     expect(onEvent).toBeTypeOf('function')
 
     setMessages.mockClear()
-    activeConversationIdRef.current = 9
+    activeConversationIdRef.current = '9'
     rerender(createOptions({
       composerValue: 'First message',
-      activeConversationId: 9,
+      activeConversationId: '9',
       currentConversation: createConversation(9),
       activeConversationIdRef,
       setMessages,
@@ -277,11 +280,166 @@ describe('useChatGeneration saved settings behavior', () => {
 
     expect(setMessages).not.toHaveBeenCalled()
   })
+
+  it('persists execution events into sessionStorage as stream events arrive', async () => {
+    chatApiMock.streamMessage.mockImplementation(
+      async (
+        _conversationId: string,
+        _payload: unknown,
+        onEvent: (event: MessageStreamEvent) => Promise<void>,
+      ) => {
+        await onEvent({
+          type: 'run_started',
+          metadata: {
+            templateKey: 'knowledge_qa',
+          },
+        })
+        await onEvent({
+          type: 'retrieval_completed',
+          stepName: 'retrieve_knowledge',
+          citations: [
+            {
+              documentId: 1,
+              documentName: 'OpenAI.md',
+              chunkId: 1,
+              snippet: 'snippet',
+              sourceUri: '',
+            },
+          ],
+          metadata: {
+            resultCount: 1,
+            knowledgeSpaceCount: 1,
+          },
+        })
+        await onEvent({
+          type: 'done',
+        })
+      },
+    )
+
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'Persist this run',
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    expect(window.sessionStorage.getItem('aichat:execution-panel:7')).toBeTruthy()
+    expect(JSON.parse(window.sessionStorage.getItem('aichat:execution-panel:7') ?? 'null')).toMatchObject({
+      pendingConfirmationId: null,
+      events: [
+        {
+          type: 'run_started',
+        },
+        {
+          type: 'retrieval_completed',
+          stepName: 'retrieve_knowledge',
+        },
+        {
+          type: 'done',
+        },
+      ],
+    })
+  })
+
+  it('restores persisted execution state when the same conversation hook remounts', async () => {
+    window.sessionStorage.setItem(
+      'aichat:execution-panel:7',
+      JSON.stringify({
+        pendingConfirmationId: 'confirm-1',
+        events: [
+          {
+            type: 'run_started',
+            metadata: {
+              templateKey: 'knowledge_qa',
+            },
+          },
+          {
+            type: 'tool_call_confirmation_required',
+            toolName: 'http_request',
+            confirmationId: 'confirm-1',
+          },
+        ],
+      }),
+    )
+
+    const { result } = renderHook(() => useChatGeneration(createOptions()))
+
+    expect(result.current.executionEvents).toMatchObject([
+      {
+        type: 'run_started',
+      },
+      {
+        type: 'tool_call_confirmation_required',
+        confirmationId: 'confirm-1',
+      },
+    ])
+    expect(result.current.pendingConfirmationId).toBe('confirm-1')
+  })
+
+  it('clears restored execution state when switching to a conversation without cache', async () => {
+    window.sessionStorage.setItem(
+      'aichat:execution-panel:7',
+      JSON.stringify({
+        pendingConfirmationId: null,
+        events: [
+          {
+            type: 'run_started',
+            metadata: {
+              templateKey: 'knowledge_qa',
+            },
+          },
+        ],
+      }),
+    )
+
+    const { result, rerender } = renderHook(
+      (options: ReturnType<typeof createOptions>) => useChatGeneration(options),
+      {
+        initialProps: createOptions(),
+      },
+    )
+
+    expect(result.current.executionEvents).toHaveLength(1)
+
+    await act(async () => {
+      rerender(createOptions({
+        activeConversationId: '9',
+        currentConversation: createConversation(9),
+        activeConversationIdRef: { current: '9' },
+      }))
+    })
+
+    expect(result.current.executionEvents).toHaveLength(0)
+    expect(result.current.pendingConfirmationId).toBeNull()
+  })
 })
 
 type MessageStreamEvent = {
-  type: 'message_start' | 'delta' | 'done' | 'cancelled' | 'error'
+  type:
+    | 'message_start'
+    | 'delta'
+    | 'done'
+    | 'cancelled'
+    | 'error'
+    | 'run_started'
+    | 'retrieval_completed'
+    | 'tool_call_confirmation_required'
   content?: string
   message?: Message
   error?: string
+  stepName?: string
+  toolName?: string
+  confirmationId?: string
+  metadata?: Record<string, unknown>
+  citations?: Array<{
+    documentId: number
+    documentName: string
+    chunkId: number
+    snippet: string
+    sourceUri: string
+  }>
 }

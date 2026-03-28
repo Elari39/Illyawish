@@ -98,7 +98,19 @@ func (s *Service) StreamAssistantReply(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, &assistantMessage, resolvedProvider.Config, history, settings, emit)
+	if s.shouldUseAgentRuntime(conversation, normalizedInput) {
+		return s.streamAgentIntoAssistantMessage(ctx, conversation, &assistantMessage, resolvedProvider.Config, normalizedInput, emit)
+	}
+
+	return s.streamIntoAssistantMessage(
+		ctx,
+		&assistantMessage,
+		conversation.PublicID,
+		resolvedProvider.Config,
+		history,
+		settings,
+		emit,
+	)
 }
 
 func (s *Service) RetryAssistantMessage(
@@ -152,7 +164,15 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, assistantMessage, resolvedProvider.Config, history, settings, emit)
+	return s.streamIntoAssistantMessage(
+		ctx,
+		assistantMessage,
+		conversation.PublicID,
+		resolvedProvider.Config,
+		history,
+		settings,
+		emit,
+	)
 }
 
 func (s *Service) RegenerateAssistantMessage(
@@ -205,7 +225,15 @@ func (s *Service) RegenerateAssistantMessage(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, assistantMessage, resolvedProvider.Config, history, settings, emit)
+	return s.streamIntoAssistantMessage(
+		ctx,
+		assistantMessage,
+		conversation.PublicID,
+		resolvedProvider.Config,
+		history,
+		settings,
+		emit,
+	)
 }
 
 func (s *Service) RegenerateLastAssistantReply(
@@ -347,5 +375,13 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(ctx, &assistantMessage, resolvedProvider.Config, history, settings, emit)
+	return s.streamIntoAssistantMessage(
+		ctx,
+		&assistantMessage,
+		conversation.PublicID,
+		resolvedProvider.Config,
+		history,
+		settings,
+		emit,
+	)
 }

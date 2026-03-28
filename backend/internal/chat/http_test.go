@@ -14,6 +14,7 @@ import (
 	"backend/internal/provider"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func TestListConversationsRejectsInvalidArchivedQuery(t *testing.T) {
@@ -54,14 +55,34 @@ func TestListMessagesReturnsNotFoundForMissingConversation(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/conversations/999/messages", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "999"}}
+	missingConversationID := uuid.NewString()
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/conversations/%s/messages", missingConversationID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: missingConversationID}}
 	ctx.Set("current_user", &user)
 
 	NewHandler(service).ListMessages(ctx)
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, recorder.Code)
+	}
+}
+
+func TestListMessagesRejectsInvalidConversationPublicID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/conversations/not-a-uuid/messages", nil)
+	ctx.Params = gin.Params{{Key: "id", Value: "not-a-uuid"}}
+	ctx.Set("current_user", &models.User{ID: 1})
+
+	NewHandler(nil).ListMessages(ctx)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "invalid conversation id") {
+		t.Fatalf("expected invalid conversation id error, got %s", recorder.Body.String())
 	}
 }
 
@@ -91,8 +112,12 @@ func TestListMessagesReturnsPaginationMetadata(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/conversations/%d/messages?limit=2", conversation.ID), nil)
-	ctx.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", conversation.ID)}}
+	var conversationPublicID string
+	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", conversation.ID).Scan(&conversationPublicID).Error; err != nil {
+		t.Fatalf("load conversation public id: %v", err)
+	}
+	ctx.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/conversations/%s/messages?limit=2", conversationPublicID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: conversationPublicID}}
 	ctx.Set("current_user", &user)
 
 	NewHandler(service).ListMessages(ctx)
@@ -112,6 +137,29 @@ func TestListMessagesReturnsPaginationMetadata(t *testing.T) {
 	}
 	if !strings.Contains(body, "\"tags\":[]") {
 		t.Fatalf("expected empty tags array in conversation response, got %s", body)
+	}
+
+	var response struct {
+		Conversation struct {
+			ID string `json:"id"`
+		} `json:"conversation"`
+		Messages []struct {
+			ConversationID string `json:"conversationId"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if response.Conversation.ID == "" {
+		t.Fatal("expected conversation id to be a UUID string")
+	}
+	if response.Conversation.ID != conversationPublicID {
+		t.Fatalf("expected conversation id %q, got %q", conversationPublicID, response.Conversation.ID)
+	}
+	for _, message := range response.Messages {
+		if message.ConversationID != conversationPublicID {
+			t.Fatalf("expected message conversation id %q, got %q", conversationPublicID, message.ConversationID)
+		}
 	}
 }
 
@@ -168,8 +216,12 @@ func TestCancelGenerationReturnsOKWithoutActiveStream(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations/1/cancel", nil)
-	ctx.Params = gin.Params{{Key: "id", Value: "1"}}
+	var conversationPublicID string
+	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", conversation.ID).Scan(&conversationPublicID).Error; err != nil {
+		t.Fatalf("load conversation public id: %v", err)
+	}
+	ctx.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/conversations/%s/cancel", conversationPublicID), nil)
+	ctx.Params = gin.Params{{Key: "id", Value: conversationPublicID}}
 	ctx.Set("current_user", &models.User{ID: user.ID})
 
 	NewHandler(service).CancelGeneration(ctx)
@@ -197,9 +249,13 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 			Type: "message_start",
 			Message: &MessageDTO{
 				ID:             1,
-				ConversationID: 2,
+				ConversationID: uuid.NewString(),
 				Role:           models.RoleAssistant,
 				Status:         models.MessageStatusStreaming,
+			},
+			Metadata: map[string]any{
+				"templateKey": "knowledge_qa",
+				"stepIndex":   1,
 			},
 		}); err != nil {
 			return err
@@ -224,6 +280,9 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 	body := recorder.Body.String()
 	if !strings.Contains(body, "event: message_start") {
 		t.Fatalf("expected message_start event, got %s", body)
+	}
+	if !strings.Contains(body, `"metadata":{"stepIndex":1,"templateKey":"knowledge_qa"}`) {
+		t.Fatalf("expected metadata in SSE event payload, got %s", body)
 	}
 	if !strings.Contains(body, "event: error") {
 		t.Fatalf("expected error event, got %s", body)
@@ -356,6 +415,8 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	payload := bytes.NewReader([]byte(`{
 		"folder":"Work",
 		"tags":["urgent","backend"],
+		"workflowPresetId":11,
+		"knowledgeSpaceIds":[3,5],
 		"settings":{
 			"systemPrompt":"Draft prompt",
 			"model":"gpt-4.1-mini",
@@ -383,6 +444,12 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	if !strings.Contains(body, `"tags":["urgent","backend"]`) {
 		t.Fatalf("expected tags in response, got %s", body)
 	}
+	if !strings.Contains(body, `"workflowPresetId":11`) {
+		t.Fatalf("expected workflow preset id in response, got %s", body)
+	}
+	if !strings.Contains(body, `"knowledgeSpaceIds":[3,5]`) {
+		t.Fatalf("expected knowledge space ids in response, got %s", body)
+	}
 	if !strings.Contains(body, `"systemPrompt":"Draft prompt"`) {
 		t.Fatalf("expected system prompt in response, got %s", body)
 	}
@@ -394,16 +461,29 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 func TestRegenerateMessageByIDRejectsInvalidMessageID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(
+		db,
+		&fakeChatModel{},
+		&fakeProviderResolver{},
+		&fakeAttachmentStore{},
+	)
+
+	var conversationPublicID string
+	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", conversation.ID).Scan(&conversationPublicID).Error; err != nil {
+		t.Fatalf("load conversation public id: %v", err)
+	}
+
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/conversations/1/messages/bad/regenerate", nil)
+	ctx.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/conversations/%s/messages/bad/regenerate", conversationPublicID), nil)
 	ctx.Params = gin.Params{
-		{Key: "id", Value: "1"},
+		{Key: "id", Value: conversationPublicID},
 		{Key: "messageId", Value: "bad"},
 	}
-	ctx.Set("current_user", &models.User{ID: 1})
+	ctx.Set("current_user", &models.User{ID: user.ID})
 
-	NewHandler(nil).RegenerateMessageByID(ctx)
+	NewHandler(service).RegenerateMessageByID(ctx)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, recorder.Code)

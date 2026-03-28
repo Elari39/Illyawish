@@ -50,13 +50,15 @@ const authValue: AuthContextValue = {
   refreshUser: vi.fn(),
 }
 
+const clipboardWriteText = vi.fn<(_: string) => Promise<void>>()
+
 function createConversation(
-  id: number,
+  id: number | string,
   title: string,
   overrides: Partial<Conversation> = {},
 ): Conversation {
   return {
-    id,
+    id: String(id) as Conversation['id'],
     title,
     isPinned: false,
     isArchived: false,
@@ -71,14 +73,14 @@ function createConversation(
 
 function createMessage(
   id: number,
-  conversationId: number,
+  conversationId: number | string,
   role: Message['role'],
   content: string,
   overrides: Partial<Message> = {},
 ): Message {
   return {
     id,
-    conversationId,
+    conversationId: String(conversationId) as Message['conversationId'],
     role,
     content,
     attachments: [],
@@ -86,6 +88,10 @@ function createMessage(
     createdAt: '2026-03-26T09:08:00Z',
     ...overrides,
   }
+}
+
+function chatPath(id: number | string) {
+  return `/chat/s/${id}`
 }
 
 function LocationProbe() {
@@ -110,7 +116,7 @@ function renderChatPage(initialEntries: string[]) {
         <I18nProvider>
           <Routes>
             <Route path="/chat" element={<RouteShell />} />
-            <Route path="/chat/:conversationId" element={<RouteShell />} />
+            <Route path="/chat/s/:conversationId" element={<RouteShell />} />
           </Routes>
         </I18nProvider>
       </MemoryRouter>
@@ -126,6 +132,14 @@ describe('ChatPage conversation navigation', () => {
       configurable: true,
       value: vi.fn(),
     })
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: clipboardWriteText,
+      },
+    })
+    clipboardWriteText.mockReset()
+    clipboardWriteText.mockResolvedValue(undefined)
     vi.spyOn(chatApi, 'getChatSettings').mockResolvedValue({
       ...createChatSettings(),
     })
@@ -159,7 +173,7 @@ describe('ChatPage conversation navigation', () => {
     renderChatPage(['/chat'])
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/chat/7')
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(7))
     })
 
     await waitFor(() => {
@@ -167,7 +181,7 @@ describe('ChatPage conversation navigation', () => {
     })
 
     expect(getConversationMessagesMock).toHaveBeenCalledTimes(1)
-    expect(getConversationMessagesMock).toHaveBeenCalledWith(7)
+    expect(getConversationMessagesMock).toHaveBeenCalledWith('7')
     expect(screen.queryByText('Loading conversation...')).not.toBeInTheDocument()
   })
 
@@ -185,19 +199,19 @@ describe('ChatPage conversation navigation', () => {
       })
     const getConversationMessagesMock = vi
       .spyOn(chatApi, 'getConversationMessages')
-      .mockImplementation(async (conversationId: number) => ({
-        conversation: conversationId === 1 ? firstConversation : secondConversation,
+      .mockImplementation(async (conversationId) => ({
+        conversation: conversationId === '1' ? firstConversation : secondConversation,
         messages: [
           createMessage(
-            conversationId * 10,
+            Number(conversationId) * 10,
             conversationId,
             'assistant',
-            conversationId === 1 ? 'Loaded first conversation' : 'Loaded second conversation',
+            conversationId === '1' ? 'Loaded first conversation' : 'Loaded second conversation',
           ),
         ],
       }))
 
-    renderChatPage(['/chat/1'])
+    renderChatPage([chatPath(1)])
 
     await waitFor(() => {
       expect(screen.getByText('Loaded first conversation')).toBeInTheDocument()
@@ -207,7 +221,7 @@ describe('ChatPage conversation navigation', () => {
     fireEvent.click(historyButtons[historyButtons.length - 1]!)
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/chat/2')
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(2))
     })
 
     await waitFor(() => {
@@ -216,7 +230,7 @@ describe('ChatPage conversation navigation', () => {
 
     expect(listConversationsPageMock).toHaveBeenCalledTimes(1)
     expect(
-      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === 2),
+      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '2'),
     ).toHaveLength(1)
   })
 
@@ -234,14 +248,14 @@ describe('ChatPage conversation navigation', () => {
     })
     const getConversationMessagesMock = vi
       .spyOn(chatApi, 'getConversationMessages')
-      .mockImplementation(async (conversationId: number) => ({
-        conversation: conversationId === 1 ? firstConversation : secondConversation,
+      .mockImplementation(async (conversationId) => ({
+        conversation: conversationId === '1' ? firstConversation : secondConversation,
         messages: [
           createMessage(
-            conversationId * 10,
+            Number(conversationId) * 10,
             conversationId,
             'assistant',
-            conversationId === 1 ? 'Loaded first conversation' : 'Loaded second conversation',
+            conversationId === '1' ? 'Loaded first conversation' : 'Loaded second conversation',
           ),
         ],
       }))
@@ -252,7 +266,7 @@ describe('ChatPage conversation navigation', () => {
         }),
     )
 
-    renderChatPage(['/chat/1'])
+    renderChatPage([chatPath(1)])
 
     await waitFor(() => {
       expect(screen.getByText('Loaded first conversation')).toBeInTheDocument()
@@ -275,9 +289,9 @@ describe('ChatPage conversation navigation', () => {
     const historyButtons = await screen.findAllByRole('button', { name: 'Second chat' })
     fireEvent.click(historyButtons[historyButtons.length - 1]!)
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/chat/1')
+    expect(screen.getByTestId('location')).toHaveTextContent(chatPath(1))
     expect(
-      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === 2),
+      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '2'),
     ).toHaveLength(0)
 
     await act(async () => {
@@ -333,7 +347,7 @@ describe('ChatPage conversation navigation', () => {
     fireEvent.submit(form)
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/chat/5')
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(5))
     })
 
     await waitFor(() => {
@@ -342,6 +356,8 @@ describe('ChatPage conversation navigation', () => {
 
     expect(createConversationMock).toHaveBeenCalledTimes(1)
     expect(createConversationMock).toHaveBeenCalledWith({
+      workflowPresetId: null,
+      knowledgeSpaceIds: [],
       settings: {
         ...defaultSettings,
         model: '',
@@ -352,7 +368,7 @@ describe('ChatPage conversation navigation', () => {
     })
     expect(streamMessageMock).toHaveBeenCalledTimes(1)
     expect(
-      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === 5),
+      getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '5'),
     ).toHaveLength(2)
   })
 
@@ -400,10 +416,10 @@ describe('ChatPage conversation navigation', () => {
       expect(createConversationMock).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
-      expect(getConversationMessagesMock).toHaveBeenCalledWith(5)
+      expect(getConversationMessagesMock).toHaveBeenCalledWith('5')
     })
     await waitFor(() => {
-      expect(deleteConversationMock).toHaveBeenCalledWith(5)
+      expect(deleteConversationMock).toHaveBeenCalledWith('5')
     })
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent('/chat')
@@ -457,10 +473,10 @@ describe('ChatPage conversation navigation', () => {
       expect(createConversationMock).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
-      expect(getConversationMessagesMock).toHaveBeenCalledWith(5)
+      expect(getConversationMessagesMock).toHaveBeenCalledWith('5')
     })
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent('/chat/5')
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(5))
     })
     expect(deleteConversationMock).not.toHaveBeenCalled()
   })
@@ -490,7 +506,7 @@ describe('ChatPage conversation navigation', () => {
       messages: [createMessage(91, 9, 'assistant', 'Visible message')],
     })
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Visible message')).toBeInTheDocument()
@@ -528,7 +544,7 @@ describe('ChatPage conversation navigation', () => {
           JSON.stringify({
             conversations: [
               {
-                id: 9,
+                id: '9',
                 title: 'Legacy settings',
                 isPinned: false,
                 isArchived: false,
@@ -554,7 +570,7 @@ describe('ChatPage conversation navigation', () => {
         return new Response(
           JSON.stringify({
             conversation: {
-              id: 9,
+              id: '9',
               title: 'Legacy settings',
               isPinned: false,
               isArchived: false,
@@ -597,7 +613,7 @@ describe('ChatPage conversation navigation', () => {
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, unauthorizedListener)
     vi.stubGlobal('fetch', fetchMock)
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Legacy reply')).toBeInTheDocument()
@@ -628,7 +644,7 @@ describe('ChatPage conversation navigation', () => {
       ],
     })
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Reply two')).toBeInTheDocument()
@@ -637,6 +653,38 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Regenerate' })).toHaveLength(2)
+  })
+
+  it('copies message content from the conversation view', async () => {
+    const conversation = createConversation(9, 'Copy controls')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [
+        createMessage(91, 9, 'user', 'Question to copy'),
+        createMessage(92, 9, 'assistant', 'Reply to copy'),
+      ],
+    })
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Reply to copy')).toBeInTheDocument()
+    })
+
+    const copyButtons = screen.getAllByRole('button', { name: 'Copy' })
+    expect(copyButtons).toHaveLength(2)
+
+    fireEvent.click(copyButtons[1]!)
+
+    await waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalledWith('Reply to copy')
+    })
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
   it('loads older messages on demand from the pagination cursor', async () => {
@@ -657,7 +705,7 @@ describe('ChatPage conversation navigation', () => {
 
     const getConversationMessagesMock = vi
       .spyOn(chatApi, 'getConversationMessages')
-      .mockImplementation(async (_conversationId: number, params?: { beforeId?: number; limit?: number }) => {
+      .mockImplementation(async (_conversationId, params?: { beforeId?: number; limit?: number }) => {
         if (params?.beforeId === 93) {
           return {
             conversation,
@@ -679,7 +727,7 @@ describe('ChatPage conversation navigation', () => {
         }
       })
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Fourth message')).toBeInTheDocument()
@@ -691,8 +739,8 @@ describe('ChatPage conversation navigation', () => {
       expect(screen.getByText('First message')).toBeInTheDocument()
     })
 
-    expect(getConversationMessagesMock).toHaveBeenCalledWith(9)
-    expect(getConversationMessagesMock).toHaveBeenCalledWith(9, {
+    expect(getConversationMessagesMock).toHaveBeenCalledWith('9')
+    expect(getConversationMessagesMock).toHaveBeenCalledWith('9', {
       beforeId: 93,
       limit: 50,
     })
@@ -746,8 +794,8 @@ describe('ChatPage conversation navigation', () => {
     })
 
     let firstConversationStopped = false
-    vi.spyOn(chatApi, 'getConversationMessages').mockImplementation(async (conversationId: number) => {
-      if (conversationId === 1) {
+    vi.spyOn(chatApi, 'getConversationMessages').mockImplementation(async (conversationId) => {
+      if (conversationId === '1') {
         return {
           conversation: firstConversation,
           messages: firstConversationStopped ? stoppedMessages : firstMessages,
@@ -770,12 +818,12 @@ describe('ChatPage conversation navigation', () => {
 
     const cancelGenerationMock = vi
       .spyOn(chatApi, 'cancelGeneration')
-      .mockImplementation(async (conversationId: number) => {
+      .mockImplementation(async (conversationId) => {
         firstConversationStopped = true
-        expect(conversationId).toBe(1)
+        expect(conversationId).toBe('1')
       })
 
-    renderChatPage(['/chat/1'])
+    renderChatPage([chatPath(1)])
 
     await waitFor(() => {
       expect(screen.getByText('Earlier answer')).toBeInTheDocument()
@@ -804,13 +852,13 @@ describe('ChatPage conversation navigation', () => {
 
     fireEvent.click(secondConversationButton)
 
-    expect(screen.getByTestId('location')).toHaveTextContent('/chat/1')
+    expect(screen.getByTestId('location')).toHaveTextContent(chatPath(1))
     expect(screen.queryByText('Second conversation')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
 
     await waitFor(() => {
-      expect(cancelGenerationMock).toHaveBeenCalledWith(1)
+      expect(cancelGenerationMock).toHaveBeenCalledWith('1')
     })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
@@ -856,7 +904,7 @@ describe('ChatPage conversation navigation', () => {
         })
       })
 
-    renderChatPage(['/chat/7'])
+    renderChatPage([chatPath(7)])
 
     await waitFor(() => {
       expect(screen.getByText('Second answer')).toBeInTheDocument()
@@ -867,7 +915,7 @@ describe('ChatPage conversation navigation', () => {
 
     await waitFor(() => {
       expect(regenerateMessageMock).toHaveBeenCalledWith(
-        7,
+        '7',
         72,
         expect.anything(),
         expect.any(Function),
@@ -894,7 +942,7 @@ describe('ChatPage conversation navigation', () => {
       messages: [createMessage(11, 1, 'assistant', 'First answer')],
     })
 
-    renderChatPage(['/chat/1'])
+    renderChatPage([chatPath(1)])
 
     await waitFor(() => {
       expect(screen.getByText('First answer')).toBeInTheDocument()
@@ -1046,7 +1094,7 @@ describe('ChatPage conversation navigation', () => {
         settings: payload.settings ?? conversation.settings,
       }))
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Visible message')).toBeInTheDocument()
@@ -1072,11 +1120,13 @@ describe('ChatPage conversation navigation', () => {
       })
     })
     await waitFor(() => {
-      expect(updateConversationMock).toHaveBeenCalledWith(9, {
-        settings: expect.objectContaining({
+      expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
+        settings: {
+          ...defaultSettings,
           systemPrompt: 'Conversation-only prompt',
-        }),
-      })
+          temperature: null,
+        },
+      }))
     })
   })
 
@@ -1111,7 +1161,7 @@ describe('ChatPage conversation navigation', () => {
         settings: payload.settings ?? conversation.settings,
       }))
 
-    renderChatPage(['/chat/9'])
+    renderChatPage([chatPath(9)])
 
     await waitFor(() => {
       expect(screen.getByText('Visible message')).toBeInTheDocument()
@@ -1128,13 +1178,15 @@ describe('ChatPage conversation navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }))
 
     await waitFor(() => {
-      expect(updateConversationMock).toHaveBeenCalledWith(9, {
+      expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
         folder: 'Work',
         tags: ['urgent', 'planning'],
-        settings: expect.objectContaining({
+        settings: {
+          ...defaultSettings,
           systemPrompt: '',
-        }),
-      })
+          temperature: null,
+        },
+      }))
     })
   })
 })

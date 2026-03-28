@@ -1,7 +1,13 @@
-import { useRef, type FormEvent, type MutableRefObject } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MutableRefObject,
+} from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
-import { chatApi } from '../../../lib/api'
+import { agentApi, chatApi } from '../../../lib/api'
 import { ApiError, isAbortError } from '../../../lib/http'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
@@ -19,10 +25,17 @@ import {
 } from '../utils'
 import type { ComposerAttachment } from '../types'
 import { buildConversationMetadataUpdate } from './chat-session-helpers'
+import { defaultAgentRunSummary } from '../types'
+import {
+  clearExecutionPanelState,
+  readExecutionPanelState,
+  writeExecutionPanelState,
+  type StoredExecutionPanelState,
+} from '../execution-panel-storage'
 
 export interface ActiveGenerationState {
   id: number
-  conversationId: number
+  conversationId: Conversation['id']
   placeholderId: number
   messageId: number | null
   controller: AbortController
@@ -31,35 +44,37 @@ export interface ActiveGenerationState {
 }
 
 interface UseChatGenerationOptions {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   currentConversation: Conversation | null
   composerValue: string
   selectedAttachments: ComposerAttachment[]
   editingMessageId: number | null
   conversationFolderDraft: string
   conversationTagsDraft: string
+  workflowPresetIdDraft?: number | null
+  knowledgeSpaceIdsDraft?: number[]
   settingsDraft: ConversationSettings
   setChatError: (value: string | null) => void
   t: I18nContextValue['t']
   insertCreatedConversation: (conversation: Conversation) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
-  navigateToConversation: (conversationId: number, replace?: boolean) => void
+  navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
   setPendingConversation: (conversation: Conversation | null) => void
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setIsSending: (value: boolean) => void
   resetComposer: () => void
-  activeConversationIdRef: MutableRefObject<number | null>
+  activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
   activeGenerationRef: MutableRefObject<ActiveGenerationState | null>
   nextGenerationIdRef: MutableRefObject<number>
   reconcileConversationState: (
-    conversationId: number,
+    conversationId: Conversation['id'],
     options?: { clearErrorOnSuccess?: boolean },
   ) => Promise<unknown>
   waitForConversationToSettle: (
-    conversationId: number,
+    conversationId: Conversation['id'],
     options?: { clearErrorOnSuccess?: boolean },
   ) => Promise<unknown>
-  cleanupEmptyCreatedConversation: (conversationId: number) => Promise<void>
+  cleanupEmptyCreatedConversation: (conversationId: Conversation['id']) => Promise<void>
 }
 
 export function useChatGeneration({
@@ -70,6 +85,8 @@ export function useChatGeneration({
   editingMessageId,
   conversationFolderDraft,
   conversationTagsDraft,
+  workflowPresetIdDraft = null,
+  knowledgeSpaceIdsDraft = [],
   settingsDraft,
   setChatError,
   t,
@@ -89,9 +106,44 @@ export function useChatGeneration({
 }: UseChatGenerationOptions) {
   const tRef = useRef(t)
   tRef.current = t
+  const [executionEvents, setExecutionEvents] = useState<StreamEvent[]>([])
+  const [pendingConfirmationId, setPendingConfirmationId] = useState<string | null>(null)
+  const executionEventsRef = useRef<StreamEvent[]>([])
+  const pendingConfirmationIdRef = useRef<string | null>(null)
+
+  function applyExecutionState(nextState: StoredExecutionPanelState) {
+    executionEventsRef.current = nextState.events
+    pendingConfirmationIdRef.current = nextState.pendingConfirmationId
+    setExecutionEvents(nextState.events)
+    setPendingConfirmationId(nextState.pendingConfirmationId)
+  }
+
+  function persistExecutionState(
+    conversationId: Conversation['id'],
+    nextState: StoredExecutionPanelState,
+  ) {
+    applyExecutionState(nextState)
+    writeExecutionPanelState(conversationId, nextState)
+  }
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      executionEventsRef.current = []
+      pendingConfirmationIdRef.current = null
+      setExecutionEvents([])
+      setPendingConfirmationId(null)
+      return
+    }
+
+    const restoredState = readExecutionPanelState(activeConversationId)
+    executionEventsRef.current = restoredState.events
+    pendingConfirmationIdRef.current = restoredState.pendingConfirmationId
+    setExecutionEvents(restoredState.events)
+    setPendingConfirmationId(restoredState.pendingConfirmationId)
+  }, [activeConversationId])
 
   function beginGeneration(
-    conversationId: number,
+    conversationId: Conversation['id'],
     placeholderId: number,
   ) {
     const generation: ActiveGenerationState = {
@@ -108,6 +160,11 @@ export function useChatGeneration({
     activeGenerationRef.current = generation
     setIsSending(true)
     setChatError(null)
+    clearExecutionPanelState(conversationId)
+    persistExecutionState(conversationId, {
+      events: [],
+      pendingConfirmationId: null,
+    })
     return generation
   }
 
@@ -196,7 +253,7 @@ export function useChatGeneration({
   }
 
   function buildMessageTarget(
-    conversationId: number,
+    conversationId: Conversation['id'],
     placeholderId: number,
   ) {
     const activeGeneration = activeGenerationRef.current
@@ -212,7 +269,7 @@ export function useChatGeneration({
 
   function handleStreamEventForConversation(
     event: StreamEvent,
-    conversationId: number | null,
+    conversationId: Conversation['id'] | null,
     placeholderId: number,
   ) {
     if (!conversationId) {
@@ -242,24 +299,65 @@ export function useChatGeneration({
       return
     }
 
-    if ((event.type === 'done' || event.type === 'cancelled') && eventMessage) {
+    if (event.type === 'message_delta' && typeof event.content === 'string') {
+      const deltaContent = event.content
+      setMessages((previous) =>
+        appendToStreamingMessage(previous, target, deltaContent),
+      )
+      return
+    }
+
+    if (
+      event.type === 'run_started' ||
+      event.type === 'workflow_step_started' ||
+      event.type === 'workflow_step_completed' ||
+      event.type === 'retrieval_started' ||
+      event.type === 'retrieval_completed' ||
+      event.type === 'tool_call_started' ||
+      event.type === 'tool_call_confirmation_required' ||
+      event.type === 'tool_call_completed'
+    ) {
+      const nextState: StoredExecutionPanelState = {
+        events: [...executionEventsRef.current, event],
+        pendingConfirmationId:
+          event.type === 'tool_call_confirmation_required'
+            ? (event.confirmationId ?? null)
+            : event.type === 'tool_call_completed'
+              ? null
+              : pendingConfirmationIdRef.current,
+      }
+      persistExecutionState(conversationId, nextState)
+      return
+    }
+
+    if (event.type === 'done' || event.type === 'cancelled') {
+      persistExecutionState(conversationId, {
+        events: [...executionEventsRef.current, event],
+        pendingConfirmationId: null,
+      })
       if (
         event.type === 'cancelled' &&
         !activeGenerationRef.current?.stopRequested
       ) {
         setChatError(t('error.generationStopped'))
       }
-      setMessages((previous) =>
-        previous.map((message) =>
-          isSameMessage(message, target)
-            ? eventMessage
-            : message,
-        ),
-      )
+      if (eventMessage) {
+        setMessages((previous) =>
+          previous.map((message) =>
+            isSameMessage(message, target)
+              ? eventMessage
+              : message,
+          ),
+        )
+      }
       return
     }
 
     if (event.type === 'error') {
+      persistExecutionState(conversationId, {
+        events: [...executionEventsRef.current, event],
+        pendingConfirmationId: null,
+      })
       setChatError(event.error ?? t('error.streamingFailed'))
       setMessages((previous) =>
         previous.map((message) => {
@@ -290,7 +388,7 @@ export function useChatGeneration({
 
     const optimisticAssistantId = -(Date.now() + 1)
     let conversationId = activeConversationId
-    let createdConversationId: number | null = null
+    let createdConversationId: Conversation['id'] | null = null
     let generation: ActiveGenerationState | null = null
 
     try {
@@ -309,6 +407,8 @@ export function useChatGeneration({
             maxTokens: null,
             contextWindowTurns: null,
           },
+          workflowPresetId: workflowPresetIdDraft,
+          knowledgeSpaceIds: knowledgeSpaceIdsDraft,
         })
         conversation = createdConversation
         conversationId = createdConversation.id
@@ -329,6 +429,7 @@ export function useChatGeneration({
         content,
         attachments,
         status: 'completed',
+        runSummary: defaultAgentRunSummary,
         createdAt: createLocalISOString(),
       }
       const optimisticAssistantMessage: Message = {
@@ -338,6 +439,7 @@ export function useChatGeneration({
         content: '',
         attachments: [],
         status: 'streaming',
+        runSummary: defaultAgentRunSummary,
         createdAt: createLocalISOString(),
       }
 
@@ -354,6 +456,10 @@ export function useChatGeneration({
           content,
           attachments,
           options: conversationSettings,
+          workflowPresetId:
+            conversation?.workflowPresetId ?? workflowPresetIdDraft,
+          knowledgeSpaceIds:
+            conversation?.knowledgeSpaceIds ?? knowledgeSpaceIdsDraft,
         },
         async (eventData) => {
           handleStreamEventForConversation(
@@ -402,7 +508,7 @@ export function useChatGeneration({
   }
 
   async function handleEditSubmit(
-    conversationId: number,
+    conversationId: Conversation['id'],
     messageId: number,
     content: string,
     attachments: Attachment[],
@@ -423,6 +529,7 @@ export function useChatGeneration({
                   content,
                   attachments,
                   status: 'completed' as const,
+                  runSummary: defaultAgentRunSummary,
                 }
               : message,
           )
@@ -434,6 +541,7 @@ export function useChatGeneration({
           content: '',
           attachments: [],
           status: 'streaming',
+          runSummary: defaultAgentRunSummary,
           createdAt: createLocalISOString(),
         })
 
@@ -655,6 +763,21 @@ export function useChatGeneration({
     await activeGeneration.stopPromise
   }
 
+  async function handleConfirmToolCall(approved: boolean) {
+    if (!pendingConfirmationId) {
+      return
+    }
+
+    try {
+      await agentApi.confirmToolCall(pendingConfirmationId, approved)
+      setPendingConfirmationId(null)
+    } catch (error) {
+      setChatError(
+        error instanceof Error ? error.message : t('error.streamingFailed'),
+      )
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -693,5 +816,8 @@ export function useChatGeneration({
     handleRegenerateAssistant,
     handleStopGeneration,
     handleSubmit,
+    executionEvents,
+    pendingConfirmationId,
+    handleConfirmToolCall,
   }
 }

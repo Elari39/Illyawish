@@ -14,12 +14,12 @@ const defaultSettings: ConversationSettings = {
 }
 
 function createConversation(
-  id: number,
+  id: number | string,
   title: string,
   overrides: Partial<Conversation> = {},
 ): Conversation {
   return {
-    id,
+    id: String(id) as Conversation['id'],
     title,
     isPinned: false,
     isArchived: false,
@@ -61,7 +61,7 @@ function renderSidebarContent(variant: 'mobile' | 'desktop' = 'mobile') {
         collapsed={false}
         variant={variant}
         interactionDisabled={false}
-        currentConversationId={1}
+        currentConversationId="1"
         conversations={conversations}
         hasMoreConversations={false}
         searchValue=""
@@ -158,7 +158,7 @@ describe('SidebarContent mobile actions', () => {
         <SidebarContent
           collapsed={false}
           variant="mobile"
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""
@@ -188,7 +188,7 @@ describe('SidebarContent mobile actions', () => {
         <SidebarContent
           collapsed={false}
           variant="mobile"
-          currentConversationId={2}
+          currentConversationId="2"
           conversations={[conversations[1]!]}
           hasMoreConversations={false}
           searchValue=""
@@ -243,7 +243,7 @@ describe('SidebarContent mobile actions', () => {
           collapsed={false}
           variant="mobile"
           interactionDisabled
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""
@@ -412,7 +412,7 @@ describe('SidebarContent desktop actions', () => {
         <SidebarContent
           collapsed={false}
           variant="desktop"
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""
@@ -438,7 +438,7 @@ describe('SidebarContent desktop actions', () => {
         <SidebarContent
           collapsed={false}
           variant="desktop"
-          currentConversationId={2}
+          currentConversationId="2"
           conversations={[conversations[1]!]}
           hasMoreConversations={false}
           searchValue=""
@@ -482,7 +482,7 @@ describe('SidebarContent desktop actions', () => {
         <SidebarContent
           collapsed={false}
           variant="desktop"
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""
@@ -508,7 +508,7 @@ describe('SidebarContent desktop actions', () => {
         <SidebarContent
           collapsed
           variant="desktop"
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""
@@ -532,7 +532,7 @@ describe('SidebarContent desktop actions', () => {
         <SidebarContent
           collapsed
           variant="desktop"
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={[createConversation(1, 'Collapsed chat')]}
           hasMoreConversations={false}
           searchValue=""
@@ -620,7 +620,7 @@ describe('SidebarContent desktop actions', () => {
           collapsed={false}
           variant="desktop"
           interactionDisabled
-          currentConversationId={1}
+          currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
           searchValue=""

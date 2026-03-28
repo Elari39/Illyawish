@@ -17,11 +17,11 @@ export function useSidebarActionMenu({
   interactionDisabled,
   conversations,
 }: UseSidebarActionMenuOptions) {
-  const [expandedConversationId, setExpandedConversationId] = useState<number | null>(null)
+  const [expandedConversationId, setExpandedConversationId] = useState<Conversation['id'] | null>(null)
   const [desktopMenuDirection, setDesktopMenuDirection] = useState<'up' | 'down'>('down')
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const desktopMenuRef = useRef<HTMLDivElement | null>(null)
-  const desktopTriggerRefs = useRef(new Map<number, HTMLButtonElement | null>())
+  const desktopTriggerRefs = useRef(new Map<Conversation['id'], HTMLButtonElement | null>())
   const isMobileVariant = variant === 'mobile' && !collapsed
   const isDesktopVariant = variant === 'desktop' && !collapsed
   const effectiveExpandedConversationId =
@@ -70,7 +70,7 @@ export function useSidebarActionMenu({
     }
   }, [effectiveExpandedConversationId, isDesktopVariant])
 
-  function updateDesktopMenuDirection(conversationId: number) {
+  function updateDesktopMenuDirection(conversationId: Conversation['id']) {
     const scrollContainer = scrollContainerRef.current
     const menu = desktopMenuRef.current
     const trigger = desktopTriggerRefs.current.get(conversationId)
@@ -91,7 +91,7 @@ export function useSidebarActionMenu({
   }
 
   function registerDesktopTrigger(
-    conversationId: number,
+    conversationId: Conversation['id'],
     node: HTMLButtonElement | null,
   ) {
     if (node == null) {
@@ -124,7 +124,7 @@ export function useSidebarActionMenu({
   }
 
   function handleToggleConversationActions(
-    conversationId: number,
+    conversationId: Conversation['id'],
     anchor?: HTMLButtonElement,
   ) {
     if (interactionDisabled) {

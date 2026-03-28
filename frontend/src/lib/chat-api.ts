@@ -100,7 +100,7 @@ export const chatApi = {
     return normalizeConversation(response.conversation)
   },
   async updateConversation(
-    conversationId: number,
+    conversationId: string,
     payload: UpdateConversationPayload,
   ) {
     const response = await apiRequest<{ conversation: Conversation }>(
@@ -113,7 +113,7 @@ export const chatApi = {
     return normalizeConversation(response.conversation)
   },
   async getConversationMessages(
-    conversationId: number,
+    conversationId: string,
     params?: {
       beforeId?: number
       limit?: number
@@ -127,18 +127,18 @@ export const chatApi = {
       conversation: normalizeConversation(response.conversation),
     }
   },
-  async deleteConversation(conversationId: number) {
+  async deleteConversation(conversationId: string) {
     await apiRequest<{ ok: boolean }>(`/api/conversations/${conversationId}`, {
       method: 'DELETE',
     })
   },
-  async cancelGeneration(conversationId: number) {
+  async cancelGeneration(conversationId: string) {
     await apiRequest<{ ok: boolean }>(`/api/conversations/${conversationId}/cancel`, {
       method: 'POST',
     })
   },
   async streamMessage(
-    conversationId: number,
+    conversationId: string,
     payload: SendMessagePayload,
     onEvent: (event: StreamEvent) => void | Promise<void>,
     signal?: AbortSignal,
@@ -152,7 +152,7 @@ export const chatApi = {
     )
   },
   async retryMessage(
-    conversationId: number,
+    conversationId: string,
     messageId: number,
     settings: ConversationSettings | null,
     onEvent: (event: StreamEvent) => void | Promise<void>,
@@ -167,7 +167,7 @@ export const chatApi = {
     )
   },
   async regenerateMessage(
-    conversationId: number,
+    conversationId: string,
     messageId: number,
     settings: ConversationSettings | null,
     onEvent: (event: StreamEvent) => void | Promise<void>,
@@ -182,7 +182,7 @@ export const chatApi = {
     )
   },
   async editMessage(
-    conversationId: number,
+    conversationId: string,
     messageId: number,
     payload: SendMessagePayload,
     onEvent: (event: StreamEvent) => void | Promise<void>,

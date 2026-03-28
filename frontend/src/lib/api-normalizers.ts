@@ -38,9 +38,19 @@ export function normalizeConversationSettings(
 export function normalizeConversation(conversation: Conversation): Conversation {
   return {
     ...conversation,
+    id: String(conversation.id) as Conversation['id'],
     folder: typeof conversation.folder === 'string' ? conversation.folder : '',
     tags: Array.isArray(conversation.tags)
       ? conversation.tags.filter((tag): tag is string => typeof tag === 'string')
+      : [],
+    workflowPresetId:
+      typeof conversation.workflowPresetId === 'number'
+        ? conversation.workflowPresetId
+        : null,
+    knowledgeSpaceIds: Array.isArray(conversation.knowledgeSpaceIds)
+      ? conversation.knowledgeSpaceIds.filter(
+          (id): id is number => typeof id === 'number' && Number.isFinite(id),
+        )
       : [],
     settings: normalizeConversationSettings(conversation.settings),
   }

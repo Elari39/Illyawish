@@ -23,7 +23,7 @@ describe('chat page utils', () => {
       [
         {
           id: 1,
-          conversationId: 1,
+          conversationId: '1',
           role: 'assistant',
           content: 'Hello',
           attachments: [],
@@ -32,7 +32,7 @@ describe('chat page utils', () => {
         },
         {
           id: 2,
-          conversationId: 2,
+          conversationId: '2',
           role: 'assistant',
           content: 'Other',
           attachments: [],
@@ -41,7 +41,7 @@ describe('chat page utils', () => {
         },
       ],
       {
-        conversationId: 1,
+        conversationId: '1',
         placeholderId: 1,
         messageId: null,
       },
@@ -57,7 +57,7 @@ describe('chat page utils', () => {
       [
         {
           id: -1,
-          conversationId: 1,
+          conversationId: '1',
           role: 'assistant',
           content: '',
           attachments: [],
@@ -67,7 +67,7 @@ describe('chat page utils', () => {
       ],
       {
         id: 99,
-        conversationId: 1,
+        conversationId: '1',
         role: 'assistant',
         content: 'Finished',
         attachments: [],
@@ -75,7 +75,7 @@ describe('chat page utils', () => {
         createdAt: '2026-03-26T00:00:01Z',
       },
       {
-        conversationId: 1,
+        conversationId: '1',
         placeholderId: -1,
         messageId: null,
       },
@@ -93,7 +93,7 @@ describe('chat page utils', () => {
   it('exports conversation history as markdown', () => {
     const markdown = buildConversationMarkdown(
       {
-        id: 1,
+        id: '1',
         title: 'Project notes',
         isPinned: false,
         isArchived: false,
@@ -112,7 +112,7 @@ describe('chat page utils', () => {
       [
         {
           id: 1,
-          conversationId: 1,
+          conversationId: '1',
           role: 'user',
           content: 'Summarize this project.',
           attachments: [
@@ -136,7 +136,7 @@ describe('chat page utils', () => {
         },
         {
           id: 2,
-          conversationId: 1,
+          conversationId: '1',
           role: 'assistant',
           content: 'Here is the summary.',
           attachments: [],

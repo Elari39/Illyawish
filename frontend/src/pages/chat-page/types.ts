@@ -1,4 +1,4 @@
-import type { Attachment, ChatSettings, ConversationSettings } from '../../types/chat'
+import type { AgentRunSummary, Attachment, ChatSettings, ConversationSettings } from '../../types/chat'
 
 export const MAX_ATTACHMENTS = 4
 export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024
@@ -7,7 +7,7 @@ export const ATTACHMENT_INPUT_ACCEPT =
 export const IMPORT_CONVERSATION_INPUT_ACCEPT =
   '.md,.markdown,.txt,text/plain,text/markdown'
 export const CONVERSATION_PAGE_SIZE = 20
-export const LAST_CONVERSATION_STORAGE_KEY = 'aichat:last-conversation-id'
+export const LAST_CONVERSATION_STORAGE_KEY = 'aichat:last-conversation-public-id'
 export const DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY =
   'aichat:desktop-sidebar-collapsed'
 export const OPENAI_COMPATIBLE_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
@@ -24,7 +24,15 @@ export interface ComposerAttachment {
   revokeOnCleanup: boolean
 }
 
-export type SettingsTab = 'chat' | 'provider' | 'security' | 'language' | 'transfer'
+export type SettingsTab =
+  | 'chat'
+  | 'provider'
+  | 'rag'
+  | 'knowledge'
+  | 'workflow'
+  | 'security'
+  | 'language'
+  | 'transfer'
 
 export interface ProviderFormErrors {
   name?: string
@@ -78,6 +86,14 @@ export const defaultConversationSettings: ConversationSettings = {
   temperature: null,
   maxTokens: null,
   contextWindowTurns: null,
+}
+
+export const defaultAgentRunSummary: AgentRunSummary = {
+  workflowTemplateKey: '',
+  workflowPresetId: null,
+  knowledgeSpaceIds: [],
+  toolCalls: [],
+  citations: [],
 }
 
 export const defaultChatSettings: ChatSettings = {

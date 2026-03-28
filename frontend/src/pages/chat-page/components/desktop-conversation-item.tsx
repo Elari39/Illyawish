@@ -23,15 +23,15 @@ interface DesktopConversationItemProps {
   archiveLabel: string
   restoreLabel: string
   deleteLabel: string
-  onSelectConversation: (conversationId: number) => void
-  onToggleActions: (conversationId: number, anchor?: HTMLButtonElement) => void
+  onSelectConversation: (conversationId: Conversation['id']) => void
+  onToggleActions: (conversationId: Conversation['id'], anchor?: HTMLButtonElement) => void
   onTogglePinned: (conversation: Conversation) => void
   onRenameConversation: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
-  onDeleteConversation: (conversationId: number) => void
+  onDeleteConversation: (conversationId: Conversation['id']) => void
   onCloseActions: () => void
   onDesktopMenuBlur: (event: FocusEvent<HTMLDivElement>) => void
-  registerDesktopTrigger: (conversationId: number, node: HTMLButtonElement | null) => void
+  registerDesktopTrigger: (conversationId: Conversation['id'], node: HTMLButtonElement | null) => void
   desktopMenuRef: RefObject<HTMLDivElement | null>
 }
 

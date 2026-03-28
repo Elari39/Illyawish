@@ -114,6 +114,8 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 	conversation := &models.Conversation{
 		UserID:             userID,
 		Title:              defaultConversationTitle,
+		WorkflowPresetID:   input.WorkflowPresetID,
+		KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
 		SystemPrompt:       settings.SystemPrompt,
 		Model:              settings.Model,
 		Temperature:        cloneFloat32(settings.Temperature),
@@ -157,10 +159,12 @@ func (s *Service) ImportConversation(
 			}
 		}
 
-		conversation = &models.Conversation{
-			UserID:             userID,
-			Title:              title,
-			SystemPrompt:       settings.SystemPrompt,
+			conversation = &models.Conversation{
+				UserID:             userID,
+				Title:              title,
+				WorkflowPresetID:   input.WorkflowPresetID,
+				KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
+				SystemPrompt:       settings.SystemPrompt,
 			Model:              settings.Model,
 			Temperature:        cloneFloat32(settings.Temperature),
 			MaxTokens:          cloneInt(settings.MaxTokens),
@@ -220,6 +224,25 @@ func (s *Service) GetConversation(userID uint, conversationID uint) (*models.Con
 	}
 	s.applyConversationDefaults(&conversation)
 	return &conversation, nil
+}
+
+func (s *Service) GetConversationByPublicID(userID uint, publicID string) (*models.Conversation, error) {
+	var conversation models.Conversation
+	if err := s.db.Where("public_id = ? AND user_id = ?", publicID, userID).First(&conversation).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("get conversation by public id: %w", err)
+	}
+	s.applyConversationDefaults(&conversation)
+	return &conversation, nil
+}
+
+func valueOrEmptyUintSlice(values *[]uint) []uint {
+	if values == nil {
+		return nil
+	}
+	return *values
 }
 
 func (s *Service) UpdateConversation(

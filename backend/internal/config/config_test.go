@@ -36,6 +36,18 @@ func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	if cfg.TrustProxyHeadersForSecureCookies {
 		t.Fatal("expected trust proxy headers for secure cookies to default to false")
 	}
+	if cfg.RAGBaseURL == "" {
+		t.Fatal("expected default RAG base URL to be populated")
+	}
+	if cfg.RAGAPIKey != "sk-oaoecvjushohmbfrfxohqctsgzrqggsvisrlzvisfwjhyunh" {
+		t.Fatalf("expected default RAG API key, got %q", cfg.RAGAPIKey)
+	}
+	if cfg.RAGEmbeddingModel != "Qwen/Qwen3-Embedding-8B" {
+		t.Fatalf("expected default RAG embedding model, got %q", cfg.RAGEmbeddingModel)
+	}
+	if cfg.RAGRerankerModel != "Qwen/Qwen3-Reranker-8B" {
+		t.Fatalf("expected default RAG reranker model, got %q", cfg.RAGRerankerModel)
+	}
 
 	configPath := filepath.Join(dataDir, defaultConfigFileName)
 	if _, err := os.Stat(configPath); err != nil {
@@ -59,7 +71,11 @@ func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
   "sqlitePath": "db.sqlite",
   "uploadDir": "uploads",
   "sessionSecret": "existing-session-secret",
-  "settingsEncryptionKey": "existing-settings-secret"
+  "settingsEncryptionKey": "existing-settings-secret",
+  "ragBaseURL": "https://api.siliconflow.cn/v1",
+  "ragApiKey": "rag-key",
+  "ragEmbeddingModel": "embed-model",
+  "ragRerankerModel": "rerank-model"
 }
 `
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
@@ -94,6 +110,18 @@ func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
 	}
 	if cfg.SettingsEncryptionKey != "existing-settings-secret" {
 		t.Fatalf("expected settings encryption key to be reused, got %q", cfg.SettingsEncryptionKey)
+	}
+	if cfg.RAGBaseURL != "https://api.siliconflow.cn/v1" {
+		t.Fatalf("expected RAG base URL to load, got %q", cfg.RAGBaseURL)
+	}
+	if cfg.RAGAPIKey != "rag-key" {
+		t.Fatalf("expected RAG API key to load, got %q", cfg.RAGAPIKey)
+	}
+	if cfg.RAGEmbeddingModel != "embed-model" {
+		t.Fatalf("expected RAG embedding model to load, got %q", cfg.RAGEmbeddingModel)
+	}
+	if cfg.RAGRerankerModel != "rerank-model" {
+		t.Fatalf("expected RAG reranker model to load, got %q", cfg.RAGRerankerModel)
 	}
 	if cfg.TrustProxyHeadersForSecureCookies {
 		t.Fatal("expected trust proxy headers for secure cookies to remain false when omitted")

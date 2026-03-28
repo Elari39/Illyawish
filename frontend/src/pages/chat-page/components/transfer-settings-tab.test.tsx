@@ -7,7 +7,7 @@ import { IMPORT_CONVERSATION_INPUT_ACCEPT } from '../types'
 import { TransferSettingsTab } from './transfer-settings-tab'
 
 const conversation: Conversation = {
-  id: 1,
+  id: '1',
   title: 'Project notes',
   isPinned: false,
   isArchived: false,

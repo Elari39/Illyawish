@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"backend/internal/agent"
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
@@ -43,10 +44,12 @@ func isRequestError(err error) bool {
 }
 
 type Service struct {
-	db        *gorm.DB
-	model     llm.ChatModel
-	providers providerResolver
-	uploads   attachmentStore
+	db              *gorm.DB
+	model           llm.ChatModel
+	providers       providerResolver
+	uploads         attachmentStore
+	agent           agentRunner
+	workflowPresets workflowPresetResolver
 
 	activeMu      sync.Mutex
 	activeStreams map[uint]context.CancelFunc
@@ -62,11 +65,24 @@ type attachmentStore interface {
 	CleanupUnreferenced(attachments []models.Attachment) error
 }
 
+type agentRunner interface {
+	Execute(context.Context, agent.RunInput, func(agent.Event) error) (*agent.RunResult, error)
+}
+
+type workflowPresetResolver interface {
+	GetPreset(userID uint, presetID uint) (*models.WorkflowPreset, error)
+}
+
 type StreamEvent struct {
-	Type    string      `json:"type"`
-	Content string      `json:"content,omitempty"`
-	Message *MessageDTO `json:"message,omitempty"`
-	Error   string      `json:"error,omitempty"`
+	Type           string                 `json:"type"`
+	Content        string                 `json:"content,omitempty"`
+	Message        *MessageDTO            `json:"message,omitempty"`
+	Error          string                 `json:"error,omitempty"`
+	StepName       string                 `json:"stepName,omitempty"`
+	ToolName       string                 `json:"toolName,omitempty"`
+	ConfirmationID string                 `json:"confirmationId,omitempty"`
+	Citations      []models.AgentCitation `json:"citations,omitempty"`
+	Metadata       map[string]any         `json:"metadata,omitempty"`
 }
 
 type ListConversationsParams struct {
@@ -98,18 +114,22 @@ type ChatSettings struct {
 }
 
 type ConversationUpdateInput struct {
-	Title      *string               `json:"title"`
-	IsPinned   *bool                 `json:"isPinned"`
-	IsArchived *bool                 `json:"isArchived"`
-	Folder     *string               `json:"folder"`
-	Tags       *[]string             `json:"tags"`
-	Settings   *ConversationSettings `json:"settings"`
+	Title             *string               `json:"title"`
+	IsPinned          *bool                 `json:"isPinned"`
+	IsArchived        *bool                 `json:"isArchived"`
+	Folder            *string               `json:"folder"`
+	Tags              *[]string             `json:"tags"`
+	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
+	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
+	Settings          *ConversationSettings `json:"settings"`
 }
 
 type CreateConversationInput struct {
-	Folder   *string               `json:"folder"`
-	Tags     *[]string             `json:"tags"`
-	Settings *ConversationSettings `json:"settings"`
+	Folder            *string               `json:"folder"`
+	Tags              *[]string             `json:"tags"`
+	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
+	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
+	Settings          *ConversationSettings `json:"settings"`
 }
 
 type ImportMessageInput struct {
@@ -118,15 +138,20 @@ type ImportMessageInput struct {
 }
 
 type ImportConversationInput struct {
-	Title    string                `json:"title"`
-	Settings *ConversationSettings `json:"settings"`
-	Messages []ImportMessageInput  `json:"messages"`
+	Title             string                `json:"title"`
+	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
+	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
+	Settings          *ConversationSettings `json:"settings"`
+	Messages          []ImportMessageInput  `json:"messages"`
 }
 
 type SendMessageInput struct {
-	Content     string                `json:"content"`
-	Attachments []models.Attachment   `json:"attachments"`
-	Options     *ConversationSettings `json:"options"`
+	Content           string                `json:"content"`
+	Attachments       []models.Attachment   `json:"attachments"`
+	Options           *ConversationSettings `json:"options"`
+	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
+	WorkflowInputs    map[string]any        `json:"workflowInputs"`
+	KnowledgeSpaceIDs []uint                `json:"knowledgeSpaceIds"`
 }
 
 func NewService(
@@ -142,6 +167,16 @@ func NewService(
 		uploads:       uploads,
 		activeStreams: map[uint]context.CancelFunc{},
 	}
+}
+
+func (s *Service) WithAgentRuntime(runtime agentRunner) *Service {
+	s.agent = runtime
+	return s
+}
+
+func (s *Service) WithWorkflowPresets(resolver workflowPresetResolver) *Service {
+	s.workflowPresets = resolver
+	return s
 }
 
 func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*SendMessageInput, error) {
@@ -175,9 +210,12 @@ func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*Send
 	}
 
 	return &SendMessageInput{
-		Content:     content,
-		Attachments: attachments,
-		Options:     options,
+		Content:           content,
+		Attachments:       attachments,
+		Options:           options,
+		WorkflowPresetID:  input.WorkflowPresetID,
+		WorkflowInputs:    input.WorkflowInputs,
+		KnowledgeSpaceIDs: cloneUintSlice(input.KnowledgeSpaceIDs),
 	}, nil
 }
 
@@ -354,6 +392,7 @@ func (s *Service) prepareAssistantReplay(
 func (s *Service) streamIntoAssistantMessage(
 	ctx context.Context,
 	assistantMessage *models.Message,
+	conversationPublicID string,
 	providerConfig llm.ProviderConfig,
 	history []llm.ChatMessage,
 	settings ConversationSettings,
@@ -361,7 +400,7 @@ func (s *Service) streamIntoAssistantMessage(
 ) error {
 	if err := emit(StreamEvent{
 		Type:    "message_start",
-		Message: ToMessageDTO(assistantMessage),
+		Message: ToMessageDTO(assistantMessage, conversationPublicID),
 	}); err != nil {
 		return err
 	}
@@ -429,7 +468,7 @@ func (s *Service) streamIntoAssistantMessage(
 		_ = emit(StreamEvent{
 			Type:    eventType,
 			Error:   streamErr.Error(),
-			Message: ToMessageDTO(assistantMessage),
+			Message: ToMessageDTO(assistantMessage, conversationPublicID),
 		})
 		return nil
 	}
@@ -445,7 +484,7 @@ func (s *Service) streamIntoAssistantMessage(
 	assistantMessage.Status = models.MessageStatusCompleted
 	return emit(StreamEvent{
 		Type:    "done",
-		Message: ToMessageDTO(assistantMessage),
+		Message: ToMessageDTO(assistantMessage, conversationPublicID),
 	})
 }
 

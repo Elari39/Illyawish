@@ -5,8 +5,13 @@ import type {
   ChatSettings,
   Conversation,
   ConversationSettings,
+  KnowledgeDocument,
+  KnowledgeSpace,
   ProviderPreset,
   ProviderState,
+  RAGProviderState,
+  WorkflowPreset,
+  WorkflowTemplate,
 } from '../../../types/chat'
 import type {
   ConfirmationState,
@@ -36,6 +41,8 @@ interface ChatOverlaysProps {
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
+  workflowPresetId: number | null
+  knowledgeSpaceIds: number[]
   isLoadingProviders: boolean
   isOpen: boolean
   isImporting: boolean
@@ -46,10 +53,17 @@ interface ChatOverlaysProps {
   promptState: PromptState | null
   providerForm: ProviderFormState
   providerState: ProviderState | null
+  ragProviderState: RAGProviderState | null
+  knowledgeSpaces: KnowledgeSpace[]
+  knowledgeDocuments: Record<number, KnowledgeDocument[]>
+  workflowTemplates: WorkflowTemplate[]
+  workflowPresets: WorkflowPreset[]
   settings: ConversationSettings
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
+  setWorkflowPresetId: Dispatch<SetStateAction<number | null>>
+  setKnowledgeSpaceIds: Dispatch<SetStateAction<number[]>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
   toasts: ToastState[]
@@ -68,6 +82,70 @@ interface ChatOverlaysProps {
   ) => void
   onProviderModelsChange: (value: { defaultModel: string; models: string[] }) => void
   onProviderTabChange: (tab: SettingsTab) => void
+  onCreateRAGProvider: (payload: {
+    name: string
+    baseURL: string
+    apiKey: string
+    embeddingModel: string
+    rerankerModel: string
+  }) => Promise<void>
+  onActivateRAGProvider: (providerId: number) => Promise<void>
+  onLoadKnowledgeDocuments: (spaceId: number) => Promise<void>
+  onCreateKnowledgeSpace: (payload: {
+    name: string
+    description?: string
+  }) => Promise<KnowledgeSpace | null>
+  onUpdateKnowledgeSpace: (spaceId: number, payload: {
+    name?: string
+    description?: string
+  }) => Promise<KnowledgeSpace | null>
+  onDeleteKnowledgeSpace: (spaceId: number) => Promise<boolean>
+  onCreateKnowledgeDocument: (
+    spaceId: number,
+    payload: {
+      title: string
+      sourceType: string
+      sourceUri?: string
+      content: string
+    },
+  ) => Promise<KnowledgeDocument | null>
+  onUpdateKnowledgeDocument: (
+    spaceId: number,
+    documentId: number,
+    payload: {
+      title?: string
+      sourceUri?: string
+      content?: string
+    },
+  ) => Promise<KnowledgeDocument | null>
+  onDeleteKnowledgeDocument: (spaceId: number, documentId: number) => Promise<boolean>
+  onUploadKnowledgeDocuments: (
+    spaceId: number,
+    files: File[],
+  ) => Promise<KnowledgeDocument[] | null>
+  onReplaceKnowledgeDocumentFile: (
+    spaceId: number,
+    documentId: number,
+    file: File,
+    title?: string,
+  ) => Promise<KnowledgeDocument | null>
+  onCreateWorkflowPreset: (payload: {
+    name: string
+    templateKey: string
+    defaultInputs?: Record<string, unknown>
+    knowledgeSpaceIds?: number[]
+    toolEnablements?: Record<string, boolean>
+    outputMode?: string
+  }) => Promise<WorkflowPreset | null>
+  onUpdateWorkflowPreset: (presetId: number, payload: {
+    name?: string
+    templateKey?: string
+    defaultInputs?: Record<string, unknown>
+    knowledgeSpaceIds?: number[]
+    toolEnablements?: Record<string, boolean>
+    outputMode?: string
+  }) => Promise<WorkflowPreset | null>
+  onDeleteWorkflowPreset: (presetId: number) => Promise<boolean>
   onReset: () => void
   onResetProvider: () => void
   onSave: () => void
@@ -83,6 +161,8 @@ export function ChatOverlays({
   chatSettings,
   conversationFolder,
   conversationTags,
+  workflowPresetId,
+  knowledgeSpaceIds,
   isLoadingProviders,
   isOpen,
   isImporting,
@@ -93,10 +173,17 @@ export function ChatOverlays({
   promptState,
   providerForm,
   providerState,
+  ragProviderState,
+  knowledgeSpaces,
+  knowledgeDocuments,
+  workflowTemplates,
+  workflowPresets,
   settings,
   setChatSettings,
   setConversationFolder,
   setConversationTags,
+  setWorkflowPresetId,
+  setKnowledgeSpaceIds,
   setSettings,
   transferConversation,
   toasts,
@@ -112,6 +199,20 @@ export function ChatOverlays({
   onProviderFieldChange,
   onProviderModelsChange,
   onProviderTabChange,
+  onCreateRAGProvider,
+  onActivateRAGProvider,
+  onLoadKnowledgeDocuments,
+  onCreateKnowledgeSpace,
+  onUpdateKnowledgeSpace,
+  onDeleteKnowledgeSpace,
+  onCreateKnowledgeDocument,
+  onUpdateKnowledgeDocument,
+  onDeleteKnowledgeDocument,
+  onUploadKnowledgeDocuments,
+  onReplaceKnowledgeDocumentFile,
+  onCreateWorkflowPreset,
+  onUpdateWorkflowPreset,
+  onDeleteWorkflowPreset,
   onReset,
   onResetProvider,
   onSave,
@@ -126,6 +227,8 @@ export function ChatOverlays({
         chatSettings={chatSettings}
         conversationFolder={conversationFolder}
         conversationTags={conversationTags}
+        workflowPresetId={workflowPresetId}
+        knowledgeSpaceIds={knowledgeSpaceIds}
         editingProviderId={editingProviderId}
         isLoadingProviders={isLoadingProviders}
         isOpen={isOpen}
@@ -151,12 +254,33 @@ export function ChatOverlays({
         onTestProvider={() => void onTestProvider()}
         providerForm={providerForm}
         providerState={providerState}
+        ragProviderState={ragProviderState}
+        knowledgeSpaces={knowledgeSpaces}
+        knowledgeDocuments={knowledgeDocuments}
+        workflowTemplates={workflowTemplates}
+        workflowPresets={workflowPresets}
         settings={settings}
         setChatSettings={setChatSettings}
         setConversationFolder={setConversationFolder}
         setConversationTags={setConversationTags}
+        setWorkflowPresetId={setWorkflowPresetId}
+        setKnowledgeSpaceIds={setKnowledgeSpaceIds}
         setSettings={setSettings}
         transferConversation={transferConversation}
+        onCreateRAGProvider={onCreateRAGProvider}
+        onActivateRAGProvider={onActivateRAGProvider}
+        onLoadKnowledgeDocuments={onLoadKnowledgeDocuments}
+        onCreateKnowledgeSpace={onCreateKnowledgeSpace}
+        onUpdateKnowledgeSpace={onUpdateKnowledgeSpace}
+        onDeleteKnowledgeSpace={onDeleteKnowledgeSpace}
+        onCreateKnowledgeDocument={onCreateKnowledgeDocument}
+        onUpdateKnowledgeDocument={onUpdateKnowledgeDocument}
+        onDeleteKnowledgeDocument={onDeleteKnowledgeDocument}
+        onUploadKnowledgeDocuments={onUploadKnowledgeDocuments}
+        onReplaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
+        onCreateWorkflowPreset={onCreateWorkflowPreset}
+        onUpdateWorkflowPreset={onUpdateWorkflowPreset}
+        onDeleteWorkflowPreset={onDeleteWorkflowPreset}
       />
       <ConfirmationDialog
         confirmation={confirmation}

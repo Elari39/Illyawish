@@ -104,6 +104,8 @@ cd backend
 go run ./cmd/server
 ```
 
+If you are upgrading a local checkout that still has an older `data/aichat.db` without conversation UUID support, delete only `data/aichat.db` and then start the backend again. Keep `data/app.json` and `data/uploads/`.
+
 Start the frontend:
 
 ```bash

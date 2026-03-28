@@ -13,7 +13,7 @@ import {
 } from '../types'
 
 interface UseChatSettingsStateOptions {
-  activeConversationId: number | null
+  activeConversationId: Conversation['id'] | null
   currentConversation: Conversation | null
   setChatError: (value: string | null) => void
   syncConversationIntoList: (
@@ -46,6 +46,8 @@ export function useChatSettingsState({
   )
   const [conversationFolderDraft, setConversationFolderDraft] = useState('')
   const [conversationTagsDraft, setConversationTagsDraft] = useState('')
+  const [workflowPresetIdDraft, setWorkflowPresetIdDraft] = useState<number | null>(null)
+  const [knowledgeSpaceIdsDraft, setKnowledgeSpaceIdsDraft] = useState<number[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +85,8 @@ export function useChatSettingsState({
     const metadataUpdate = buildConversationMetadataUpdate(
       nextFolder,
       nextTags,
+      workflowPresetIdDraft,
+      knowledgeSpaceIdsDraft,
       currentConversation,
     )
 
@@ -106,6 +110,8 @@ export function useChatSettingsState({
         )
         setConversationFolderDraft(nextFolder)
         setConversationTagsDraft(nextTags.join(', '))
+        setWorkflowPresetIdDraft(workflowPresetIdDraft)
+        setKnowledgeSpaceIdsDraft(knowledgeSpaceIdsDraft)
         onSaved()
         return
       }
@@ -123,6 +129,8 @@ export function useChatSettingsState({
       syncConversationIntoList(updatedConversation)
       setPendingConversation(updatedConversation)
       setSettingsDraft(updatedConversation.settings)
+      setWorkflowPresetIdDraft(updatedConversation.workflowPresetId ?? null)
+      setKnowledgeSpaceIdsDraft(updatedConversation.knowledgeSpaceIds ?? [])
       onSaved()
     } catch (error) {
       setChatError(
@@ -134,6 +142,8 @@ export function useChatSettingsState({
     chatSettingsDraft,
     conversationFolderDraft,
     conversationTagsDraft,
+    workflowPresetIdDraft,
+    knowledgeSpaceIdsDraft,
     currentConversation,
     settingsDraft,
     setChatError,
@@ -148,6 +158,8 @@ export function useChatSettingsState({
       setSettingsDraft(currentConversation.settings)
       setConversationFolderDraft(currentConversation.folder)
       setConversationTagsDraft(currentConversation.tags.join(', '))
+      setWorkflowPresetIdDraft(currentConversation.workflowPresetId ?? null)
+      setKnowledgeSpaceIdsDraft(currentConversation.knowledgeSpaceIds ?? [])
       return
     }
 
@@ -156,6 +168,8 @@ export function useChatSettingsState({
     )
     setConversationFolderDraft(newConversationFolder)
     setConversationTagsDraft(newConversationTagsInput)
+    setWorkflowPresetIdDraft(null)
+    setKnowledgeSpaceIdsDraft([])
   }, [
     chatSettings,
     currentConversation,
@@ -179,6 +193,8 @@ export function useChatSettingsState({
     )
     setConversationFolderDraft(newConversationFolder)
     setConversationTagsDraft(newConversationTagsInput)
+    setWorkflowPresetIdDraft(null)
+    setKnowledgeSpaceIdsDraft([])
   }, [
     chatSettings,
     newChatSystemPrompt,
@@ -190,11 +206,15 @@ export function useChatSettingsState({
     chatSettingsDraft,
     conversationFolderDraft,
     conversationTagsDraft,
+    workflowPresetIdDraft,
+    knowledgeSpaceIdsDraft,
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
+    setWorkflowPresetIdDraft,
+    setKnowledgeSpaceIdsDraft,
     setPendingConversation,
     setSettingsDraft,
     handleSaveSettings,
@@ -230,6 +250,8 @@ function parseConversationTags(value: string) {
 function buildConversationMetadataUpdate(
   folder: string,
   tags: string[],
+  workflowPresetId: number | null,
+  knowledgeSpaceIds: number[],
   currentConversation: Conversation | null,
 ) {
   if (!currentConversation) {
@@ -240,10 +262,16 @@ function buildConversationMetadataUpdate(
   const tagsChanged =
     tags.length !== currentConversation.tags.length ||
     tags.some((tag, index) => tag !== currentConversation.tags[index])
+  const workflowChanged = workflowPresetId !== currentConversation.workflowPresetId
+  const knowledgeChanged =
+    knowledgeSpaceIds.length !== (currentConversation.knowledgeSpaceIds ?? []).length ||
+    knowledgeSpaceIds.some((id, index) => id !== (currentConversation.knowledgeSpaceIds ?? [])[index])
 
   return {
     ...(folderChanged ? { folder } : {}),
     ...(tagsChanged ? { tags } : {}),
+    ...(workflowChanged ? { workflowPresetId } : {}),
+    ...(knowledgeChanged ? { knowledgeSpaceIds } : {}),
   }
 }
 

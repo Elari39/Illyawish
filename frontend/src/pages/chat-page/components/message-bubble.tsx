@@ -1,4 +1,5 @@
-import { FileText } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FileText, RefreshCw } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { MarkdownContent } from '../../../components/chat/markdown-content'
@@ -16,6 +17,7 @@ interface MessageBubbleProps {
   canRetry: boolean
   canRegenerate: boolean
   isEditing: boolean
+  onCopySuccessToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   onEdit: () => void
   onRetry: () => void
   onRegenerate: () => void
@@ -27,11 +29,14 @@ export function MessageBubble({
   canRetry,
   canRegenerate,
   isEditing,
+  onCopySuccessToast,
   onEdit,
   onRetry,
   onRegenerate,
 }: MessageBubbleProps) {
   const { locale, t } = useI18n()
+  const [copied, setCopied] = useState(false)
+  const resetCopiedTimerRef = useRef<number | null>(null)
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
@@ -41,6 +46,31 @@ export function MessageBubble({
   const documentAttachments = message.attachments.filter(
     (attachment) => !isImageAttachment(attachment),
   )
+
+  useEffect(() => {
+    return () => {
+      if (resetCopiedTimerRef.current) {
+        window.clearTimeout(resetCopiedTimerRef.current)
+      }
+    }
+  }, [])
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(message.content)
+      setCopied(true)
+      onCopySuccessToast(t('message.copied'), 'success')
+      if (resetCopiedTimerRef.current) {
+        window.clearTimeout(resetCopiedTimerRef.current)
+      }
+      resetCopiedTimerRef.current = window.setTimeout(() => {
+        setCopied(false)
+        resetCopiedTimerRef.current = null
+      }, 1200)
+    } catch {
+      onCopySuccessToast(t('error.copyMessage'), 'error')
+    }
+  }
 
   if (isUser) {
     return (
@@ -87,6 +117,13 @@ export function MessageBubble({
           <div className="flex items-center justify-end gap-3 text-xs text-[var(--muted-foreground)]">
             <span>{formatMessageTimestamp(message.createdAt, locale)}</span>
             {isEditing ? <span>{t('message.editing')}</span> : null}
+            <Button
+              className="px-2 py-1 text-xs"
+              onClick={() => void handleCopy()}
+              variant="ghost"
+            >
+              {copied ? t('message.copied') : t('message.copy')}
+            </Button>
             {canEdit ? (
               <Button className="px-2 py-1 text-xs" onClick={onEdit} variant="ghost">
                 {t('message.edit')}
@@ -109,18 +146,44 @@ export function MessageBubble({
 
       {canRetry || canRegenerate ? (
         <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            className="rounded-full px-3 py-1.5 text-xs"
+            onClick={() => void handleCopy()}
+            variant="secondary"
+          >
+            {copied ? t('message.copied') : t('message.copy')}
+          </Button>
           {canRetry ? (
-            <Button className="px-3 py-2" onClick={onRetry} variant="secondary">
+            <Button
+              className="rounded-full px-3 py-1.5 text-xs"
+              onClick={onRetry}
+              variant="secondary"
+            >
               {t('message.retry')}
             </Button>
           ) : null}
           {canRegenerate ? (
-            <Button className="px-3 py-2" onClick={onRegenerate} variant="secondary">
+            <Button
+              className="rounded-full px-3 py-1.5 text-xs"
+              onClick={onRegenerate}
+              variant="secondary"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
               {t('chat.regenerate')}
             </Button>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            className="rounded-full px-3 py-1.5 text-xs"
+            onClick={() => void handleCopy()}
+            variant="secondary"
+          >
+            {copied ? t('message.copied') : t('message.copy')}
+          </Button>
+        </div>
+      )}
     </article>
   )
 }

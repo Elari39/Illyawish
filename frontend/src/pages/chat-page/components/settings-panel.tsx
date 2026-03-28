@@ -15,15 +15,23 @@ import type {
   ChatSettings,
   Conversation,
   ConversationSettings,
+  KnowledgeDocument,
+  KnowledgeSpace,
   ProviderPreset,
   ProviderState,
+  RAGProviderState,
+  WorkflowPreset,
+  WorkflowTemplate,
 } from '../../../types/chat'
 import type { ProviderFormState, SettingsTab } from '../types'
 import { canReuseActivePresetAPIKey, resolveChatModelOptions } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
+import { KnowledgeSettingsTab } from './knowledge-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
+import { RAGProviderSettingsTab } from './rag-provider-settings-tab'
 import { SecuritySettingsTab } from './security-settings-tab'
 import { TransferSettingsTab } from './transfer-settings-tab'
+import { WorkflowSettingsTab } from './workflow-settings-tab'
 
 interface SettingsPanelProps {
   activeTab: SettingsTab
@@ -31,6 +39,8 @@ interface SettingsPanelProps {
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
+  workflowPresetId?: number | null
+  knowledgeSpaceIds?: number[]
   isLoadingProviders: boolean
   isImporting: boolean
   isOpen: boolean
@@ -43,9 +53,16 @@ interface SettingsPanelProps {
   settings: ConversationSettings
   providerForm: ProviderFormState
   providerState: ProviderState | null
+  ragProviderState?: RAGProviderState | null
+  knowledgeSpaces?: KnowledgeSpace[]
+  knowledgeDocuments?: Record<number, KnowledgeDocument[]>
+  workflowTemplates?: WorkflowTemplate[]
+  workflowPresets?: WorkflowPreset[]
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
+  setWorkflowPresetId?: Dispatch<SetStateAction<number | null>>
+  setKnowledgeSpaceIds?: Dispatch<SetStateAction<number[]>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   onClose: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
@@ -63,6 +80,73 @@ interface SettingsPanelProps {
     },
   ) => void
   onProviderTabChange: (tab: SettingsTab) => void
+  onCreateRAGProvider?: (payload: {
+    name: string
+    baseURL: string
+    apiKey: string
+    embeddingModel: string
+    rerankerModel: string
+  }) => Promise<void>
+  onActivateRAGProvider?: (providerId: number) => Promise<void>
+  onLoadKnowledgeDocuments?: (spaceId: number) => Promise<void>
+  onCreateKnowledgeSpace?: (payload: {
+    name: string
+    description?: string
+  }) => Promise<KnowledgeSpace | null>
+  onUpdateKnowledgeSpace?: (spaceId: number, payload: {
+    name?: string
+    description?: string
+  }) => Promise<KnowledgeSpace | null>
+  onDeleteKnowledgeSpace?: (spaceId: number) => Promise<boolean>
+  onCreateKnowledgeDocument?: (
+    spaceId: number,
+    payload: {
+      title: string
+      sourceType: string
+      sourceUri?: string
+      content: string
+    },
+  ) => Promise<KnowledgeDocument | null>
+  onUpdateKnowledgeDocument?: (
+    spaceId: number,
+    documentId: number,
+    payload: {
+      title?: string
+      sourceUri?: string
+      content?: string
+    },
+  ) => Promise<KnowledgeDocument | null>
+  onDeleteKnowledgeDocument?: (
+    spaceId: number,
+    documentId: number,
+  ) => Promise<boolean>
+  onUploadKnowledgeDocuments?: (
+    spaceId: number,
+    files: File[],
+  ) => Promise<KnowledgeDocument[] | null>
+  onReplaceKnowledgeDocumentFile?: (
+    spaceId: number,
+    documentId: number,
+    file: File,
+    title?: string,
+  ) => Promise<KnowledgeDocument | null>
+  onCreateWorkflowPreset?: (payload: {
+    name: string
+    templateKey: string
+    defaultInputs?: Record<string, unknown>
+    knowledgeSpaceIds?: number[]
+    toolEnablements?: Record<string, boolean>
+    outputMode?: string
+  }) => Promise<WorkflowPreset | null>
+  onUpdateWorkflowPreset?: (presetId: number, payload: {
+    name?: string
+    templateKey?: string
+    defaultInputs?: Record<string, unknown>
+    knowledgeSpaceIds?: number[]
+    toolEnablements?: Record<string, boolean>
+    outputMode?: string
+  }) => Promise<WorkflowPreset | null>
+  onDeleteWorkflowPreset?: (presetId: number) => Promise<boolean>
   onReset: () => void
   onResetProvider: () => void
   onSave: () => void
@@ -77,6 +161,8 @@ export function SettingsPanel({
   chatSettings,
   conversationFolder,
   conversationTags,
+  workflowPresetId = null,
+  knowledgeSpaceIds = [],
   isLoadingProviders,
   isImporting,
   isOpen,
@@ -89,9 +175,16 @@ export function SettingsPanel({
   settings,
   providerForm,
   providerState,
+  ragProviderState = null,
+  knowledgeSpaces = [],
+  knowledgeDocuments = {},
+  workflowTemplates = [],
+  workflowPresets = [],
   setChatSettings,
   setConversationFolder,
   setConversationTags,
+  setWorkflowPresetId = () => undefined,
+  setKnowledgeSpaceIds = () => undefined,
   setSettings,
   onClose,
   onDeleteProvider,
@@ -101,6 +194,20 @@ export function SettingsPanel({
   onProviderFieldChange,
   onProviderModelsChange,
   onProviderTabChange,
+  onCreateRAGProvider = async () => undefined,
+  onActivateRAGProvider = async () => undefined,
+  onLoadKnowledgeDocuments = async () => undefined,
+  onCreateKnowledgeSpace = async () => null,
+  onUpdateKnowledgeSpace = async () => null,
+  onDeleteKnowledgeSpace = async () => false,
+  onCreateKnowledgeDocument = async () => null,
+  onUpdateKnowledgeDocument = async () => null,
+  onDeleteKnowledgeDocument = async () => false,
+  onUploadKnowledgeDocuments = async () => null,
+  onReplaceKnowledgeDocumentFile = async () => null,
+  onCreateWorkflowPreset = async () => null,
+  onUpdateWorkflowPreset = async () => null,
+  onDeleteWorkflowPreset = async () => false,
   onReset,
   onResetProvider,
   onSave,
@@ -151,16 +258,22 @@ export function SettingsPanel({
   const modelOptions = resolveChatModelOptions(providerState, chatSettings.model)
   const canReuseActiveAPIKey =
     editingProviderId == null && canReuseActivePresetAPIKey(providerState)
-  const descriptionKey =
+  const descriptionText =
     activeTab === 'chat'
-      ? 'settings.chatDescription'
-      : activeTab === 'provider'
-        ? 'settings.providerDescription'
+      ? t('settings.chatDescription')
+        : activeTab === 'provider'
+          ? t('settings.providerDescription')
+        : activeTab === 'rag'
+          ? t('settings.ragDescription')
+          : activeTab === 'knowledge'
+            ? t('settings.knowledgeDescription')
+            : activeTab === 'workflow'
+              ? t('settings.workflowDescription')
         : activeTab === 'security'
-          ? 'settings.securityDescription'
+          ? t('settings.securityDescription')
         : activeTab === 'language'
-          ? 'settings.languageDescription'
-          : 'settings.transferDescription'
+          ? t('settings.languageDescription')
+          : t('settings.transferDescription')
 
   return (
     <div
@@ -184,7 +297,7 @@ export function SettingsPanel({
               {t('settings.title')}
             </h2>
             <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]" id={descriptionId}>
-              {t(descriptionKey)}
+              {descriptionText}
             </p>
           </div>
           <button
@@ -222,6 +335,42 @@ export function SettingsPanel({
             type="button"
           >
             {t('settings.providerTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'rag'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('rag')}
+            type="button"
+          >
+            {t('settings.ragTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'knowledge'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('knowledge')}
+            type="button"
+          >
+            {t('settings.knowledgeTab')}
+          </button>
+          <button
+            className={cn(
+              'rounded-xl px-4 py-2 text-sm font-medium transition',
+              activeTab === 'workflow'
+                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+            )}
+            onClick={() => onProviderTabChange('workflow')}
+            type="button"
+          >
+            {t('settings.workflowTab')}
           </button>
           <button
             className={cn(
@@ -272,6 +421,38 @@ export function SettingsPanel({
             setConversationTags={setConversationTags}
             setChatSettings={setChatSettings}
             setSettings={setSettings}
+          />
+        ) : activeTab === 'rag' ? (
+          <RAGProviderSettingsTab
+            activateProvider={onActivateRAGProvider}
+            createProvider={onCreateRAGProvider}
+            providerState={ragProviderState}
+          />
+        ) : activeTab === 'knowledge' ? (
+          <KnowledgeSettingsTab
+            createKnowledgeDocument={onCreateKnowledgeDocument}
+            createKnowledgeSpace={onCreateKnowledgeSpace}
+            deleteKnowledgeDocument={onDeleteKnowledgeDocument}
+            deleteKnowledgeSpace={onDeleteKnowledgeSpace}
+            knowledgeDocuments={knowledgeDocuments}
+            knowledgeSpaces={knowledgeSpaces}
+            loadKnowledgeDocuments={onLoadKnowledgeDocuments}
+            replaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
+            selectedKnowledgeSpaceIds={knowledgeSpaceIds}
+            setSelectedKnowledgeSpaceIds={setKnowledgeSpaceIds}
+            uploadKnowledgeDocuments={onUploadKnowledgeDocuments}
+            updateKnowledgeDocument={onUpdateKnowledgeDocument}
+            updateKnowledgeSpace={onUpdateKnowledgeSpace}
+          />
+        ) : activeTab === 'workflow' ? (
+          <WorkflowSettingsTab
+            createWorkflowPreset={onCreateWorkflowPreset}
+            deleteWorkflowPreset={onDeleteWorkflowPreset}
+            selectedWorkflowPresetId={workflowPresetId}
+            setSelectedWorkflowPresetId={setWorkflowPresetId}
+            updateWorkflowPreset={onUpdateWorkflowPreset}
+            workflowPresets={workflowPresets}
+            workflowTemplates={workflowTemplates}
           />
         ) : activeTab === 'provider' ? (
           <ProviderSettingsTab

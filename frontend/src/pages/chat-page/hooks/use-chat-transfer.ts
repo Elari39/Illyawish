@@ -20,19 +20,19 @@ interface UseChatTransferOptions {
   setChatError: (value: string | null) => void
   showToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   insertCreatedConversation: (conversation: Conversation) => void
-  removeConversationFromList: (conversationId: number) => void
+  removeConversationFromList: (conversationId: Conversation['id']) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
-  navigateToConversation: (conversationId: number, replace?: boolean) => void
+  navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
   navigateHome: (replace?: boolean) => void
   setSkipAutoResume: (value: boolean) => void
-  activeConversationIdRef: MutableRefObject<number | null>
+  activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
   setPendingConversation: (conversation: Conversation | null) => void
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   resetForNewChatSettings: () => void
   resetComposer: () => void
   resetHistoryState: () => void
   reconcileConversationState: (
-    conversationId: number,
+    conversationId: Conversation['id'],
     options?: { clearErrorOnSuccess?: boolean },
   ) => Promise<{ messages: Message[] } | null>
 }
@@ -61,7 +61,7 @@ export function useChatTransfer({
 }: UseChatTransferOptions) {
   const [isImporting, setIsImporting] = useState(false)
 
-  async function cleanupEmptyCreatedConversation(conversationId: number) {
+  async function cleanupEmptyCreatedConversation(conversationId: Conversation['id']) {
     const reconciled = await reconcileConversationState(conversationId, {
       clearErrorOnSuccess: false,
     })

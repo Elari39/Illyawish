@@ -12,12 +12,12 @@ const defaultSettings: ConversationSettings = {
 }
 
 function createConversation(
-  id: number,
+  id: number | string,
   title: string,
   overrides: Partial<Conversation> = {},
 ): Conversation {
   return {
-    id,
+    id: String(id) as Conversation['id'],
     title,
     isPinned: false,
     isArchived: false,
@@ -46,7 +46,7 @@ describe('applyConversationSync', () => {
       },
     )
 
-    expect(result.conversations.map((conversation) => conversation.id)).toEqual([11])
+    expect(result.conversations.map((conversation) => conversation.id)).toEqual(['11'])
     expect(result.totalDelta).toBe(0)
     expect(result.loadedDelta).toBe(0)
   })
@@ -83,7 +83,7 @@ describe('applyConversationSync', () => {
       },
     )
 
-    expect(result.conversations.map((conversation) => conversation.id)).toEqual([13])
+    expect(result.conversations.map((conversation) => conversation.id)).toEqual(['13'])
     expect(result.totalDelta).toBe(1)
     expect(result.loadedDelta).toBe(1)
   })
@@ -103,7 +103,7 @@ describe('applyConversationSync', () => {
       },
     )
 
-    expect(result.conversations.map((conversation) => conversation.id)).toEqual([14])
+    expect(result.conversations.map((conversation) => conversation.id)).toEqual(['14'])
     expect(result.totalDelta).toBe(1)
     expect(result.loadedDelta).toBe(0)
   })
