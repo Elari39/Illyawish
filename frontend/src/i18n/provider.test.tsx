@@ -49,8 +49,8 @@ describe('I18nProvider', () => {
       </I18nProvider>,
     )
 
-    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
-    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
+    expect(screen.getByTestId('i18n-loading-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('locale')).not.toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
@@ -70,10 +70,13 @@ describe('I18nProvider', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '日本語' }))
 
+    expect(screen.getByTestId('locale')).toHaveTextContent('en-US')
+    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
+
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
       expect(screen.getByTestId('message')).toHaveTextContent('読み込み中...')
-    })
+    }, { timeout: 3000 })
 
     expect(document.documentElement.lang).toBe('ja-JP')
     expect(window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)).toBe('ja-JP')

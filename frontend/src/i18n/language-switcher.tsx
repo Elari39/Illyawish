@@ -3,7 +3,8 @@ import { useI18n } from './use-i18n'
 import { cn } from '../lib/utils'
 
 export function LanguageSwitcher({ className }: { className?: string }) {
-  const { locale, setLocale, t } = useI18n()
+  const { locale, pendingLocale, setLocale, t } = useI18n()
+  const selectedLocale = pendingLocale ?? locale
 
   return (
     <div
@@ -19,13 +20,15 @@ export function LanguageSwitcher({ className }: { className?: string }) {
       </span>
       {APP_LOCALES.map((value) => (
         <button
-          aria-pressed={locale === value}
+          aria-pressed={selectedLocale === value}
           className={cn(
             'rounded-full px-3 py-1.5 text-xs font-medium transition',
-            locale === value
+            selectedLocale === value
               ? 'bg-[var(--brand)] text-white'
               : 'text-[var(--muted-foreground)] hover:bg-black/[0.04] hover:text-[var(--foreground)]',
+            pendingLocale === value ? 'cursor-wait opacity-80' : null,
           )}
+          disabled={pendingLocale === value}
           key={value}
           onClick={() => setLocale(value)}
           type="button"

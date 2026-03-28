@@ -10,23 +10,9 @@ import (
 
 	"backend/internal/models"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-)
-
-const (
-	sessionKeyUserID   = "user_id"
-	sessionKeyVersion  = "session_version"
-	contextKeyUser     = "current_user"
-	codeUnauthorized   = "unauthorized"
-	codeSessionExpired = "session_expired"
-	codeSessionRevoked = "session_revoked"
-	codeAccountDisabled = "account_disabled"
-	codeRateLimited    = "rate_limited"
-	codeInvalidPayload = "validation_failed"
-	codeForbidden      = "insufficient_permissions"
 )
 
 type Handler struct {
@@ -48,14 +34,6 @@ type bootstrapRequest struct {
 type changePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword"`
 	NewPassword     string `json:"newPassword"`
-}
-
-type userResponse struct {
-	ID          uint    `json:"id"`
-	Username    string  `json:"username"`
-	Role        string  `json:"role"`
-	Status      string  `json:"status"`
-	LastLoginAt *string `json:"lastLoginAt"`
 }
 
 type auditRecorder interface {
@@ -278,130 +256,6 @@ func (h *Handler) Me(c *gin.Context) {
 	c.JSON(http.StatusOK, toUserResponse(user))
 }
 
-func RequireAuth(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		userIDValue := session.Get(sessionKeyUserID)
-		if userIDValue == nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "code": codeUnauthorized})
-			return
-		}
-
-		userID, ok := uintFromSessionValue(userIDValue)
-		if !ok {
-			clearSession(c)
-			abortSessionError(c, "session expired", codeSessionExpired)
-			return
-		}
-
-		var user models.User
-		if err := db.First(&user, userID).Error; err != nil {
-			clearSession(c)
-			abortSessionError(c, "session expired", codeSessionExpired)
-			return
-		}
-		if user.Status != models.UserStatusActive {
-			clearSession(c)
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "account is disabled", "code": codeAccountDisabled})
-			return
-		}
-
-		sessionVersion, ok := uintFromSessionValue(session.Get(sessionKeyVersion))
-		if !ok {
-			clearSession(c)
-			abortSessionError(c, "session expired", codeSessionExpired)
-			return
-		}
-		if sessionVersion != user.SessionVersion {
-			clearSession(c)
-			abortSessionError(c, "session revoked", codeSessionRevoked)
-			return
-		}
-
-		c.Set(contextKeyUser, &user)
-		c.Next()
-	}
-}
-
-func RequireRole(roles ...string) gin.HandlerFunc {
-	allowed := map[string]struct{}{}
-	for _, role := range roles {
-		allowed[strings.TrimSpace(role)] = struct{}{}
-	}
-
-	return func(c *gin.Context) {
-		user := CurrentUser(c)
-		if user == nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized", "code": codeUnauthorized})
-			return
-		}
-		if _, ok := allowed[user.Role]; !ok {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permissions", "code": codeForbidden})
-			return
-		}
-		c.Next()
-	}
-}
-
-func CurrentUser(c *gin.Context) *models.User {
-	value, exists := c.Get(contextKeyUser)
-	if !exists {
-		return nil
-	}
-
-	user, _ := value.(*models.User)
-	return user
-}
-
-func toUserResponse(user *models.User) userResponse {
-	var lastLoginAt *string
-	if user.LastLoginAt != nil {
-		value := user.LastLoginAt.UTC().Format(time.RFC3339)
-		lastLoginAt = &value
-	}
-
-	return userResponse{
-		ID:          user.ID,
-		Username:    user.Username,
-		Role:        strings.TrimSpace(user.Role),
-		Status:      strings.TrimSpace(user.Status),
-		LastLoginAt: lastLoginAt,
-	}
-}
-
-func persistSessionUser(c *gin.Context, user *models.User) error {
-	session := sessions.Default(c)
-	session.Set(sessionKeyUserID, strconv.FormatUint(uint64(user.ID), 10))
-	session.Set(sessionKeyVersion, strconv.FormatUint(uint64(user.SessionVersion), 10))
-	return session.Save()
-}
-
-func clearSession(c *gin.Context) {
-	session := sessions.Default(c)
-	session.Clear()
-	_ = session.Save()
-}
-
-func sanitizeCredentials(username string, password string) (string, string, error) {
-	normalizedUsername := strings.TrimSpace(username)
-	if normalizedUsername == "" {
-		return "", "", errors.New("username is required")
-	}
-	if len(normalizedUsername) > 64 {
-		return "", "", errors.New("username must be 64 characters or fewer")
-	}
-
-	normalizedPassword := strings.TrimSpace(password)
-	if normalizedPassword == "" {
-		return "", "", errors.New("password is required")
-	}
-	if len(normalizedPassword) < 8 {
-		return "", "", errors.New("password must be at least 8 characters long")
-	}
-
-	return normalizedUsername, normalizedPassword, nil
-}
-
 func (h *Handler) recordAudit(actor *models.User, action string, targetType string, targetID string, targetName string, summary string) {
 	if h.audit == nil {
 		return
@@ -421,29 +275,4 @@ func (h *Handler) markLoginSuccess(user *models.User) error {
 	}
 	user.LastLoginAt = &now
 	return nil
-}
-
-func uintFromSessionValue(value any) (uint, bool) {
-	switch v := value.(type) {
-	case string:
-		parsed, err := strconv.ParseUint(v, 10, 64)
-		if err != nil {
-			return 0, false
-		}
-		return uint(parsed), true
-	case uint:
-		return v, true
-	case int:
-		return uint(v), true
-	case int64:
-		return uint(v), true
-	case float64:
-		return uint(v), true
-	default:
-		return 0, false
-	}
-}
-
-func abortSessionError(c *gin.Context, message string, code string) {
-	c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": message, "code": code})
 }

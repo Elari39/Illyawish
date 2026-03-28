@@ -114,8 +114,8 @@ describe('I18nProvider transition handling', () => {
       </I18nProvider>,
     )
 
-    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
-    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
+    expect(screen.getByTestId('i18n-loading-shell')).toBeInTheDocument()
+    expect(screen.queryByTestId('locale')).not.toBeInTheDocument()
 
     zhCNDeferred.resolve(i18nMocks.zhCNMessages)
 
@@ -161,15 +161,16 @@ describe('I18nProvider transition handling', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '日本語' }))
 
-    expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
-    expect(screen.getByTestId('message')).toHaveTextContent('Loading...')
-    expect(document.documentElement.lang).toBe('ja-JP')
+    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN')
+    expect(screen.getByTestId('message')).toHaveTextContent('加载中...')
+    expect(document.documentElement.lang).toBe('zh-CN')
 
     jaJPDeferred.resolve(i18nMocks.jaJPMessages)
 
     await waitFor(() => {
       expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
       expect(screen.getByTestId('message')).toHaveTextContent('読み込み中...')
+      expect(document.documentElement.lang).toBe('ja-JP')
     })
   })
 

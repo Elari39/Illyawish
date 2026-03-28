@@ -258,6 +258,23 @@ func TestServiceGetUsageStatsAggregatesWorkspaceState(t *testing.T) {
 	}
 }
 
+func TestAuditListParamsRejectsInvalidLimitAndOffset(t *testing.T) {
+	_, err := auditListParams("", "", "", "", "", 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error for default pagination: %v", err)
+	}
+
+	_, err = auditListParams("", "", "", "", "", -1, 0)
+	if err == nil {
+		t.Fatal("expected negative limit to fail")
+	}
+
+	_, err = auditListParams("", "", "", "", "", 10, -1)
+	if err == nil {
+		t.Fatal("expected negative offset to fail")
+	}
+}
+
 func newAdminTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 

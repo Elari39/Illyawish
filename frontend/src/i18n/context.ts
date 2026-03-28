@@ -5,6 +5,8 @@ import type { TranslationKey, TranslationValues } from './messages'
 
 export interface I18nContextValue {
   locale: AppLocale
+  pendingLocale: AppLocale | null
+  isLocaleLoading: boolean
   setLocale: (locale: AppLocale) => void
   t: (key: TranslationKey, values?: TranslationValues) => string
 }

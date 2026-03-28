@@ -146,8 +146,16 @@ func (h *Handler) ResetPassword(c *gin.Context) {
 }
 
 func (h *Handler) ListAuditLogs(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	limit, err := parseNonNegativeQueryInt(c, "limit", 50)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "validation_failed"})
+		return
+	}
+	offset, err := parseNonNegativeQueryInt(c, "offset", 0)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "validation_failed"})
+		return
+	}
 	params, err := auditListParams(
 		c.Query("actor"),
 		c.Query("action"),
@@ -236,6 +244,13 @@ func userIDParam(c *gin.Context) (uint, error) {
 }
 
 func auditListParams(actor string, action string, targetType string, dateFrom string, dateTo string, limit int, offset int) (audit.ListParams, error) {
+	if limit < 0 {
+		return audit.ListParams{}, requestError{message: "limit must be 0 or greater", code: "validation_failed"}
+	}
+	if offset < 0 {
+		return audit.ListParams{}, requestError{message: "offset must be 0 or greater", code: "validation_failed"}
+	}
+
 	parsedDateFrom, err := parseAuditDate(dateFrom, false)
 	if err != nil {
 		return audit.ListParams{}, err
@@ -254,6 +269,29 @@ func auditListParams(actor string, action string, targetType string, dateFrom st
 		Limit:      limit,
 		Offset:     offset,
 	}, nil
+}
+
+func parseNonNegativeQueryInt(c *gin.Context, key string, defaultValue int) (int, error) {
+	rawValue := strings.TrimSpace(c.Query(key))
+	if rawValue == "" {
+		return defaultValue, nil
+	}
+
+	parsed, err := strconv.Atoi(rawValue)
+	if err != nil {
+		return 0, requestError{
+			message: key + " must be a number",
+			code:    "validation_failed",
+		}
+	}
+	if parsed < 0 {
+		return 0, requestError{
+			message: key + " must be 0 or greater",
+			code:    "validation_failed",
+		}
+	}
+
+	return parsed, nil
 }
 
 func toUserDTO(user *models.User) UserDTO {

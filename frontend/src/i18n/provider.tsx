@@ -27,85 +27,86 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const fallbackMessages = getFallbackMessages()
   const [initialLocale] = useState<AppLocale>(() => getInitialLocale())
   const [locale, setLocaleState] = useState<AppLocale>(() => initialLocale)
-  const [loadedBundle, setLoadedBundle] = useState<{
-    locale: AppLocale
-    messages: TranslationTable
-  } | null>(() => {
-    const cachedCatalog = getCachedMessages(initialLocale)
-    if (!cachedCatalog) {
-      return null
-    }
-
-    return {
-      locale: initialLocale,
-      messages: cachedCatalog,
-    }
-  })
-  const messageCatalog =
-    getCachedMessages(locale) ??
-    (loadedBundle?.locale === locale ? loadedBundle.messages : fallbackMessages)
+  const [messageCatalog, setMessageCatalog] = useState<TranslationTable | null>(() =>
+    getCachedMessages(initialLocale) ?? null,
+  )
+  const [pendingLocale, setPendingLocale] = useState<AppLocale | null>(() =>
+    getCachedMessages(initialLocale) ? null : initialLocale,
+  )
   const localeRequestIdRef = useRef(0)
-  const pendingLocaleRef = useRef<AppLocale | null>(null)
+  const isLocaleLoading = pendingLocale !== null
 
   useEffect(() => {
-    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, locale)
+    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, pendingLocale ?? locale)
+  }, [locale, pendingLocale])
+
+  useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
 
   useEffect(() => {
-    if (getCachedMessages(locale) || loadedBundle?.locale === locale) {
-      pendingLocaleRef.current = null
+    if (!pendingLocale) {
       return
     }
 
     const requestId = ++localeRequestIdRef.current
-    pendingLocaleRef.current = locale
+    const targetLocale = pendingLocale
 
-    void loadMessages(locale)
+    void loadMessages(targetLocale)
       .then((nextCatalog) => {
         if (localeRequestIdRef.current !== requestId) {
           return
         }
 
-        pendingLocaleRef.current = null
-        setLoadedBundle({
-          locale,
-          messages: nextCatalog,
-        })
+        setMessageCatalog(nextCatalog)
+        setLocaleState(targetLocale)
+        setPendingLocale(null)
       })
       .catch(() => {
         if (localeRequestIdRef.current !== requestId) {
           return
         }
 
-        pendingLocaleRef.current = null
+        setMessageCatalog(getCachedMessages(DEFAULT_APP_LOCALE) ?? fallbackMessages)
         setLocaleState(DEFAULT_APP_LOCALE)
-        setLoadedBundle(null)
+        setPendingLocale(null)
       })
-  }, [loadedBundle?.locale, locale])
+  }, [fallbackMessages, pendingLocale])
 
   const setLocale = useCallback((nextLocale: AppLocale) => {
-    if (
-      nextLocale === locale ||
-      nextLocale === pendingLocaleRef.current
-    ) {
+    if (nextLocale === pendingLocale || (nextLocale === locale && pendingLocale === null)) {
       return
     }
 
-    pendingLocaleRef.current = nextLocale
-    setLocaleState(nextLocale)
-  }, [locale])
+    localeRequestIdRef.current += 1
+
+    const cachedCatalog = getCachedMessages(nextLocale)
+    if (cachedCatalog) {
+      setMessageCatalog(cachedCatalog)
+      setLocaleState(nextLocale)
+      setPendingLocale(null)
+      return
+    }
+
+    setPendingLocale(nextLocale)
+  }, [locale, pendingLocale])
 
   const t = useCallback(
     (key: TranslationKey, values?: TranslationValues) =>
-      formatMessage(messageCatalog[key], values),
-    [messageCatalog],
+      formatMessage((messageCatalog ?? fallbackMessages)[key], values),
+    [fallbackMessages, messageCatalog],
   )
+
+  if (!messageCatalog) {
+    return <div aria-busy="true" data-testid="i18n-loading-shell" />
+  }
 
   return (
     <I18nContext.Provider
       value={{
         locale,
+        pendingLocale,
+        isLocaleLoading,
         setLocale,
         t,
       }}

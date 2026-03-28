@@ -12,9 +12,9 @@ type ListMessagesParams struct {
 }
 
 type MessageListResult struct {
-	Messages      []models.Message
-	HasMore       bool
-	NextBeforeID  *uint
+	Messages     []models.Message
+	HasMore      bool
+	NextBeforeID *uint
 }
 
 func (s *Service) ListMessagesPage(

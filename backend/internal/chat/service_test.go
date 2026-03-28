@@ -1182,12 +1182,12 @@ func createStoredAttachment(t *testing.T, db *gorm.DB, userID uint, attachment m
 	t.Helper()
 
 	storedAttachment := models.StoredAttachment{
-		ID:         attachment.ID,
-		UserID:     userID,
-		Name:       attachment.Name,
-		MIMEType:   attachment.MIMEType,
-		Size:       attachment.Size,
-		StorageKey: fmt.Sprintf("attachment-%s", attachment.ID),
+		ID:            attachment.ID,
+		UserID:        userID,
+		Name:          attachment.Name,
+		MIMEType:      attachment.MIMEType,
+		Size:          attachment.Size,
+		StorageKey:    fmt.Sprintf("attachment-%s", attachment.ID),
 		ExtractedText: attachment.Name,
 	}
 	if err := db.Create(&storedAttachment).Error; err != nil {

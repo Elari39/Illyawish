@@ -1,6 +1,7 @@
 import {
   fetchOrThrow,
   notifyUnauthorized,
+  shouldNotifyUnauthorized,
   toApiError,
 } from './http'
 
@@ -18,7 +19,7 @@ export async function streamSSE(
 
   if (!response.ok) {
     const apiError = await toApiError(response)
-    if (response.status === 401 && typeof window !== 'undefined') {
+    if (response.status === 401 && shouldNotifyUnauthorized(apiError.code)) {
       notifyUnauthorized(apiError.code)
     }
 

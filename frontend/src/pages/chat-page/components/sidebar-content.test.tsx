@@ -403,6 +403,22 @@ describe('SidebarContent desktop actions', () => {
     expect(screen.queryByRole('menuitem', { name: 'Pin' })).not.toBeInTheDocument()
   })
 
+  it('closes the desktop menu when clicking outside the trigger and menu', () => {
+    const { conversations } = renderSidebarContent('desktop')
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+
+    expect(screen.getByRole('menu')).toBeInTheDocument()
+
+    fireEvent.mouseDown(document.body)
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
   it('closes the desktop menu when the desktop sidebar collapses', () => {
     const conversations = [
       createConversation(1, 'First desktop chat'),
@@ -455,6 +471,32 @@ describe('SidebarContent desktop actions', () => {
     )
 
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('renders a collapsed desktop variant without search controls and keeps logout accessible', () => {
+    const handlers = createHandlers()
+
+    render(
+      <TestProviders>
+        <SidebarContent
+          collapsed
+          variant="desktop"
+          currentConversationId={1}
+          conversations={[createConversation(1, 'Collapsed chat')]}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.queryByPlaceholderText('Search conversations')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })
 
   it('opens upward when the measured menu would overflow below the scroll container', () => {

@@ -156,6 +156,40 @@ describe('streamSSE', () => {
       code: 'session_expired',
     })
   })
+
+  it('does not notify unauthorized listeners for unrelated 401 response codes', async () => {
+    const unauthorizedSpy = vi.fn()
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, unauthorizedSpy)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'provider rejected the stream',
+            code: 'provider_auth_failed',
+          }),
+          {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        ),
+      ),
+    )
+
+    await expect(
+      streamSSE('/api/test', {}, async () => {}),
+    ).rejects.toMatchObject({
+      message: 'provider rejected the stream',
+      status: 401,
+      code: 'provider_auth_failed',
+    })
+
+    expect(unauthorizedSpy).not.toHaveBeenCalled()
+    window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, unauthorizedSpy)
+  })
 })
 
 function createStreamResponse(chunks: Uint8Array[], init: ResponseInit) {
