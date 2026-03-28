@@ -31,7 +31,7 @@ function createConversation(
 }
 
 describe('applyConversationSync', () => {
-  it('preserves an already visible conversation even when local metadata does not match the search term', () => {
+  it('keeps an already visible conversation when search may match message content', () => {
     const existingConversation = createConversation(11, 'Alpha')
 
     const result = applyConversationSync(
@@ -48,6 +48,63 @@ describe('applyConversationSync', () => {
 
     expect(result.conversations.map((conversation) => conversation.id)).toEqual([11])
     expect(result.totalDelta).toBe(0)
+    expect(result.loadedDelta).toBe(0)
+  })
+
+  it('does not insert a not-yet-visible conversation during search from partial local metadata', () => {
+    const result = applyConversationSync(
+      [],
+      createConversation(12, 'Alpha', {
+        folder: 'alpha',
+      }),
+      {
+        showArchived: false,
+        search: 'alpha',
+      },
+    )
+
+    expect(result.conversations).toEqual([])
+    expect(result.totalDelta).toBe(0)
+    expect(result.loadedDelta).toBe(0)
+  })
+
+  it('increments both total and loaded counts when an existing conversation becomes visible locally', () => {
+    const result = applyConversationSync(
+      [],
+      createConversation(13, 'Alpha', {
+        folder: 'alpha',
+      }),
+      {
+        showArchived: false,
+        search: '',
+      },
+      {
+        updateCountsForVisibilityChange: true,
+      },
+    )
+
+    expect(result.conversations.map((conversation) => conversation.id)).toEqual([13])
+    expect(result.totalDelta).toBe(1)
+    expect(result.loadedDelta).toBe(1)
+  })
+
+  it('keeps loaded count unchanged for a newly created local conversation', () => {
+    const result = applyConversationSync(
+      [],
+      createConversation(14, 'Alpha', {
+        folder: 'alpha',
+      }),
+      {
+        showArchived: false,
+        search: '',
+      },
+      {
+        countAsNew: true,
+      },
+    )
+
+    expect(result.conversations.map((conversation) => conversation.id)).toEqual([14])
+    expect(result.totalDelta).toBe(1)
     expect(result.loadedDelta).toBe(0)
   })
 })

@@ -16,7 +16,10 @@ interface UseChatSettingsStateOptions {
   activeConversationId: number | null
   currentConversation: Conversation | null
   setChatError: (value: string | null) => void
-  syncConversationIntoList: (conversation: Conversation) => void
+  syncConversationIntoList: (
+    conversation: Conversation,
+    options?: { updateCountsForVisibilityChange?: boolean },
+  ) => void
   t: I18nContextValue['t']
 }
 

@@ -17,6 +17,27 @@ const wrapper = ({ children }: { children: ReactNode }) => (
   <I18nProvider>{children}</I18nProvider>
 )
 
+function createConversation(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    title: `Conversation ${id}`,
+    isPinned: false,
+    isArchived: false,
+    folder: '',
+    tags: [] as string[],
+    settings: {
+      systemPrompt: 'You are a helpful assistant.',
+      model: '',
+      temperature: 1,
+      maxTokens: null,
+      contextWindowTurns: null,
+    },
+    createdAt: '2026-03-26T00:00:00Z',
+    updatedAt: '2026-03-27T00:00:00Z',
+    ...overrides,
+  }
+}
+
 describe('useConversationList', () => {
   beforeEach(() => {
     listConversationsPageMock.mockReset()
@@ -156,6 +177,109 @@ describe('useConversationList', () => {
         offset: 0,
       })
     })
+  })
+
+  it('keeps a visible conversation during search when local metadata no longer matches', async () => {
+    listConversationsPageMock.mockResolvedValue({
+      conversations: [
+        createConversation(7, {
+          title: 'Alpha project',
+          folder: 'alpha',
+        }),
+      ],
+      total: 1,
+    })
+    const onError = vi.fn()
+    const navigateToConversation = vi.fn()
+
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: null,
+          onError,
+          navigateToConversation,
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.conversations).toHaveLength(1)
+    })
+
+    act(() => {
+      result.current.setConversationSearch('alpha')
+    })
+
+    await waitFor(() => {
+      expect(listConversationsPageMock).toHaveBeenCalledWith({
+        search: 'alpha',
+        archived: false,
+        limit: 20,
+        offset: 0,
+      })
+    })
+
+    act(() => {
+      result.current.syncConversationIntoList(createConversation(7, {
+        title: 'Beta project',
+        folder: 'beta',
+      }))
+    })
+
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([7])
+    expect(result.current.hasMoreConversations).toBe(false)
+  })
+
+  it('does not insert a newly matching conversation from partial local metadata during search', async () => {
+    listConversationsPageMock.mockResolvedValue({
+      conversations: [
+        createConversation(1, {
+          title: 'Alpha one',
+          folder: 'alpha',
+        }),
+      ],
+      total: 2,
+    })
+    const onError = vi.fn()
+    const navigateToConversation = vi.fn()
+
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: null,
+          onError,
+          navigateToConversation,
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.conversations).toHaveLength(1)
+    })
+
+    act(() => {
+      result.current.setConversationSearch('alpha')
+    })
+
+    await waitFor(() => {
+      expect(listConversationsPageMock).toHaveBeenCalledWith({
+        search: 'alpha',
+        archived: false,
+        limit: 20,
+        offset: 0,
+      })
+    })
+
+    act(() => {
+      result.current.syncConversationIntoList(createConversation(2, {
+        title: 'Alpha two',
+        folder: 'alpha',
+        updatedAt: '2026-03-28T00:00:00Z',
+      }))
+    })
+
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([1])
+    expect(result.current.hasMoreConversations).toBe(true)
   })
 
   it('restores the last conversation only once when it is still available', async () => {
@@ -306,7 +430,7 @@ describe('useConversationList', () => {
     expect(result.current.hasMoreConversations).toBe(false)
   })
 
-  it('keeps a locally inserted active conversation when an older fetch resolves later', async () => {
+  it('ignores an older fetch after syncing a local active conversation', async () => {
     let resolveListRequest: ((value: {
       conversations: Array<{
         id: number
@@ -394,7 +518,65 @@ describe('useConversationList', () => {
     })
 
     await waitFor(() => {
-      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99, 1])
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([99])
+    })
+  })
+
+  it('keeps a locally updated non-active conversation when an older fetch resolves later', async () => {
+    let resolveListRequest: ((value: {
+      conversations: Array<ReturnType<typeof createConversation>>
+      total: number
+    }) => void) | null = null
+
+    listConversationsPageMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveListRequest = resolve
+        }),
+    )
+
+    const onError = vi.fn()
+    const navigateToConversation = vi.fn()
+
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: 1,
+          onError,
+          navigateToConversation,
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.syncConversationIntoList(createConversation(2, {
+        title: 'Fresh title',
+        updatedAt: '2026-03-28T00:00:00Z',
+      }))
+    })
+
+    await waitFor(() => {
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual([2])
+    })
+
+    await act(async () => {
+      resolveListRequest?.({
+        conversations: [
+          createConversation(2, {
+            title: 'Stale title',
+            updatedAt: '2026-03-26T00:00:00Z',
+          }),
+          createConversation(1, {
+            title: 'Active chat',
+            updatedAt: '2026-03-25T00:00:00Z',
+          }),
+        ],
+        total: 2,
+      })
+    })
+
+    await waitFor(() => {
+      expect(result.current.conversations.find((conversation) => conversation.id === 2)?.title).toBe('Fresh title')
     })
   })
 

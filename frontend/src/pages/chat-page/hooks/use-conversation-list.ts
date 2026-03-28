@@ -36,6 +36,11 @@ export function useConversationList({
   onError,
   navigateToConversation,
 }: UseConversationListOptions) {
+  interface SyncConversationOptions {
+    updateCountsForVisibilityChange?: boolean
+    invalidateRequests?: boolean
+  }
+
   const { t } = useI18n()
   const [state, dispatch] = useReducer(
     conversationListReducer,
@@ -273,9 +278,13 @@ export function useConversationList({
   )
 
   const syncConversationIntoList = useCallback(
-    (conversation: Conversation) => {
+    (
+      conversation: Conversation,
+      options: SyncConversationOptions = {},
+    ) => {
       applyConversationMutation(
         (previous) => {
+          const wasVisible = previous.some((item) => item.id === conversation.id)
           const result = applyConversationSync(
             previous,
             conversation,
@@ -283,9 +292,43 @@ export function useConversationList({
               showArchived: stateRef.current.showArchived,
               search: deferredConversationSearch,
             },
+            {
+              updateCountsForVisibilityChange:
+                options.updateCountsForVisibilityChange ?? true,
+            },
           )
+          const isVisible = result.conversations.some(
+            (item) => item.id === conversation.id,
+          )
+          const countsShouldTrackVisibilityChange =
+            !wasVisible &&
+            isVisible &&
+            (options.updateCountsForVisibilityChange ?? true)
 
           if (!localOnlyConversationIdsRef.current.has(conversation.id)) {
+            if (!countsShouldTrackVisibilityChange) {
+              return result
+            }
+
+            if (conversation.id === activeConversationIdRef.current) {
+              return {
+                ...result,
+                totalDelta: 0,
+                loadedDelta: 0,
+              }
+            }
+
+            if (
+              stateRef.current.loadedConversationCount <
+              stateRef.current.conversationTotal
+            ) {
+              return {
+                ...result,
+                totalDelta: 0,
+                loadedDelta: 1,
+              }
+            }
+
             return result
           }
 
@@ -299,7 +342,7 @@ export function useConversationList({
           }
         },
         {
-          invalidateRequests: false,
+          invalidateRequests: options.invalidateRequests ?? true,
         },
       )
     },

@@ -84,15 +84,45 @@ export function applyConversationSync(
   filter: ConversationFilter,
   options: {
     countAsNew?: boolean
+    updateCountsForVisibilityChange?: boolean
+    allowInsertionWhenSearching?: boolean
   } = {},
 ): ConversationMutationResult {
   const previousConversations = conversations.filter(
     (item) => item.id !== conversation.id,
   )
   const wasVisible = previousConversations.length !== conversations.length
+  const normalizedSearch = filter.search.trim()
   const matchesLocalFilters = matchesConversationFilters(conversation, filter)
+  const matchesArchiveFilter = conversation.isArchived === filter.showArchived
 
-  if (conversation.isArchived !== filter.showArchived) {
+  if (normalizedSearch !== '') {
+    if (!matchesArchiveFilter) {
+      return {
+        conversations: sortConversations(previousConversations),
+        totalDelta: wasVisible ? -1 : 0,
+        loadedDelta: wasVisible ? -1 : 0,
+      }
+    }
+
+    if (wasVisible) {
+      return {
+        conversations: sortConversations([conversation, ...previousConversations]),
+        totalDelta: 0,
+        loadedDelta: 0,
+      }
+    }
+
+    if (!options.allowInsertionWhenSearching) {
+      return {
+        conversations: sortConversations(previousConversations),
+        totalDelta: 0,
+        loadedDelta: 0,
+      }
+    }
+  }
+
+  if (!matchesLocalFilters) {
     return {
       conversations: sortConversations(previousConversations),
       totalDelta: wasVisible ? -1 : 0,
@@ -108,18 +138,19 @@ export function applyConversationSync(
     }
   }
 
-  if (!matchesLocalFilters) {
-    return {
-      conversations: sortConversations(previousConversations),
-      totalDelta: 0,
-      loadedDelta: 0,
-    }
-  }
-
   return {
     conversations: sortConversations([conversation, ...previousConversations]),
-    totalDelta: !wasVisible && options.countAsNew ? 1 : 0,
-    loadedDelta: 0,
+    totalDelta:
+      !wasVisible &&
+      (options.countAsNew || options.updateCountsForVisibilityChange)
+        ? 1
+        : 0,
+    loadedDelta:
+      !wasVisible &&
+      !options.countAsNew &&
+      options.updateCountsForVisibilityChange
+        ? 1
+        : 0,
   }
 }
 

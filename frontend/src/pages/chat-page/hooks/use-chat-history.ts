@@ -23,7 +23,10 @@ interface UseChatHistoryOptions {
   search: string
   showArchived: boolean
   setChatError: (value: string | null) => void
-  syncConversationIntoList: (conversation: Conversation) => void
+  syncConversationIntoList: (
+    conversation: Conversation,
+    options?: { updateCountsForVisibilityChange?: boolean },
+  ) => void
   navigateHome: (replace?: boolean) => void
   setSkipAutoResume: (value: boolean) => void
   t: I18nContextValue['t']
@@ -115,6 +118,7 @@ export function useChatHistory({
   ) => {
     syncConversationIntoListRef.current(
       resolveConversationForList(response.conversation),
+      { updateCountsForVisibilityChange: false },
     )
     setPendingConversation(response.conversation)
     if (replaceMessages) {
@@ -251,6 +255,7 @@ export function useChatHistory({
       setPendingConversation(response.conversation)
       syncConversationIntoListRef.current(
         resolveConversationForList(response.conversation),
+        { updateCountsForVisibilityChange: false },
       )
       setHasMoreMessages(response.pagination?.hasMore ?? false)
       setNextBeforeMessageId(response.pagination?.nextBeforeId ?? null)

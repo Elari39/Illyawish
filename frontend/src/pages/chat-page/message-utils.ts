@@ -1,10 +1,24 @@
 import type { Attachment, Message } from '../../types/chat'
 
-export function appendToStreamingMessage(messages: Message[], content: string) {
+interface StreamingMessageTarget {
+  conversationId: number
+  placeholderId: number
+  messageId: number | null
+}
+
+export function appendToStreamingMessage(
+  messages: Message[],
+  target: StreamingMessageTarget,
+  content: string,
+) {
   const nextMessages = [...messages]
   for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
     const candidate = nextMessages[index]
-    if (candidate.role === 'assistant' && candidate.status === 'streaming') {
+    if (
+      candidate.role === 'assistant' &&
+      candidate.status === 'streaming' &&
+      isSameMessage(candidate, target)
+    ) {
       nextMessages[index] = {
         ...candidate,
         content: candidate.content + content,
@@ -18,11 +32,11 @@ export function appendToStreamingMessage(messages: Message[], content: string) {
 export function upsertMessage(
   messages: Message[],
   message: Message,
-  placeholderId: number,
+  target: StreamingMessageTarget,
 ) {
   let replaced = false
   const nextMessages = messages.map((item) => {
-    if (item.id === placeholderId || item.id === message.id) {
+    if (isSameMessage(item, target) || item.id === message.id) {
       replaced = true
       return message
     }
@@ -33,14 +47,15 @@ export function upsertMessage(
 }
 
 export function isSameMessage(
-  left: Message,
-  right: Message | undefined,
-  placeholderId: number,
+  message: Message,
+  target: StreamingMessageTarget,
 ) {
-  if (!right) {
-    return left.id === placeholderId
+  if (message.conversationId !== target.conversationId) {
+    return false
   }
-  return left.id === right.id || left.id === placeholderId
+
+  return message.id === target.placeholderId ||
+    (target.messageId != null && message.id === target.messageId)
 }
 
 export function dedupeMessages(messages: Message[]) {

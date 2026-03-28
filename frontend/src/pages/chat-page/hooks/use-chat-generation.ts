@@ -195,20 +195,49 @@ export function useChatGeneration({
     }
   }
 
-  function handleStreamEvent(event: StreamEvent, placeholderId: number) {
+  function buildMessageTarget(
+    conversationId: number,
+    placeholderId: number,
+  ) {
+    const activeGeneration = activeGenerationRef.current
+    return {
+      conversationId,
+      placeholderId,
+      messageId:
+        activeGeneration?.conversationId === conversationId
+          ? activeGeneration.messageId
+          : null,
+    }
+  }
+
+  function handleStreamEventForConversation(
+    event: StreamEvent,
+    conversationId: number | null,
+    placeholderId: number,
+  ) {
+    if (!conversationId) {
+      return
+    }
+
     const eventMessage = event.message
     syncGenerationMessageId(placeholderId, eventMessage)
+    if (activeConversationIdRef.current !== conversationId) {
+      return
+    }
+
+    const target = buildMessageTarget(conversationId, placeholderId)
 
     if (event.type === 'message_start' && eventMessage) {
       setMessages((previous) =>
-        upsertMessage(previous, eventMessage, placeholderId),
+        upsertMessage(previous, eventMessage, target),
       )
       return
     }
 
     if (event.type === 'delta' && typeof event.content === 'string') {
+      const deltaContent = event.content
       setMessages((previous) =>
-        appendToStreamingMessage(previous, event.content!),
+        appendToStreamingMessage(previous, target, deltaContent),
       )
       return
     }
@@ -222,7 +251,7 @@ export function useChatGeneration({
       }
       setMessages((previous) =>
         previous.map((message) =>
-          isSameMessage(message, eventMessage, placeholderId)
+          isSameMessage(message, target)
             ? eventMessage
             : message,
         ),
@@ -234,7 +263,7 @@ export function useChatGeneration({
       setChatError(event.error ?? t('error.streamingFailed'))
       setMessages((previous) =>
         previous.map((message) => {
-          if (isSameMessage(message, eventMessage, placeholderId)) {
+          if (isSameMessage(message, target)) {
             return {
               ...(eventMessage ?? message),
               content:
@@ -327,7 +356,11 @@ export function useChatGeneration({
           options: conversationSettings,
         },
         async (eventData) => {
-          handleStreamEvent(eventData, optimisticAssistantId)
+          handleStreamEventForConversation(
+            eventData,
+            conversationId,
+            optimisticAssistantId,
+          )
         },
         generation.controller.signal,
       )
@@ -418,7 +451,11 @@ export function useChatGeneration({
           options: resolveSavedGenerationSettings(),
         },
         async (eventData) => {
-          handleStreamEvent(eventData, optimisticAssistantId)
+          handleStreamEventForConversation(
+            eventData,
+            conversationId,
+            optimisticAssistantId,
+          )
         },
         generation.controller.signal,
       )
@@ -488,7 +525,11 @@ export function useChatGeneration({
         message.id,
         resolveSavedGenerationSettings(),
         async (eventData) => {
-          handleStreamEvent(eventData, message.id)
+          handleStreamEventForConversation(
+            eventData,
+            message.conversationId,
+            message.id,
+          )
         },
         generation.controller.signal,
       )
@@ -558,7 +599,11 @@ export function useChatGeneration({
         message.id,
         resolveSavedGenerationSettings(),
         async (eventData) => {
-          handleStreamEvent(eventData, message.id)
+          handleStreamEventForConversation(
+            eventData,
+            message.conversationId,
+            message.id,
+          )
         },
         generation.controller.signal,
       )

@@ -230,4 +230,58 @@ describe('useChatGeneration saved settings behavior', () => {
       expect.any(AbortSignal),
     )
   })
+
+  it('ignores stream events after the user switches to another conversation', async () => {
+    const activeConversationIdRef = { current: 7 }
+    const setMessages = vi.fn()
+    const initialOptions = createOptions({
+      composerValue: 'First message',
+      activeConversationId: 7,
+      currentConversation: createConversation(7),
+      activeConversationIdRef,
+      setMessages,
+    })
+
+    const { result, rerender } = renderHook(
+      (options: ReturnType<typeof createOptions>) => useChatGeneration(options),
+      { initialProps: initialOptions },
+    )
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+
+    setMessages.mockClear()
+    activeConversationIdRef.current = 9
+    rerender(createOptions({
+      composerValue: 'First message',
+      activeConversationId: 9,
+      currentConversation: createConversation(9),
+      activeConversationIdRef,
+      setMessages,
+    }))
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'delta',
+        content: 'late chunk',
+      })
+    })
+
+    expect(setMessages).not.toHaveBeenCalled()
+  })
 })
+
+type MessageStreamEvent = {
+  type: 'message_start' | 'delta' | 'done' | 'cancelled' | 'error'
+  content?: string
+  message?: Message
+  error?: string
+}

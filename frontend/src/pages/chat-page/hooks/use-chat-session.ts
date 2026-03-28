@@ -19,7 +19,10 @@ interface UseChatSessionOptions {
   showToast: (message: string, variant?: ToastVariant) => void
   insertCreatedConversation: (conversation: Conversation) => void
   removeConversationFromList: (conversationId: number) => void
-  syncConversationIntoList: (conversation: Conversation) => void
+  syncConversationIntoList: (
+    conversation: Conversation,
+    options?: { updateCountsForVisibilityChange?: boolean },
+  ) => void
   loadConversations: (options?: { append?: boolean }) => Promise<void>
   navigateToConversation: (conversationId: number, replace?: boolean) => void
   navigateHome: (replace?: boolean) => void

@@ -18,7 +18,7 @@ const t: I18nContextValue['t'] = (key, values) =>
   formatMessage(enUSMessages[key], values)
 
 describe('chat page utils', () => {
-  it('appends deltas to the latest streaming assistant message', () => {
+  it('appends deltas only to the targeted streaming assistant message', () => {
     const result = appendToStreamingMessage(
       [
         {
@@ -30,11 +30,26 @@ describe('chat page utils', () => {
           status: 'streaming',
           createdAt: '2026-03-26T00:00:00Z',
         },
+        {
+          id: 2,
+          conversationId: 2,
+          role: 'assistant',
+          content: 'Other',
+          attachments: [],
+          status: 'streaming',
+          createdAt: '2026-03-26T00:00:00Z',
+        },
       ],
+      {
+        conversationId: 1,
+        placeholderId: 1,
+        messageId: null,
+      },
       ' world',
     )
 
     expect(result[0]?.content).toBe('Hello world')
+    expect(result[1]?.content).toBe('Other')
   })
 
   it('replaces a placeholder message when the real streamed message arrives', () => {
@@ -59,7 +74,11 @@ describe('chat page utils', () => {
         status: 'completed',
         createdAt: '2026-03-26T00:00:01Z',
       },
-      -1,
+      {
+        conversationId: 1,
+        placeholderId: -1,
+        messageId: null,
+      },
     )
 
     expect(result).toEqual([
