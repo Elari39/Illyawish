@@ -28,15 +28,15 @@ type Attachment struct {
 }
 
 type StoredAttachment struct {
-	ID         string `gorm:"primaryKey;size:64"`
-	UserID     uint   `gorm:"index;not null"`
-	Name       string `gorm:"size:255;not null"`
-	MIMEType   string `gorm:"size:128;not null"`
-	Size       int64  `gorm:"not null"`
-	StorageKey string `gorm:"size:255;not null;uniqueIndex"`
+	ID            string `gorm:"primaryKey;size:64"`
+	UserID        uint   `gorm:"index;not null"`
+	Name          string `gorm:"size:255;not null"`
+	MIMEType      string `gorm:"size:128;not null"`
+	Size          int64  `gorm:"not null"`
+	StorageKey    string `gorm:"size:255;not null;uniqueIndex"`
 	ExtractedText string `gorm:"type:text;not null;default:''"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type User struct {
@@ -46,7 +46,7 @@ type User struct {
 	Role                      string `gorm:"size:32;not null;default:member"`
 	Status                    string `gorm:"size:32;not null;default:active"`
 	LastLoginAt               *time.Time
-	SessionVersion            uint `gorm:"not null;default:1"`
+	SessionVersion            uint   `gorm:"not null;default:1"`
 	GlobalPrompt              string `gorm:"type:text;not null;default:''"`
 	DefaultModel              string `gorm:"size:128;not null;default:''"`
 	DefaultTemperature        *float32
@@ -64,15 +64,15 @@ type User struct {
 }
 
 type Conversation struct {
-	ID                 uint   `gorm:"primaryKey"`
-	UserID             uint   `gorm:"not null;index:idx_conversations_user_view,priority:1"`
-	Title              string `gorm:"size:255;not null;default:New chat"`
-	IsPinned           bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
-	IsArchived         bool   `gorm:"not null;default:false;index:idx_conversations_user_view,priority:2"`
-	Folder             string `gorm:"size:120;not null;default:''"`
+	ID                 uint     `gorm:"primaryKey"`
+	UserID             uint     `gorm:"not null;index:idx_conversations_user_view,priority:1"`
+	Title              string   `gorm:"size:255;not null;default:New chat"`
+	IsPinned           bool     `gorm:"not null;default:false;index:idx_conversations_user_view,priority:3"`
+	IsArchived         bool     `gorm:"not null;default:false;index:idx_conversations_user_view,priority:2"`
+	Folder             string   `gorm:"size:120;not null;default:''"`
 	Tags               []string `gorm:"serializer:json;type:text"`
-	SystemPrompt       string `gorm:"type:text;not null;default:''"`
-	Model              string `gorm:"size:128;not null;default:''"`
+	SystemPrompt       string   `gorm:"type:text;not null;default:''"`
+	Model              string   `gorm:"size:128;not null;default:''"`
 	Temperature        *float32
 	MaxTokens          *int
 	ContextWindowTurns *int
@@ -118,21 +118,22 @@ type LLMProviderPreset struct {
 type AuditLog struct {
 	ID            uint `gorm:"primaryKey"`
 	ActorID       *uint
-	ActorUsername string `gorm:"size:64;not null;default:''"`
-	Action        string `gorm:"size:80;not null;index"`
-	TargetType    string `gorm:"size:80;not null;index"`
-	TargetID      string `gorm:"size:120;not null;default:''"`
-	TargetName    string `gorm:"size:255;not null;default:''"`
-	Summary       string `gorm:"type:text;not null;default:''"`
+	ActorUsername string    `gorm:"size:64;not null;default:''"`
+	Action        string    `gorm:"size:80;not null;index"`
+	TargetType    string    `gorm:"size:80;not null;index"`
+	TargetID      string    `gorm:"size:120;not null;default:''"`
+	TargetName    string    `gorm:"size:255;not null;default:''"`
+	Summary       string    `gorm:"type:text;not null;default:''"`
 	CreatedAt     time.Time `gorm:"index"`
 }
 
 type WorkspacePolicy struct {
-	ID                              uint `gorm:"primaryKey"`
+	ID                              uint   `gorm:"primaryKey"`
 	DefaultUserRole                 string `gorm:"size:32;not null;default:member"`
 	DefaultUserMaxConversations     *int
 	DefaultUserMaxAttachmentsPerMsg *int
 	DefaultUserDailyMessageLimit    *int
+	AttachmentRetentionDays         int `gorm:"not null;default:30"`
 	CreatedAt                       time.Time
 	UpdatedAt                       time.Time
 }

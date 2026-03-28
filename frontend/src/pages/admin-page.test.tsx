@@ -43,6 +43,7 @@ const workspacePolicy: WorkspacePolicy = {
   defaultUserMaxConversations: 20,
   defaultUserMaxAttachmentsPerMessage: 4,
   defaultUserDailyMessageLimit: 100,
+  attachmentRetentionDays: 30,
 }
 
 const usageStats = {
@@ -107,6 +108,7 @@ describe('AdminPage', () => {
     vi.spyOn(adminApi, 'updateUser').mockResolvedValue(users[0])
     vi.spyOn(adminApi, 'updateWorkspacePolicy').mockResolvedValue(workspacePolicy)
     vi.spyOn(adminApi, 'resetUserPassword').mockResolvedValue(users[0])
+    vi.spyOn(adminApi, 'purgeAttachments').mockResolvedValue({ deletedCount: 1 })
   })
 
   it('renders localized admin content and updates immediately when the locale changes', async () => {
@@ -213,6 +215,61 @@ describe('AdminPage', () => {
         limit: 100,
         offset: 0,
       })
+    })
+  })
+
+  it('saves attachment retention days from the attachments tab', async () => {
+    const updateWorkspacePolicySpy = vi.spyOn(adminApi, 'updateWorkspacePolicy')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    fireEvent.change(screen.getByLabelText('Attachment retention (days)'), {
+      target: { value: '45' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save attachment policy' }))
+
+    await waitFor(() => {
+      expect(updateWorkspacePolicySpy).toHaveBeenLastCalledWith({
+        defaultUserRole: 'member',
+        defaultUserMaxConversations: 20,
+        defaultUserMaxAttachmentsPerMessage: 4,
+        defaultUserDailyMessageLimit: 100,
+        attachmentRetentionDays: 45,
+      })
+    })
+  })
+
+  it('purges attachments for one user and the whole workspace through confirmations', async () => {
+    const purgeAttachmentsSpy = vi.spyOn(adminApi, 'purgeAttachments')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete aria attachments' }))
+
+    let dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Delete all attachments uploaded by aria. This cannot be undone.')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete attachments' }))
+
+    await waitFor(() => {
+      expect(purgeAttachmentsSpy).toHaveBeenCalledWith({
+        scope: 'user',
+        userId: 1,
+      })
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete all attachments' }))
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Delete every stored attachment for all users. This will break historical attachment links.')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete all attachments' }))
+
+    await waitFor(() => {
+      expect(purgeAttachmentsSpy).toHaveBeenCalledWith({ scope: 'all' })
     })
   })
 })

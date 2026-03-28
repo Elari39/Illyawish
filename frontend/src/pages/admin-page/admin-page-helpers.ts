@@ -6,7 +6,7 @@ import type {
   CreateUserPayload,
 } from '../../types/chat'
 
-export type AdminTab = 'users' | 'audit' | 'policy'
+export type AdminTab = 'users' | 'audit' | 'policy' | 'attachments'
 
 export interface AuditFilters {
   actor: string

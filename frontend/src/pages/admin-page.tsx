@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/auth/use-auth'
 import { Button } from '../components/ui/button'
 import { useI18n } from '../i18n/use-i18n'
+import { ConfirmationDialog } from './chat-page/components/confirmation-dialog'
 import { PromptDialog } from './chat-page/components/prompt-dialog'
-import type { PromptState } from './chat-page/types'
+import type { ConfirmationState, PromptState } from './chat-page/types'
 import type { AdminUser } from '../types/chat'
 import { type AdminTab } from './admin-page/admin-page-helpers'
+import { AdminAttachmentsTab } from './admin-page/components/admin-attachments-tab'
 import { AdminAuditTab } from './admin-page/components/admin-audit-tab'
 import { AdminPolicyTab } from './admin-page/components/admin-policy-tab'
 import { AdminStatsPanel } from './admin-page/components/admin-stats-panel'
@@ -45,6 +47,7 @@ export function AdminPage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [resetPasswordPrompt, setResetPasswordPrompt] = useState<PromptState | null>(null)
+  const [confirmation, setConfirmation] = useState<ConfirmationState | null>(null)
 
   const canManageUsers = user?.role === 'admin'
   const data = useAdminPageData({
@@ -67,6 +70,38 @@ export function AdminPage() {
   async function handleLogout() {
     await logout()
     navigate('/login', { replace: true })
+  }
+
+  function handlePurgeUser(userToPurge: AdminUser) {
+    setConfirmation({
+      title: t('admin.attachments.confirmUserTitle', { username: userToPurge.username }),
+      description: t('admin.attachments.confirmUserDescription', { username: userToPurge.username }),
+      confirmLabel: t('admin.attachments.confirmDelete'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await data.handlePurgeAttachments({
+          scope: 'user',
+          userId: userToPurge.id,
+        })
+        setInfo(t('admin.feedback.attachmentsDeletedForUser', {
+          username: userToPurge.username,
+          count: result.deletedCount,
+        }))
+      },
+    })
+  }
+
+  function handlePurgeAll() {
+    setConfirmation({
+      title: t('admin.attachments.confirmAllTitle'),
+      description: t('admin.attachments.confirmAllDescription'),
+      confirmLabel: t('admin.attachments.deleteAll'),
+      variant: 'danger',
+      onConfirm: async () => {
+        const result = await data.handlePurgeAttachments({ scope: 'all' })
+        setInfo(t('admin.feedback.attachmentsDeletedAll', { count: result.deletedCount }))
+      },
+    })
   }
 
   if (!canManageUsers) {
@@ -118,6 +153,11 @@ export function AdminPage() {
               active={activeTab === 'policy'}
               label={t('admin.tabs.policy')}
               onClick={() => setActiveTab('policy')}
+            />
+            <AdminTabButton
+              active={activeTab === 'attachments'}
+              label={t('admin.tabs.attachments')}
+              onClick={() => setActiveTab('attachments')}
             />
           </div>
 
@@ -182,8 +222,26 @@ export function AdminPage() {
               onSavePolicy={data.handleSavePolicy}
             />
           ) : null}
+
+          {!data.isLoading && activeTab === 'attachments' && data.workspacePolicy ? (
+            <AdminAttachmentsTab
+              workspacePolicy={data.workspacePolicy}
+              usageStats={data.usageStats}
+              users={data.sortedUsers}
+              isSavingPolicy={data.isSavingPolicy}
+              t={t}
+              setWorkspacePolicy={data.setWorkspacePolicy}
+              onSavePolicy={data.handleSavePolicy}
+              onPurgeUser={handlePurgeUser}
+              onPurgeAll={handlePurgeAll}
+            />
+          ) : null}
         </div>
       </main>
+      <ConfirmationDialog
+        confirmation={confirmation}
+        onClose={() => setConfirmation(null)}
+      />
       <PromptDialog
         onClose={() => setResetPasswordPrompt(null)}
         promptState={resetPasswordPrompt}

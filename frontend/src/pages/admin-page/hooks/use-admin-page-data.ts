@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { I18nContextValue } from '../../../i18n/context'
 import { adminApi } from '../../../lib/api'
 import type {
+  AttachmentPurgePayload,
   AdminUsageStats,
   AdminUser,
   AuditLog,
@@ -180,6 +181,7 @@ export function useAdminPageData({
         defaultUserMaxConversations: parseNullableNumber(workspacePolicy.defaultUserMaxConversations),
         defaultUserMaxAttachmentsPerMessage: parseNullableNumber(workspacePolicy.defaultUserMaxAttachmentsPerMessage),
         defaultUserDailyMessageLimit: parseNullableNumber(workspacePolicy.defaultUserDailyMessageLimit),
+        attachmentRetentionDays: Number(workspacePolicy.attachmentRetentionDays),
       })
       setWorkspacePolicy(nextPolicy)
       setInfo(t('admin.feedback.policyUpdated'))
@@ -229,6 +231,20 @@ export function useAdminPageData({
     }
   }
 
+  async function refreshUsageStats() {
+    const nextUsageStats = await adminApi.getUsageStats()
+    setUsageStats(nextUsageStats)
+  }
+
+  async function handlePurgeAttachments(payload: AttachmentPurgePayload) {
+    setError(null)
+    setInfo(null)
+
+    const result = await adminApi.purgeAttachments(payload)
+    await refreshUsageStats()
+    return result
+  }
+
   return {
     users,
     sortedUsers,
@@ -252,6 +268,7 @@ export function useAdminPageData({
     handleSaveUser,
     handleResetUserPassword,
     handleSavePolicy,
+    handlePurgeAttachments,
     handleApplyAuditFilters,
     handleResetAuditFilters,
   }

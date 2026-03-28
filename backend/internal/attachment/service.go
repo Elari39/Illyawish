@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"backend/internal/config"
 	"backend/internal/llm"
@@ -112,12 +113,12 @@ func (s *Service) SaveUpload(userID uint, fileHeader *multipart.FileHeader) (*mo
 	}
 
 	record := &models.StoredAttachment{
-		ID:         attachmentID,
-		UserID:     userID,
-		Name:       strings.TrimSpace(fileHeader.Filename),
-		MIMEType:   mimeType,
-		Size:       int64(len(payload)),
-		StorageKey: storageKey,
+		ID:            attachmentID,
+		UserID:        userID,
+		Name:          strings.TrimSpace(fileHeader.Filename),
+		MIMEType:      mimeType,
+		Size:          int64(len(payload)),
+		StorageKey:    storageKey,
 		ExtractedText: truncateAttachmentText(extractedText),
 	}
 	if record.Name == "" {
@@ -262,6 +263,50 @@ func (s *Service) CleanupUnreferenced(attachments []models.Attachment) error {
 	return nil
 }
 
+func (s *Service) DeleteExpiredUnreferenced(retentionDays int, now time.Time) (int, error) {
+	if retentionDays < 1 {
+		return 0, requestError{message: "attachment retention days must be greater than 0"}
+	}
+
+	var records []models.StoredAttachment
+	cutoff := now.UTC().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	if err := s.db.
+		Where("created_at < ?", cutoff).
+		Order("created_at asc").
+		Find(&records).Error; err != nil {
+		return 0, fmt.Errorf("list expired attachments: %w", err)
+	}
+
+	attachmentIDs := make([]string, 0, len(records))
+	for _, record := range records {
+		count, err := s.referenceCount(record.ID)
+		if err != nil {
+			return 0, err
+		}
+		if count == 0 {
+			attachmentIDs = append(attachmentIDs, record.ID)
+		}
+	}
+
+	return s.deleteAttachmentsByID(attachmentIDs)
+}
+
+func (s *Service) DeleteAllForUser(userID uint) (int, error) {
+	var records []models.StoredAttachment
+	if err := s.db.Where("user_id = ?", userID).Order("created_at asc").Find(&records).Error; err != nil {
+		return 0, fmt.Errorf("list user attachments: %w", err)
+	}
+	return s.deleteStoredAttachments(records)
+}
+
+func (s *Service) DeleteAll() (int, error) {
+	var records []models.StoredAttachment
+	if err := s.db.Order("created_at asc").Find(&records).Error; err != nil {
+		return 0, fmt.Errorf("list attachments: %w", err)
+	}
+	return s.deleteStoredAttachments(records)
+}
+
 func (s *Service) getForUser(userID uint, attachmentID string) (*models.StoredAttachment, error) {
 	var record models.StoredAttachment
 	if err := s.db.Where("id = ? AND user_id = ?", attachmentID, userID).First(&record).Error; err != nil {
@@ -272,6 +317,50 @@ func (s *Service) getForUser(userID uint, attachmentID string) (*models.StoredAt
 	}
 
 	return &record, nil
+}
+
+func (s *Service) deleteAttachmentsByID(attachmentIDs []string) (int, error) {
+	if len(attachmentIDs) == 0 {
+		return 0, nil
+	}
+
+	var records []models.StoredAttachment
+	if err := s.db.Where("id IN ?", attachmentIDs).Order("created_at asc").Find(&records).Error; err != nil {
+		return 0, fmt.Errorf("load attachments for delete: %w", err)
+	}
+	return s.deleteStoredAttachments(records)
+}
+
+func (s *Service) deleteStoredAttachments(records []models.StoredAttachment) (int, error) {
+	if len(records) == 0 {
+		return 0, nil
+	}
+
+	attachmentIDs := make([]string, 0, len(records))
+	paths := make([]string, 0, len(records))
+	for _, record := range records {
+		attachmentIDs = append(attachmentIDs, record.ID)
+		paths = append(paths, filepath.Join(s.uploadDir, record.StorageKey))
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("attachment_id IN ?", attachmentIDs).Delete(&models.MessageAttachment{}).Error; err != nil {
+			return fmt.Errorf("delete attachment links: %w", err)
+		}
+		if err := tx.Where("id IN ?", attachmentIDs).Delete(&models.StoredAttachment{}).Error; err != nil {
+			return fmt.Errorf("delete attachment metadata: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return 0, fmt.Errorf("delete attachment file: %w", err)
+		}
+	}
+	return len(records), nil
 }
 
 func (s *Service) getByID(attachmentID string) (*models.StoredAttachment, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"mime/multipart"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -271,6 +272,99 @@ func TestCleanupUnreferencedKeepsSharedAttachmentMetadata(t *testing.T) {
 	}
 }
 
+func TestDeleteExpiredUnreferencedRemovesOnlyExpiredUnreferencedAttachments(t *testing.T) {
+	service, user := newAttachmentTestService(t)
+
+	expiredUnreferenced, expiredUnreferencedPath := saveAttachmentFixture(t, service, user.ID, "expired-unreferenced.txt", "expired unreferenced")
+	expiredReferenced, _ := saveAttachmentFixture(t, service, user.ID, "expired-referenced.txt", "expired referenced")
+	recentUnreferenced, _ := saveAttachmentFixture(t, service, user.ID, "recent-unreferenced.txt", "recent unreferenced")
+
+	expiredAt := time.Now().Add(-40 * 24 * time.Hour).UTC()
+	recentAt := time.Now().Add(-3 * 24 * time.Hour).UTC()
+	if err := service.db.Model(&models.StoredAttachment{}).
+		Where("id IN ?", []string{expiredUnreferenced.ID, expiredReferenced.ID}).
+		Update("created_at", expiredAt).Error; err != nil {
+		t.Fatalf("set expired created_at: %v", err)
+	}
+	if err := service.db.Model(&models.StoredAttachment{}).
+		Where("id = ?", recentUnreferenced.ID).
+		Update("created_at", recentAt).Error; err != nil {
+		t.Fatalf("set recent created_at: %v", err)
+	}
+
+	createAttachmentReference(t, service.db, user.ID, expiredReferenced.ID)
+
+	deletedCount, err := service.DeleteExpiredUnreferenced(30, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("DeleteExpiredUnreferenced() error = %v", err)
+	}
+	if deletedCount != 1 {
+		t.Fatalf("expected 1 deleted attachment, got %d", deletedCount)
+	}
+
+	assertAttachmentMissing(t, service.db, expiredUnreferenced.ID)
+	if _, err := os.Stat(expiredUnreferencedPath); !os.IsNotExist(err) {
+		t.Fatalf("expected expired unreferenced file to be deleted, got err=%v", err)
+	}
+	assertAttachmentExists(t, service.db, expiredReferenced.ID)
+	assertAttachmentExists(t, service.db, recentUnreferenced.ID)
+}
+
+func TestDeleteAllForUserRemovesReferencedAttachments(t *testing.T) {
+	service, user := newAttachmentTestService(t)
+
+	ownedAttachment, ownedPath := saveAttachmentFixture(t, service, user.ID, "owned.txt", "owned")
+	otherUser := models.User{Username: "other", PasswordHash: "hash"}
+	if err := service.db.Create(&otherUser).Error; err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	otherAttachment, otherPath := saveAttachmentFixture(t, service, otherUser.ID, "other.txt", "other")
+
+	createAttachmentReference(t, service.db, user.ID, ownedAttachment.ID)
+
+	deletedCount, err := service.DeleteAllForUser(user.ID)
+	if err != nil {
+		t.Fatalf("DeleteAllForUser() error = %v", err)
+	}
+	if deletedCount != 1 {
+		t.Fatalf("expected 1 deleted attachment, got %d", deletedCount)
+	}
+
+	assertAttachmentMissing(t, service.db, ownedAttachment.ID)
+	if _, err := os.Stat(ownedPath); !os.IsNotExist(err) {
+		t.Fatalf("expected owned attachment file to be deleted, got err=%v", err)
+	}
+	assertAttachmentExists(t, service.db, otherAttachment.ID)
+	if _, err := os.Stat(otherPath); err != nil {
+		t.Fatalf("expected other attachment file to remain, got err=%v", err)
+	}
+}
+
+func TestDeleteAllRemovesMetadataEvenWhenFilesAreMissing(t *testing.T) {
+	service, user := newAttachmentTestService(t)
+
+	firstAttachment, firstPath := saveAttachmentFixture(t, service, user.ID, "first.txt", "first")
+	secondAttachment, secondPath := saveAttachmentFixture(t, service, user.ID, "second.txt", "second")
+
+	if err := os.Remove(firstPath); err != nil {
+		t.Fatalf("remove first attachment file: %v", err)
+	}
+
+	deletedCount, err := service.DeleteAll()
+	if err != nil {
+		t.Fatalf("DeleteAll() error = %v", err)
+	}
+	if deletedCount != 2 {
+		t.Fatalf("expected 2 deleted attachments, got %d", deletedCount)
+	}
+
+	assertAttachmentMissing(t, service.db, firstAttachment.ID)
+	assertAttachmentMissing(t, service.db, secondAttachment.ID)
+	if _, err := os.Stat(secondPath); !os.IsNotExist(err) {
+		t.Fatalf("expected second attachment file to be deleted, got err=%v", err)
+	}
+}
+
 func newAttachmentTestService(t *testing.T) (*Service, models.User) {
 	t.Helper()
 
@@ -384,4 +478,72 @@ func pdfFixtureBytes(text string) []byte {
 	body.WriteString("%%EOF\n")
 
 	return body.Bytes()
+}
+
+func saveAttachmentFixture(t *testing.T, service *Service, userID uint, filename string, payload any) (*models.Attachment, string) {
+	t.Helper()
+
+	attachment, err := service.SaveUpload(userID, buildMultipartFileHeader(t, filename, payload))
+	if err != nil {
+		t.Fatalf("SaveUpload() error = %v", err)
+	}
+
+	record, err := service.getByID(attachment.ID)
+	if err != nil {
+		t.Fatalf("getByID() error = %v", err)
+	}
+	return attachment, filepath.Join(service.uploadDir, record.StorageKey)
+}
+
+func createAttachmentReference(t *testing.T, db *gorm.DB, userID uint, attachmentID string) {
+	t.Helper()
+
+	conversation := &models.Conversation{
+		UserID: userID,
+		Title:  "Referenced conversation",
+	}
+	if err := db.Create(conversation).Error; err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	message := &models.Message{
+		ConversationID: conversation.ID,
+		Role:           models.RoleUser,
+		Content:        "hello",
+		Status:         models.MessageStatusCompleted,
+	}
+	if err := db.Create(message).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	if err := db.Create(&models.MessageAttachment{
+		MessageID:    message.ID,
+		AttachmentID: attachmentID,
+		Position:     0,
+	}).Error; err != nil {
+		t.Fatalf("create message attachment: %v", err)
+	}
+}
+
+func assertAttachmentMissing(t *testing.T, db *gorm.DB, attachmentID string) {
+	t.Helper()
+
+	var count int64
+	if err := db.Model(&models.StoredAttachment{}).Where("id = ?", attachmentID).Count(&count).Error; err != nil {
+		t.Fatalf("count attachment metadata: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected attachment %s to be deleted", attachmentID)
+	}
+}
+
+func assertAttachmentExists(t *testing.T, db *gorm.DB, attachmentID string) {
+	t.Helper()
+
+	var count int64
+	if err := db.Model(&models.StoredAttachment{}).Where("id = ?", attachmentID).Count(&count).Error; err != nil {
+		t.Fatalf("count attachment metadata: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected attachment %s to exist", attachmentID)
+	}
 }

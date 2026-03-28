@@ -1,4 +1,6 @@
 import type {
+  AttachmentPurgePayload,
+  AttachmentPurgeResult,
   AdminUsageStats,
   AdminUser,
   AuditLog,
@@ -80,6 +82,12 @@ export const adminApi = {
   updateWorkspacePolicy(payload: WorkspacePolicy) {
     return apiRequest<WorkspacePolicy>('/api/admin/workspace-policy', {
       method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+  purgeAttachments(payload: AttachmentPurgePayload) {
+    return apiRequest<AttachmentPurgeResult>('/api/admin/attachments/purge', {
+      method: 'POST',
       body: JSON.stringify(payload),
     })
   },

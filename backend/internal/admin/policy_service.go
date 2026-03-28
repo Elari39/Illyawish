@@ -15,6 +15,9 @@ func (s *Service) GetWorkspacePolicy() (*models.WorkspacePolicy, error) {
 	if strings.TrimSpace(policy.DefaultUserRole) == "" {
 		policy.DefaultUserRole = models.UserRoleMember
 	}
+	if policy.AttachmentRetentionDays <= 0 {
+		policy.AttachmentRetentionDays = 30
+	}
 	return &policy, nil
 }
 
@@ -40,16 +43,22 @@ func (s *Service) UpdateWorkspacePolicy(actor *models.User, input WorkspacePolic
 	if err != nil {
 		return nil, err
 	}
+	retentionDays, err := sanitizeRequiredPositiveInt(input.AttachmentRetentionDays, "attachment retention days")
+	if err != nil {
+		return nil, err
+	}
 
 	policy.DefaultUserRole = role
 	policy.DefaultUserMaxConversations = maxConversations
 	policy.DefaultUserMaxAttachmentsPerMsg = maxAttachments
 	policy.DefaultUserDailyMessageLimit = dailyMessageLimit
+	policy.AttachmentRetentionDays = retentionDays
 	if err := s.db.Model(policy).Updates(map[string]any{
 		"default_user_role":                    policy.DefaultUserRole,
 		"default_user_max_conversations":       policy.DefaultUserMaxConversations,
 		"default_user_max_attachments_per_msg": policy.DefaultUserMaxAttachmentsPerMsg,
 		"default_user_daily_message_limit":     policy.DefaultUserDailyMessageLimit,
+		"attachment_retention_days":            policy.AttachmentRetentionDays,
 	}).Error; err != nil {
 		return nil, fmt.Errorf("update workspace policy: %w", err)
 	}

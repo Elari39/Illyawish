@@ -258,6 +258,51 @@ func TestServiceGetUsageStatsAggregatesWorkspaceState(t *testing.T) {
 	}
 }
 
+func TestGetWorkspacePolicyDefaultsAttachmentRetentionDaysTo30(t *testing.T) {
+	db := newAdminTestDB(t)
+	service := NewService(db, audit.NewService(db))
+
+	policy, err := service.GetWorkspacePolicy()
+	if err != nil {
+		t.Fatalf("GetWorkspacePolicy() error = %v", err)
+	}
+
+	if policy.AttachmentRetentionDays != 30 {
+		t.Fatalf("expected default attachment retention 30 days, got %d", policy.AttachmentRetentionDays)
+	}
+}
+
+func TestUpdateWorkspacePolicyValidatesAndPersistsAttachmentRetentionDays(t *testing.T) {
+	db := newAdminTestDB(t)
+	service := NewService(db, audit.NewService(db))
+	adminUser := createAdminActor(t, db)
+
+	updated, err := service.UpdateWorkspacePolicy(adminUser, WorkspacePolicyInput{
+		DefaultUserRole:                 models.UserRoleMember,
+		DefaultUserMaxConversations:     intPtr(5),
+		DefaultUserMaxAttachmentsPerMsg: intPtr(2),
+		DefaultUserDailyMessageLimit:    intPtr(9),
+		AttachmentRetentionDays:         45,
+	})
+	if err != nil {
+		t.Fatalf("UpdateWorkspacePolicy() error = %v", err)
+	}
+	if updated.AttachmentRetentionDays != 45 {
+		t.Fatalf("expected retention 45 days, got %d", updated.AttachmentRetentionDays)
+	}
+
+	_, err = service.UpdateWorkspacePolicy(adminUser, WorkspacePolicyInput{
+		DefaultUserRole:         models.UserRoleMember,
+		AttachmentRetentionDays: 0,
+	})
+	if err == nil {
+		t.Fatal("expected zero retention days to fail")
+	}
+	if !IsRequestError(err) {
+		t.Fatalf("expected request error, got %v", err)
+	}
+}
+
 func TestAuditListParamsRejectsInvalidLimitAndOffset(t *testing.T) {
 	_, err := auditListParams("", "", "", "", "", 0, 0)
 	if err != nil {
@@ -289,6 +334,7 @@ func newAdminTestDB(t *testing.T) *gorm.DB {
 		&models.WorkspacePolicy{},
 		&models.Conversation{},
 		&models.Message{},
+		&models.MessageAttachment{},
 		&models.StoredAttachment{},
 		&models.LLMProviderPreset{},
 	); err != nil {

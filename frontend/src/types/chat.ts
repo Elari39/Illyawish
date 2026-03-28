@@ -265,4 +265,14 @@ export interface WorkspacePolicy {
   defaultUserMaxConversations: number | null
   defaultUserMaxAttachmentsPerMessage: number | null
   defaultUserDailyMessageLimit: number | null
+  attachmentRetentionDays: number
+}
+
+export interface AttachmentPurgePayload {
+  scope: 'user' | 'all'
+  userId?: number
+}
+
+export interface AttachmentPurgeResult {
+  deletedCount: number
 }

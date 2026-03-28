@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os/signal"
 	"strings"
@@ -27,9 +28,10 @@ import (
 )
 
 type App struct {
-	config *config.Config
-	router *gin.Engine
-	server *http.Server
+	config           *config.Config
+	router           *gin.Engine
+	server           *http.Server
+	attachmentWorker *attachment.RetentionWorker
 }
 
 const (
@@ -78,8 +80,9 @@ func New() (*App, error) {
 	chatHandler := chat.NewHandler(chatService)
 	providerHandler := provider.NewHandler(providerService, auditService)
 	attachmentHandler := attachment.NewHandler(attachmentService)
-	adminService := admin.NewService(db, auditService)
+	adminService := admin.NewService(db, auditService, attachmentService)
 	adminHandler := admin.NewHandler(adminService)
+	attachmentWorker := attachment.NewRetentionWorker(db, attachmentService, log.Default())
 
 	router := gin.New()
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -149,14 +152,16 @@ func New() (*App, error) {
 		adminAPI.GET("/usage-stats", adminHandler.GetUsageStats)
 		adminAPI.GET("/workspace-policy", adminHandler.GetWorkspacePolicy)
 		adminAPI.PATCH("/workspace-policy", limitRequestBody(mediumJSONBodyLimit), adminHandler.UpdateWorkspacePolicy)
+		adminAPI.POST("/attachments/purge", limitRequestBody(smallJSONBodyLimit), adminHandler.PurgeAttachments)
 	}
 
 	server := newHTTPServer(fmt.Sprintf(":%s", cfg.ServerPort), router)
 
 	return &App{
-		config: cfg,
-		router: router,
-		server: server,
+		config:           cfg,
+		router:           router,
+		server:           server,
+		attachmentWorker: attachmentWorker,
 	}, nil
 }
 
@@ -209,6 +214,10 @@ func (a *App) Run() error {
 		syscall.SIGTERM,
 	)
 	defer stop()
+
+	if a.attachmentWorker != nil {
+		a.attachmentWorker.Start(shutdownSignals)
+	}
 
 	serverErrCh := make(chan error, 1)
 	go func() {

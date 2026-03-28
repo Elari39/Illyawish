@@ -3,6 +3,7 @@ package admin
 import (
 	"errors"
 
+	"backend/internal/attachment"
 	"backend/internal/audit"
 
 	"gorm.io/gorm"
@@ -16,8 +17,14 @@ var (
 )
 
 type Service struct {
-	db    *gorm.DB
-	audit *audit.Service
+	db          *gorm.DB
+	audit       *audit.Service
+	attachments attachmentManager
+}
+
+type attachmentManager interface {
+	DeleteAllForUser(userID uint) (int, error)
+	DeleteAll() (int, error)
 }
 
 type UserInput struct {
@@ -47,6 +54,7 @@ type WorkspacePolicyInput struct {
 	DefaultUserMaxConversations     *int   `json:"defaultUserMaxConversations"`
 	DefaultUserMaxAttachmentsPerMsg *int   `json:"defaultUserMaxAttachmentsPerMessage"`
 	DefaultUserDailyMessageLimit    *int   `json:"defaultUserDailyMessageLimit"`
+	AttachmentRetentionDays         int    `json:"attachmentRetentionDays"`
 }
 
 type UsageStats struct {
@@ -67,9 +75,15 @@ type ProviderUsage struct {
 	UserCount int64
 }
 
-func NewService(db *gorm.DB, auditService *audit.Service) *Service {
+func NewService(db *gorm.DB, auditService *audit.Service, attachments ...*attachment.Service) *Service {
+	var attachmentManager attachmentManager
+	if len(attachments) > 0 {
+		attachmentManager = attachments[0]
+	}
+
 	return &Service{
-		db:    db,
-		audit: auditService,
+		db:          db,
+		audit:       auditService,
+		attachments: attachmentManager,
 	}
 }

@@ -204,6 +204,7 @@ export const jaJPMessages = {
     'admin.tabs.users': 'ユーザー',
     'admin.tabs.audit': '監査ログ',
     'admin.tabs.policy': 'ワークスペースポリシー',
+    'admin.tabs.attachments': '添付ファイル',
     'admin.loading': '管理データを読み込み中...',
     'admin.createUserTitle': 'ユーザーを作成',
     'admin.createUserDescription':
@@ -257,6 +258,27 @@ export const jaJPMessages = {
     'admin.policy.defaultMaxConversations': '既定の最大会話数',
     'admin.policy.defaultMaxAttachments': '既定の最大添付数',
     'admin.policy.defaultDailyMessageLimit': '既定の1日メッセージ上限',
+    'admin.attachments.title': '添付ファイル保持',
+    'admin.attachments.description':
+      '未参照の添付ファイルを保持する日数を設定し、必要に応じて手動削除を実行します。',
+    'admin.attachments.retentionDays': '添付ファイル保持日数',
+    'admin.attachments.totalCount': '現在 {{count}} 件の添付ファイルを保存しています。',
+    'admin.attachments.savePolicy': '添付ファイルポリシーを保存',
+    'admin.attachments.userCleanupTitle': 'ユーザー単位で削除',
+    'admin.attachments.userCleanupDescription':
+      '特定ユーザーがアップロードしたすべての添付ファイルを削除します。過去メッセージに紐づくファイルも対象です。',
+    'admin.attachments.deleteUser': '{{username}} の添付ファイルを削除',
+    'admin.attachments.dangerTitle': 'ワークスペース全体の削除',
+    'admin.attachments.dangerDescription':
+      'ワークスペース内の全添付ファイルを削除したい場合にのみ使用してください。',
+    'admin.attachments.deleteAll': 'すべての添付ファイルを削除',
+    'admin.attachments.confirmUserTitle': '{{username}} の添付ファイルを削除',
+    'admin.attachments.confirmUserDescription':
+      '{{username}} がアップロードしたすべての添付ファイルを削除します。この操作は取り消せません。',
+    'admin.attachments.confirmAllTitle': 'すべての添付ファイルを削除',
+    'admin.attachments.confirmAllDescription':
+      'すべてのユーザーの保存済み添付ファイルを削除します。過去メッセージの添付リンクは無効になります。',
+    'admin.attachments.confirmDelete': '添付ファイルを削除',
     'admin.savePolicy': 'ワークスペースポリシーを保存',
     'admin.unlimited': '無制限',
     'admin.field.role': '役割',
@@ -272,6 +294,10 @@ export const jaJPMessages = {
     'admin.feedback.passwordReset':
       '{{username}} のパスワードをリセットしました。',
     'admin.feedback.policyUpdated': 'ワークスペースポリシーを更新しました。',
+    'admin.feedback.attachmentsDeletedForUser':
+      '{{username}} の添付ファイルを {{count}} 件削除しました。',
+    'admin.feedback.attachmentsDeletedAll':
+      'ワークスペース全体で {{count}} 件の添付ファイルを削除しました。',
     'admin.role.admin': '管理者',
     'admin.role.member': 'メンバー',
     'admin.status.active': '有効',

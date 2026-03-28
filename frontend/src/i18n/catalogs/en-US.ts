@@ -203,6 +203,7 @@ export const enUSMessages = {
   'admin.tabs.users': 'Users',
   'admin.tabs.audit': 'Audit Logs',
   'admin.tabs.policy': 'Workspace Policy',
+  'admin.tabs.attachments': 'Attachments',
   'admin.loading': 'Loading admin data...',
   'admin.createUserTitle': 'Create user',
   'admin.createUserDescription':
@@ -256,6 +257,27 @@ export const enUSMessages = {
   'admin.policy.defaultMaxConversations': 'Default max conversations',
   'admin.policy.defaultMaxAttachments': 'Default max attachments',
   'admin.policy.defaultDailyMessageLimit': 'Default daily message limit',
+  'admin.attachments.title': 'Attachment retention',
+  'admin.attachments.description':
+    'Set how long unused attachments stay in storage and trigger manual cleanup when necessary.',
+  'admin.attachments.retentionDays': 'Attachment retention (days)',
+  'admin.attachments.totalCount': 'Currently storing {{count}} attachments.',
+  'admin.attachments.savePolicy': 'Save attachment policy',
+  'admin.attachments.userCleanupTitle': 'Delete by user',
+  'admin.attachments.userCleanupDescription':
+    'Remove every attachment uploaded by a specific user, including files still linked from historical messages.',
+  'admin.attachments.deleteUser': 'Delete {{username}} attachments',
+  'admin.attachments.dangerTitle': 'Workspace-wide cleanup',
+  'admin.attachments.dangerDescription':
+    'Use this only when you want to remove every stored attachment in the workspace.',
+  'admin.attachments.deleteAll': 'Delete all attachments',
+  'admin.attachments.confirmUserTitle': 'Delete {{username}} attachments',
+  'admin.attachments.confirmUserDescription':
+    'Delete all attachments uploaded by {{username}}. This cannot be undone.',
+  'admin.attachments.confirmAllTitle': 'Delete all attachments',
+  'admin.attachments.confirmAllDescription':
+    'Delete every stored attachment for all users. This will break historical attachment links.',
+  'admin.attachments.confirmDelete': 'Delete attachments',
   'admin.savePolicy': 'Save workspace policy',
   'admin.unlimited': 'Unlimited',
   'admin.field.role': 'Role',
@@ -270,6 +292,10 @@ export const enUSMessages = {
   'admin.feedback.userUpdated': 'Updated {{username}}.',
   'admin.feedback.passwordReset': 'Password reset for {{username}}.',
   'admin.feedback.policyUpdated': 'Workspace policy updated.',
+  'admin.feedback.attachmentsDeletedForUser':
+    'Deleted {{count}} attachments for {{username}}.',
+  'admin.feedback.attachmentsDeletedAll':
+    'Deleted {{count}} attachments across the workspace.',
   'admin.role.admin': 'Admin',
   'admin.role.member': 'Member',
   'admin.status.active': 'Active',

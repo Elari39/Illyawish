@@ -87,12 +87,19 @@ func migrateUsersAndWorkspacePolicy(db *gorm.DB) error {
 	}
 	if count == 0 {
 		policy := models.WorkspacePolicy{
-			ID:              1,
-			DefaultUserRole: models.UserRoleMember,
+			ID:                      1,
+			DefaultUserRole:         models.UserRoleMember,
+			AttachmentRetentionDays: 30,
 		}
 		if err := db.Create(&policy).Error; err != nil {
 			return fmt.Errorf("create default workspace policy: %w", err)
 		}
+	}
+
+	if err := db.Model(&models.WorkspacePolicy{}).
+		Where("attachment_retention_days <= 0").
+		Update("attachment_retention_days", 30).Error; err != nil {
+		return fmt.Errorf("backfill workspace attachment retention: %w", err)
 	}
 
 	return nil

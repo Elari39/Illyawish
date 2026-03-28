@@ -47,6 +47,7 @@ type WorkspacePolicyDTO struct {
 	DefaultUserMaxConversations     *int   `json:"defaultUserMaxConversations"`
 	DefaultUserMaxAttachmentsPerMsg *int   `json:"defaultUserMaxAttachmentsPerMessage"`
 	DefaultUserDailyMessageLimit    *int   `json:"defaultUserDailyMessageLimit"`
+	AttachmentRetentionDays         int    `json:"attachmentRetentionDays"`
 }
 
 type UsageStatsDTO struct {
@@ -65,6 +66,15 @@ type ProviderUsageDTO struct {
 	Name      string `json:"name"`
 	BaseURL   string `json:"baseURL"`
 	UserCount int64  `json:"userCount"`
+}
+
+type AttachmentPurgeRequest struct {
+	Scope  string `json:"scope"`
+	UserID *uint  `json:"userId"`
+}
+
+type AttachmentPurgeResponse struct {
+	DeletedCount int `json:"deletedCount"`
 }
 
 func NewHandler(service *Service) *Handler {
@@ -217,6 +227,40 @@ func (h *Handler) UpdateWorkspacePolicy(c *gin.Context) {
 	c.JSON(http.StatusOK, toWorkspacePolicyDTO(policy))
 }
 
+func (h *Handler) PurgeAttachments(c *gin.Context) {
+	actor := auth.CurrentUser(c)
+
+	var req AttachmentPurgeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid attachment purge payload", "code": "validation_failed"})
+		return
+	}
+
+	switch strings.TrimSpace(req.Scope) {
+	case string(AttachmentPurgeScopeUser):
+		if req.UserID == nil || *req.UserID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "userId is required for user scope", "code": "validation_failed"})
+			return
+		}
+
+		deletedCount, _, err := h.service.PurgeAttachmentsForUser(actor, *req.UserID)
+		if err != nil {
+			handleAdminError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, AttachmentPurgeResponse{DeletedCount: deletedCount})
+	case string(AttachmentPurgeScopeAll):
+		deletedCount, err := h.service.PurgeAllAttachments(actor)
+		if err != nil {
+			handleAdminError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, AttachmentPurgeResponse{DeletedCount: deletedCount})
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "scope must be user or all", "code": "validation_failed"})
+	}
+}
+
 func handleAdminError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrUserNotFound):
@@ -334,6 +378,7 @@ func toWorkspacePolicyDTO(policy *models.WorkspacePolicy) WorkspacePolicyDTO {
 		DefaultUserMaxConversations:     cloneInt(policy.DefaultUserMaxConversations),
 		DefaultUserMaxAttachmentsPerMsg: cloneInt(policy.DefaultUserMaxAttachmentsPerMsg),
 		DefaultUserDailyMessageLimit:    cloneInt(policy.DefaultUserDailyMessageLimit),
+		AttachmentRetentionDays:         policy.AttachmentRetentionDays,
 	}
 }
 

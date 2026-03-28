@@ -65,6 +65,13 @@ func sanitizeOptionalPositiveInt(value *int, label string) (*int, error) {
 	return &cloned, nil
 }
 
+func sanitizeRequiredPositiveInt(value int, label string) (int, error) {
+	if value <= 0 {
+		return 0, requestError{message: fmt.Sprintf("%s must be greater than 0", label), code: "validation_failed"}
+	}
+	return value, nil
+}
+
 func coalesceIntPointer(primary *int, fallback *int) *int {
 	if primary != nil {
 		return primary
