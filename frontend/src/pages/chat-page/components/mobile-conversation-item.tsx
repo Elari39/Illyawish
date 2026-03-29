@@ -83,8 +83,8 @@ export function MobileConversationItem({
       className={cn(
         'group relative rounded-xl border transition-[border-color,background-color,box-shadow] duration-200',
         isActive
-          ? 'border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--sidebar-accent)_84%,white)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]'
-          : 'border-transparent hover:border-[var(--line)] hover:bg-white/30',
+          ? 'border-[var(--line-strong)] bg-[var(--sidebar-item-active-bg)] shadow-[var(--sidebar-item-active-shadow)]'
+          : 'border-transparent hover:border-[var(--line)] hover:bg-[var(--hover-bg)]',
         'px-2 py-1.5',
       )}
     >
@@ -112,7 +112,7 @@ export function MobileConversationItem({
                   'mt-0.5 inline-flex h-4 w-4 shrink-0 rounded border',
                   isSelected
                     ? 'border-[var(--brand)] bg-[var(--brand)]'
-                    : 'border-[var(--line-strong)] bg-white',
+                    : 'border-[var(--line-strong)] bg-[var(--surface-strong)]',
                 )}
               />
             ) : null}
@@ -127,7 +127,7 @@ export function MobileConversationItem({
               {folderLabel || visibleTags.length > 0 ? (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {folderLabel ? (
-                    <span className="rounded-full border border-[var(--line)] bg-white/75 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                    <span className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
                       {folderLabel}
                     </span>
                   ) : null}
@@ -140,7 +140,7 @@ export function MobileConversationItem({
                     </span>
                   ))}
                   {hiddenTagCount > 0 ? (
-                    <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                    <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
                       +{hiddenTagCount}
                     </span>
                   ) : null}
@@ -154,8 +154,8 @@ export function MobileConversationItem({
             aria-expanded={isActionsOpen}
             aria-label={isActionsOpen ? hideActionsLabel : moreActionsLabel}
             className={cn(
-              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]',
-              isActionsOpen && 'bg-black/[0.05] text-[var(--foreground)]',
+              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]',
+              isActionsOpen && 'bg-[var(--hover-bg)] text-[var(--foreground)]',
             )}
             disabled={interactionDisabled}
             onClick={(event) => {

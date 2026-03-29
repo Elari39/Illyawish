@@ -6,6 +6,7 @@
 .claude/*
 .superpowers/
 AGENTS.md
+CLAUDE.md
 
 # Frontend dependencies and build output
 frontend/node_modules/
@@ -14,6 +15,21 @@ frontend/dist-ssr/
 coverage/
 .eslintcache
 .vite/
+frontend/.cache/
+frontend/.turbo/
+frontend/.parcel-cache/
+
+# Package manager caches
+.pnpm-store/
+npm-cache/
+yarn-cache/
+
+# Local environment and secret files
+.envrc
+.secrets/
+*.pem
+*.key
+*.crt
 
 # Local databases
 data/
@@ -29,6 +45,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+*.log.*
+*.pid
+*.pid.lock
+*.seed
 
 # Go build/test artifacts
 *.out
@@ -36,15 +56,26 @@ lerna-debug.log*
 coverage.out
 backend/bin/
 backend/tmp/
+tmp/
+temp/
 
 # Local config files
 *.local
+*.local.*
+*.bak
+*.swp
+*.swo
+*~
 
 # Editor and OS files
 .vscode/*
 !.vscode/extensions.json
 .idea/
 .DS_Store
+Thumbs.db
+Desktop.ini
+*.tmp
+*.orig
 *.suo
 *.ntvs*
 *.njsproj

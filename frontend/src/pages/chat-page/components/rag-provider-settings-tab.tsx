@@ -38,7 +38,7 @@ export function RAGProviderSettingsTab({
         </div>
 
         {providerState?.presets.map((preset) => (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-white p-3" key={preset.id}>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] p-3" key={preset.id}>
             <div>
               <p className="text-sm font-medium text-[var(--foreground)]">{preset.name}</p>
               <p className="text-xs text-[var(--muted-foreground)]">

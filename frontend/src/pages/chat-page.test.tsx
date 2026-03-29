@@ -1356,10 +1356,14 @@ describe('ChatPage conversation navigation', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('Knowledge enabled · 2 spaces')).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Knowledge enabled · 2 spaces' }),
+      ).toBeInTheDocument()
     })
     await waitFor(() => {
-      expect(screen.getByText('Workflow enabled · Knowledge Q&A')).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Workflow enabled · Knowledge Q&A' }),
+      ).toBeInTheDocument()
     })
 
     fireEvent.change(screen.getByLabelText('Provider and model'), {

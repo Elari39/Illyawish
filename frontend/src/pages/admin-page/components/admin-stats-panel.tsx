@@ -24,7 +24,7 @@ export function AdminStatsPanel({
   t: I18nContextValue['t']
 }) {
   return (
-    <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+    <section className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold">{t('admin.statsTitle')}</h2>
@@ -64,7 +64,7 @@ export function AdminStatsPanel({
         {usageStats.activeProviderDistribution.length > 0 ? (
           <div className="mt-4 space-y-3">
             {usageStats.activeProviderDistribution.map((item) => (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-white px-4 py-3" key={`${item.name}:${item.baseURL}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3" key={`${item.name}:${item.baseURL}`}>
                 <div>
                   <p className="font-medium text-[var(--foreground)]">{item.name}</p>
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">{item.baseURL}</p>

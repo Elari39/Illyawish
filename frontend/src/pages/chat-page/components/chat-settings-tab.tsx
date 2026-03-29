@@ -213,7 +213,7 @@ export function ChatSettingsTab({
             {t('settings.globalPrompt')}
           </span>
           <Textarea
-            className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+            className="min-h-[160px] rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3"
             placeholder={t('settings.globalPromptPlaceholder')}
             value={chatSettings.globalPrompt}
             onChange={(event) =>
@@ -232,7 +232,7 @@ export function ChatSettingsTab({
             </span>
             <Textarea
               aria-describedby="session-prompt-help"
-              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3"
               placeholder={t('settings.sessionPromptPlaceholder')}
               value={settings.systemPrompt}
               onChange={(event) =>

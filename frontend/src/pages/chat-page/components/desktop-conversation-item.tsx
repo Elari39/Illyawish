@@ -6,6 +6,9 @@ import { formatConversationDate, cn } from '../../../lib/utils'
 import type { Conversation } from '../../../types/chat'
 import { getConversationMonogram } from '../utils'
 
+const menuItemClassName =
+  'flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--menu-hover-bg)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20'
+
 interface DesktopConversationItemProps {
   conversation: Conversation
   collapsed: boolean
@@ -96,10 +99,10 @@ export function DesktopConversationItem({
       className={cn(
         'group relative rounded-xl border transition-[border-color,background-color,box-shadow] duration-200',
         isActive
-          ? 'border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--sidebar-accent)_84%,white)] shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]'
-          : 'border-transparent hover:border-[var(--line)] hover:bg-white/30',
+          ? 'border-[var(--line-strong)] bg-[var(--sidebar-item-active-bg)] shadow-[var(--sidebar-item-active-shadow)]'
+          : 'border-transparent hover:border-[var(--line)] hover:bg-[var(--hover-bg)]',
         isMenuOpen &&
-          'z-10 border-[var(--line-strong)] bg-[color-mix(in_srgb,var(--sidebar-accent)_74%,white)] shadow-[0_10px_24px_rgba(26,26,24,0.08)]',
+          'z-10 border-[var(--line-strong)] bg-[var(--sidebar-item-open-bg)] shadow-[var(--menu-shadow)]',
         collapsed ? 'p-1.5' : 'px-2 py-1.5',
       )}
     >
@@ -116,8 +119,8 @@ export function DesktopConversationItem({
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-xl border text-sm font-semibold',
               isActive
-                ? 'border-[var(--line-strong)] bg-white text-[var(--foreground)]'
-                : 'border-transparent bg-white/60 text-[var(--muted-foreground)]',
+                ? 'border-[var(--line-strong)] bg-[var(--surface-strong)] text-[var(--foreground)]'
+                : 'border-transparent bg-[var(--hover-bg)] text-[var(--muted-foreground)]',
             )}
           >
             {monogram}
@@ -151,7 +154,7 @@ export function DesktopConversationItem({
                     'mt-0.5 inline-flex h-4 w-4 shrink-0 rounded border',
                     isSelected
                       ? 'border-[var(--brand)] bg-[var(--brand)]'
-                      : 'border-[var(--line-strong)] bg-white',
+                      : 'border-[var(--line-strong)] bg-[var(--surface-strong)]',
                   )}
                 />
               ) : null}
@@ -159,7 +162,7 @@ export function DesktopConversationItem({
                 <div
                   className={cn(
                     'truncate text-sm font-medium text-[var(--foreground)] transition-colors',
-                    isMenuOpen && 'text-[color-mix(in_srgb,var(--foreground)_92%,black)]',
+                    isMenuOpen && 'text-[var(--foreground)]',
                   )}
                 >
                   {conversation.isPinned ? pinnedPrefix : ''}
@@ -177,7 +180,7 @@ export function DesktopConversationItem({
                 {folderLabel || visibleTags.length > 0 ? (
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {folderLabel ? (
-                      <span className="rounded-full border border-[var(--line)] bg-white/75 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
+                      <span className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--muted-foreground)]">
                         {folderLabel}
                       </span>
                     ) : null}
@@ -190,7 +193,7 @@ export function DesktopConversationItem({
                       </span>
                     ))}
                     {hiddenTagCount > 0 ? (
-                      <span className="rounded-full bg-white/75 px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+                      <span className="rounded-full bg-[var(--surface-strong)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
                         +{hiddenTagCount}
                       </span>
                     ) : null}
@@ -206,9 +209,9 @@ export function DesktopConversationItem({
               aria-haspopup="menu"
               aria-label={isMenuOpen ? hideActionsLabel : moreActionsLabel}
               className={cn(
-                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-[color-mix(in_srgb,var(--muted-foreground)_92%,var(--foreground)_8%)] transition-all duration-200 hover:border-[var(--line)] hover:bg-white/70 hover:text-[var(--foreground)] focus-visible:border-[var(--line-strong)] focus-visible:bg-white/80 focus-visible:text-[var(--foreground)] focus-visible:opacity-100',
+                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-transparent text-[color-mix(in_srgb,var(--muted-foreground)_92%,var(--foreground)_8%)] transition-all duration-200 hover:border-[var(--line)] hover:bg-[var(--surface-strong)] hover:text-[var(--foreground)] focus-visible:border-[var(--line-strong)] focus-visible:bg-[var(--surface-strong)] focus-visible:text-[var(--foreground)] focus-visible:opacity-100',
                 isMenuOpen
-                  ? 'border-[var(--line)] bg-white/85 text-[var(--foreground)] opacity-100 shadow-[0_6px_16px_rgba(26,26,24,0.08)]'
+                  ? 'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--foreground)] opacity-100 shadow-[var(--shadow-md)]'
                   : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
               )}
               disabled={interactionDisabled}
@@ -232,14 +235,14 @@ export function DesktopConversationItem({
               ref={desktopMenuRef}
               role="menu"
               className={cn(
-                'absolute right-0 z-20 w-[184px] overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--line-strong)_82%,white_18%)] bg-[color-mix(in_srgb,white_88%,var(--app-bg)_12%)] p-2 shadow-[0_18px_40px_rgba(26,26,24,0.16)] backdrop-blur-sm',
+                'absolute right-0 z-20 w-[184px] overflow-hidden rounded-2xl border border-[var(--menu-border)] bg-[var(--menu-bg)] p-2 shadow-[var(--menu-shadow)] backdrop-blur-sm',
                 desktopMenuDirection === 'up'
                   ? 'bottom-full mb-2'
                   : 'top-full mt-2',
               )}
             >
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onMoveConversationToFolder(conversation))
@@ -249,7 +252,7 @@ export function DesktopConversationItem({
                 {moveToFolderLabel}
               </button>
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onAddConversationTags(conversation))
@@ -259,7 +262,7 @@ export function DesktopConversationItem({
                 {addTagsLabel}
               </button>
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onRemoveConversationTags(conversation))
@@ -269,7 +272,7 @@ export function DesktopConversationItem({
                 {removeTagsLabel}
               </button>
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onTogglePinned(conversation))
@@ -279,7 +282,7 @@ export function DesktopConversationItem({
                 {conversation.isPinned ? unpinLabel : pinLabel}
               </button>
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onRenameConversation(conversation))
@@ -289,7 +292,7 @@ export function DesktopConversationItem({
                 {renameLabel}
               </button>
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[color-mix(in_srgb,var(--foreground)_80%,var(--muted-foreground)_20%)] transition-colors hover:bg-[color-mix(in_srgb,var(--sidebar-accent)_54%,white_46%)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/20"
+                className={menuItemClassName}
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onToggleArchivedConversation(conversation))
@@ -300,11 +303,11 @@ export function DesktopConversationItem({
               </button>
               <div
                 aria-orientation="horizontal"
-                className="my-2 h-px bg-[color-mix(in_srgb,var(--line-strong)_60%,white_40%)]"
+                className="my-2 h-px bg-[var(--menu-separator)]"
                 role="separator"
               />
               <button
-                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--danger)_10%,white_90%)] hover:text-[color-mix(in_srgb,var(--danger)_88%,black_12%)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)]/20"
+                className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)]/20"
                 disabled={interactionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onDeleteConversation(conversation.id))

@@ -34,7 +34,7 @@ export function AdminUsersTab({
 }) {
   return (
     <section className="grid gap-6 xl:grid-cols-[0.95fr_1.55fr]">
-      <form className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]" onSubmit={onCreateUser}>
+      <form className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]" onSubmit={onCreateUser}>
         <h2 className="text-xl font-semibold">{t('admin.createUserTitle')}</h2>
         <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
           {t('admin.createUserDescription')}
@@ -61,7 +61,7 @@ export function AdminUsersTab({
         </button>
       </form>
 
-      <div className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <div className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]">
         <h2 className="text-xl font-semibold">{t('admin.usersTitle')}</h2>
         <div className="mt-5 space-y-4">
           {sortedUsers.map((item) => {

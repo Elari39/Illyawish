@@ -75,7 +75,7 @@ export function ExecutionPanelCollapsedSummary({
 
 function SummaryChip({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-[var(--line)] bg-white/80 px-2.5 py-1 text-[11px] font-medium text-[var(--foreground)]">
+    <span className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)]/80 px-2.5 py-1 text-[11px] font-medium text-[var(--foreground)]">
       {label}
     </span>
   )

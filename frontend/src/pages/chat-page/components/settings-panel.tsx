@@ -276,7 +276,7 @@ export function SettingsPanel({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 px-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--overlay-scrim)] px-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose()
@@ -287,7 +287,7 @@ export function SettingsPanel({
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]"
+        className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-lg)]"
         role="dialog"
       >
         <div className="flex items-start justify-between gap-4">
@@ -301,7 +301,7 @@ export function SettingsPanel({
           </div>
           <button
             aria-label={t('common.close')}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-black/5"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)]"
             onClick={onClose}
             ref={closeButtonRef}
             type="button"
@@ -315,7 +315,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'chat'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('chat')}
@@ -327,7 +327,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'provider'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('provider')}
@@ -339,7 +339,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'rag'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('rag')}
@@ -351,7 +351,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'knowledge'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('knowledge')}
@@ -363,7 +363,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'workflow'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('workflow')}
@@ -375,7 +375,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'security'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('security')}
@@ -387,7 +387,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'language'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('language')}
@@ -399,7 +399,7 @@ export function SettingsPanel({
             className={cn(
               'rounded-xl px-4 py-2 text-sm font-medium transition',
               activeTab === 'transfer'
-                ? 'bg-white text-[var(--foreground)] shadow-sm'
+                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
                 : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
             )}
             onClick={() => onProviderTabChange('transfer')}

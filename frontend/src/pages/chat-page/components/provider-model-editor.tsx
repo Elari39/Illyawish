@@ -112,7 +112,7 @@ export function ProviderModelEditor({
               ) : null}
             </div>
             <button
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
               onClick={() => {
                 const nextModels = models.filter((_, itemIndex) => itemIndex !== index)
                 updateModels(nextModels)

@@ -52,7 +52,7 @@ export function SidebarContent({
   onLogout,
 }: SidebarContentProps) {
   const { locale, t } = useI18n()
-  const [isFoldersOpen, setIsFoldersOpen] = useState(true)
+  const [isFoldersOpen, setIsFoldersOpen] = useState(false)
   const {
     scrollContainerRef,
     desktopMenuRef,
@@ -91,7 +91,7 @@ export function SidebarContent({
         <div className="space-y-3 px-3 pb-3">
           <div className="flex items-center justify-between gap-2">
             <button
-              className="inline-flex flex-1 items-center gap-2 rounded-xl border border-[var(--line)] bg-white/70 px-3 py-2 text-left text-sm font-medium text-[var(--foreground)] transition hover:bg-white"
+              className="inline-flex flex-1 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-left text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--surface-strong)]"
               onClick={() => setIsFoldersOpen((previous) => !previous)}
               type="button"
             >
@@ -103,7 +103,7 @@ export function SidebarContent({
                 'rounded-xl border px-3 py-2 text-xs font-medium transition',
                 selectionMode
                   ? 'border-[var(--brand)] bg-[var(--brand)] text-white'
-                  : 'border-[var(--line)] bg-white/70 text-[var(--foreground)] hover:bg-white',
+                  : 'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--foreground)] hover:bg-[var(--surface-strong)]',
               )}
               onClick={() => onSetSelectionMode(!selectionMode)}
               type="button"
@@ -113,7 +113,7 @@ export function SidebarContent({
           </div>
 
           {selectionMode ? (
-            <div className="rounded-2xl border border-[var(--line)] bg-white/80 p-3">
+            <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-3">
               <p className="text-sm font-medium text-[var(--foreground)]">
                 {t('sidebar.selectedCount', { count: selectedConversationIds.length })}
               </p>
@@ -147,7 +147,7 @@ export function SidebarContent({
           ) : null}
 
           {isFoldersOpen ? (
-            <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-white/75 p-3">
+            <div className="space-y-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-3">
               <div className="space-y-2">
                 <FolderFilterButton
                   active={selectedFolder == null}

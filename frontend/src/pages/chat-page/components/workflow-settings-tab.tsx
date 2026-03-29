@@ -114,7 +114,7 @@ export function WorkflowSettingsTab({
             <span className="text-sm font-medium text-[var(--foreground)]">{t('workflow.templateLabel')}</span>
             <select
               aria-label={t('workflow.templateLabel')}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-white px-4"
+              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4"
               value={selectedWorkflowPresetId ?? ''}
               onChange={(event) =>
                 setSelectedWorkflowPresetId(event.target.value ? Number(event.target.value) : null)
@@ -139,7 +139,7 @@ export function WorkflowSettingsTab({
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-[var(--line)] bg-white p-4">
+        <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-semibold text-[var(--foreground)]">{t('workflow.savedPresetsTitle')}</h3>
@@ -147,7 +147,7 @@ export function WorkflowSettingsTab({
             </div>
             <button
               aria-label={t('workflow.newPreset')}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
               onClick={resetForm}
               type="button"
             >
@@ -190,7 +190,7 @@ export function WorkflowSettingsTab({
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         aria-label={t('workflow.editPresetAction', { name: preset.name })}
-                        className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:bg-black/[0.04]"
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:bg-[var(--hover-bg)]"
                         onClick={() => beginEditingPreset(preset)}
                         type="button"
                       >
@@ -217,7 +217,7 @@ export function WorkflowSettingsTab({
         </div>
       </div>
 
-      <div className="rounded-[1.75rem] border border-[var(--line)] bg-white p-5">
+      <div className="rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-base font-semibold text-[var(--foreground)]">
@@ -253,7 +253,7 @@ export function WorkflowSettingsTab({
             <span className="text-sm font-medium text-[var(--foreground)]">{t('workflow.templateOptionLabel')}</span>
             <select
               aria-label={t('workflow.templateOptionLabel')}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-white px-4"
+              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4"
               value={effectiveTemplateKey}
               onChange={(event) => setTemplateKey(event.target.value)}
             >

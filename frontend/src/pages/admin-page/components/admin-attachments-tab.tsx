@@ -26,7 +26,7 @@ export function AdminAttachmentsTab({
   return (
     <section className="space-y-6">
       <form
-        className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]"
+        className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]"
         onSubmit={onSavePolicy}
       >
         <h2 className="text-xl font-semibold">{t('admin.attachments.title')}</h2>
@@ -58,7 +58,7 @@ export function AdminAttachmentsTab({
         </button>
       </form>
 
-      <div className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+      <div className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]">
         <h2 className="text-xl font-semibold">{t('admin.attachments.userCleanupTitle')}</h2>
         <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
           {t('admin.attachments.userCleanupDescription')}

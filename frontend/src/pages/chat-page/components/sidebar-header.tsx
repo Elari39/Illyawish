@@ -55,7 +55,7 @@ export function SidebarHeader({
           {appName}
         </span>
         <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
           disabled={interactionDisabled}
           onClick={onCreateChat}
           title={newChatLabel}

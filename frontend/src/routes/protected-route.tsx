@@ -9,7 +9,7 @@ function BackendUnavailableNotice() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-6">
-      <div className="max-w-xl rounded-3xl border border-[var(--danger)]/20 bg-white px-6 py-5 text-center shadow-[var(--shadow-md)]">
+      <div className="max-w-xl rounded-3xl border border-[var(--danger)]/20 bg-[var(--surface-strong)] px-6 py-5 text-center shadow-[var(--shadow-md)]">
         <p className="text-base text-[var(--danger)]">{t('error.backendUnavailable')}</p>
       </div>
     </div>
@@ -24,7 +24,7 @@ export function ProtectedRoute({ requiredRole }: { requiredRole?: 'admin' | 'mem
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)]">
-        <div className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm text-[var(--muted-foreground)] shadow-sm backdrop-blur">
+        <div className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-2 text-sm text-[var(--muted-foreground)] shadow-sm backdrop-blur">
           {t('app.loadingWorkspace')}
         </div>
       </div>
@@ -52,7 +52,7 @@ export function PublicOnlyRoute({ children }: { children: ReactElement }) {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)]">
-        <div className="rounded-full border border-[var(--line)] bg-white/80 px-4 py-2 text-sm text-[var(--muted-foreground)] shadow-sm backdrop-blur">
+        <div className="rounded-full border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-2 text-sm text-[var(--muted-foreground)] shadow-sm backdrop-blur">
           {t('app.loading')}
         </div>
       </div>

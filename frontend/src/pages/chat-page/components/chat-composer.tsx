@@ -4,6 +4,7 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
+  type ReactNode,
   type RefObject,
 } from 'react'
 import { FileText, Paperclip, SendHorizonal, Square, X } from 'lucide-react'
@@ -30,6 +31,7 @@ interface ChatComposerProps {
   isSending: boolean
   chatError: string | null
   composerIsComposingRef: MutableRefObject<boolean>
+  contextBar?: ReactNode
   onComposerChange: (value: string) => void
   onCancelEdit: () => void
   onStopGeneration: () => void
@@ -49,6 +51,7 @@ export function ChatComposer({
   isSending,
   chatError,
   composerIsComposingRef,
+  contextBar,
   onComposerChange,
   onCancelEdit,
   onStopGeneration,
@@ -106,7 +109,7 @@ export function ChatComposer({
     <footer className="border-t border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 md:px-8 md:py-4">
       <div className="mx-auto max-w-3xl space-y-3">
         {editingMessageId ? (
-          <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-white px-4 py-3 text-sm text-[var(--muted-foreground)]">
+          <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
             <span>{t('chat.editingBanner')}</span>
             <Button onClick={onCancelEdit} variant="ghost">
               {t('common.cancel')}
@@ -120,7 +123,7 @@ export function ChatComposer({
               <div
                 key={attachment.id}
                 className={cn(
-                  'relative overflow-hidden rounded-xl border border-[var(--line)] bg-white',
+                  'relative overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]',
                   isImageAttachment(attachment)
                     ? 'p-1'
                     : 'flex w-full max-w-xs items-center gap-3 px-4 py-3',
@@ -169,7 +172,7 @@ export function ChatComposer({
 
         <form
           className={cn(
-            'rounded-2xl border border-[var(--line)] bg-white px-3 py-2.5 shadow-[var(--shadow-md)] transition-colors md:px-4 md:py-3',
+            'rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2.5 shadow-[var(--shadow-md)] transition-colors md:px-4 md:py-3',
             isDragActive && 'border-[var(--brand)] bg-[var(--brand)]/[0.04]',
           )}
           ref={composerFormRef}
@@ -224,15 +227,18 @@ export function ChatComposer({
             value={composerValue}
           />
           <div className="flex items-center justify-between border-t border-[var(--line)] px-1 pt-1.5">
-            <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
-              onClick={handleOpenImagePicker}
-              type="button"
-              title={t('chat.attachFile')}
-              aria-label={t('chat.attachFile')}
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
+                onClick={handleOpenImagePicker}
+                type="button"
+                title={t('chat.attachFile')}
+                aria-label={t('chat.attachFile')}
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+              {contextBar}
+            </div>
 
             <p className="px-3 text-xs text-[var(--muted-foreground)]">
               {hasPendingUploads ? t('common.loading') : t('chat.shortcutHint')}

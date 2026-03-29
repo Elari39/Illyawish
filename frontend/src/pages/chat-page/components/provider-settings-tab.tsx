@@ -107,7 +107,7 @@ export function ProviderSettingsTab({
             </div>
             <button
               aria-label={t('settings.createProviderPreset')}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--line)] text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
               onClick={onStartNewProvider}
               title={t('settings.createProviderPreset')}
               type="button"
@@ -129,7 +129,7 @@ export function ProviderSettingsTab({
                     'rounded-2xl border px-4 py-4 transition',
                     editingProviderId === preset.id
                       ? 'border-[var(--brand)]/40 bg-[var(--brand)]/[0.04]'
-                      : 'border-[var(--line)] bg-white hover:bg-black/[0.02]',
+                      : 'border-[var(--line)] bg-[var(--surface-strong)] hover:bg-[var(--hover-bg)]',
                   )}
                   key={preset.id}
                 >
@@ -168,7 +168,7 @@ export function ProviderSettingsTab({
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
-                      className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:bg-black/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition hover:bg-[var(--hover-bg)] disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={preset.isActive || isSavingProvider}
                       onClick={() => onActivateProvider(preset.id)}
                       type="button"
@@ -216,7 +216,7 @@ export function ProviderSettingsTab({
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-[var(--line)] bg-white p-5">
+        <div className="rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="text-base font-semibold text-[var(--foreground)]">

@@ -58,7 +58,7 @@ export function PromptDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay-scrim)] px-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
           onClose()
@@ -68,7 +68,7 @@ export function PromptDialog({
       <div
         aria-labelledby={titleId}
         aria-modal="true"
-        className="w-full max-w-md rounded-[1.75rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-lg)]"
+        className="w-full max-w-md rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-lg)]"
         role="dialog"
       >
         <h3 className="text-lg font-semibold text-[var(--foreground)]" id={titleId}>

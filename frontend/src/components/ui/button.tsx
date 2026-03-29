@@ -12,9 +12,9 @@ const variantClassName: Record<ButtonVariant, string> = {
   primary:
     'bg-[var(--brand)] text-white shadow-sm hover:bg-[var(--brand-strong)] active:scale-[0.98]',
   secondary:
-    'border border-[var(--line)] bg-transparent text-[var(--foreground)] hover:bg-black/[0.04]',
+    'border border-[var(--line)] bg-transparent text-[var(--foreground)] hover:bg-[var(--hover-bg)]',
   ghost:
-    'text-[var(--muted-foreground)] hover:bg-black/5 hover:text-[var(--foreground)]',
+    'text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]',
   danger:
     'border border-transparent bg-[var(--danger)] text-white hover:opacity-90',
 }

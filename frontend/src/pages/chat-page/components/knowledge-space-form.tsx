@@ -49,7 +49,7 @@ export function KnowledgeSpaceForm({
         <span className="text-sm font-medium text-[var(--foreground)]">{t('knowledge.spaceDescription')}</span>
         <Textarea
           aria-label={t('knowledge.spaceDescription')}
-          className="min-h-[120px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+          className="min-h-[120px] rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3"
           placeholder={t('knowledge.spaceDescriptionPlaceholder')}
           value={spaceDescription}
           onChange={(event) => onSpaceDescriptionChange(event.target.value)}

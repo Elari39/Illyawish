@@ -41,7 +41,7 @@ export function MobileSidebar({
     <div
       aria-hidden={!isOpen}
       className={cn(
-        'pointer-events-none fixed inset-0 z-30 bg-black/25 opacity-0 transition md:hidden',
+        'pointer-events-none fixed inset-0 z-30 bg-[var(--overlay-scrim)] opacity-0 transition md:hidden',
         isOpen && 'pointer-events-auto opacity-100',
       )}
     >

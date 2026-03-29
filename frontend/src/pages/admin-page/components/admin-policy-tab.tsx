@@ -17,7 +17,7 @@ export function AdminPolicyTab({
   onSavePolicy: (event: React.FormEvent<HTMLFormElement>) => Promise<void>
 }) {
   return (
-    <form className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]" onSubmit={onSavePolicy}>
+    <form className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]" onSubmit={onSavePolicy}>
       <h2 className="text-xl font-semibold">{t('admin.policyTitle')}</h2>
       <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
         {t('admin.policyDescription')}

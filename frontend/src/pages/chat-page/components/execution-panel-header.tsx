@@ -27,7 +27,7 @@ export function ExecutionPanelHeader({ model }: ExecutionPanelHeaderProps) {
 
   return (
     <header className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(18rem,1fr)]">
-      <div className="rounded-[1.35rem] border border-[var(--line)] bg-white/90 p-4">
+      <div className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--surface-strong)]/90 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] text-[var(--foreground)]">
             <Sparkles className="h-4 w-4" />
@@ -118,7 +118,7 @@ function SummaryMetric({
   value: string
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-white px-3 py-3">
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-3">
       <dt className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]">{label}</dt>
       <dd className="mt-2 text-lg font-semibold text-[var(--foreground)]">{value}</dd>
     </div>

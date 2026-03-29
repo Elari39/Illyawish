@@ -1,5 +1,6 @@
 import { LogOut } from 'lucide-react'
 
+import { ThemeToggle } from '../../../components/theme-toggle'
 import { cn } from '../../../lib/utils'
 
 interface SidebarUserFooterProps {
@@ -25,8 +26,9 @@ export function SidebarUserFooter({
           >
             {username[0]?.toUpperCase() ?? 'U'}
           </div>
+          <ThemeToggle className="h-9 w-9" />
           <button
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
             onClick={onLogout}
             title={signOutLabel}
             type="button"
@@ -43,8 +45,9 @@ export function SidebarUserFooter({
           <span className="flex-1 truncate text-sm font-medium text-[var(--foreground)]">
             {username}
           </span>
+          <ThemeToggle className="h-7 w-7 shrink-0" />
           <button
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)]"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
             onClick={onLogout}
             title={signOutLabel}
             type="button"

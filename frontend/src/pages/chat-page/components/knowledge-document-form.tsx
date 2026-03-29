@@ -76,7 +76,7 @@ export function KnowledgeDocumentForm({
         <span className="text-sm font-medium text-[var(--foreground)]">{t('knowledge.documentSpace')}</span>
         <select
           aria-label={t('knowledge.documentSpace')}
-          className="h-11 w-full rounded-xl border border-[var(--line)] bg-white px-4"
+          className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4"
           value={documentSpaceId ?? ''}
           onChange={(event) => onDocumentSpaceIdChange(event.target.value ? Number(event.target.value) : null)}
         >
@@ -122,7 +122,7 @@ export function KnowledgeDocumentForm({
           <span className="text-sm font-medium text-[var(--foreground)]">{t('knowledge.documentContent')}</span>
           <Textarea
             aria-label={t('knowledge.documentContent')}
-            className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+            className="min-h-[160px] rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3"
             placeholder={t('knowledge.textContentPlaceholder')}
             value={content}
             onChange={(event) => onContentChange(event.target.value)}
@@ -145,7 +145,7 @@ export function KnowledgeDocumentForm({
             <span className="text-sm font-medium text-[var(--foreground)]">{t('knowledge.documentContentOptional')}</span>
             <Textarea
               aria-label={t('knowledge.documentContentOptional')}
-              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-white px-4 py-3"
+              className="min-h-[160px] rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3"
               placeholder={t('knowledge.urlContentPlaceholder')}
               value={content}
               onChange={(event) => onContentChange(event.target.value)}
@@ -180,7 +180,7 @@ export function KnowledgeDocumentForm({
             <p className="text-xs text-[var(--muted-foreground)]">{replacementFile.name}</p>
           ) : null}
           {!isEditing && attachmentFiles.length > 0 ? (
-            <div className="rounded-xl border border-[var(--line)] bg-white px-3 py-2">
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2">
               <p className="text-xs font-medium text-[var(--foreground)]">{t('knowledge.selectedFiles')}</p>
               <div className="mt-2 grid gap-1">
                 {attachmentFiles.map((file) => (

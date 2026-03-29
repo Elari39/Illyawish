@@ -112,7 +112,7 @@ export function AdminPage() {
     <>
       <main className="min-h-screen bg-[var(--app-bg)] px-4 py-6 text-[var(--foreground)] md:px-8">
         <div className="mx-auto max-w-7xl space-y-6">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-[2rem] border border-[var(--line)] bg-white px-5 py-5 shadow-[var(--shadow-md)]">
+          <header className="flex flex-wrap items-center justify-between gap-3 rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] px-5 py-5 shadow-[var(--shadow-md)]">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
                 <Shield className="h-5 w-5" />
@@ -138,7 +138,7 @@ export function AdminPage() {
             </div>
           </header>
 
-          <div className="inline-flex rounded-2xl border border-[var(--line)] bg-white p-1 shadow-sm">
+          <div className="inline-flex rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-1 shadow-sm">
             <AdminTabButton
               active={activeTab === 'users'}
               label={t('admin.tabs.users')}
@@ -167,13 +167,13 @@ export function AdminPage() {
             </div>
           ) : null}
           {info ? (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            <div className="rounded-2xl border border-[var(--status-completed-border)] bg-[var(--status-completed-bg)] px-4 py-3 text-sm text-[var(--status-completed-text)]">
               {info}
             </div>
           ) : null}
 
           {data.isLoading ? (
-            <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+            <section className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]">
               {t('admin.loading')}
             </section>
           ) : null}

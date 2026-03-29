@@ -20,7 +20,7 @@ export function KnowledgeDocumentList({
   const { t } = useI18n()
 
   return (
-    <div className="space-y-2 rounded-xl border border-[var(--line)] bg-white p-3">
+    <div className="space-y-2 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] p-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-[var(--foreground)]">{t('knowledge.documentsTitle')}</p>
         <Button onClick={onRefresh} type="button" variant="ghost">

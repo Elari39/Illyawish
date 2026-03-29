@@ -37,7 +37,7 @@ export function KnowledgeSpaceList({
           knowledgeSpaces.map((space) => {
             const selected = selectedKnowledgeSpaceIds.includes(space.id)
             return (
-              <div className="rounded-xl border border-[var(--line)] bg-white p-3" key={space.id}>
+              <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] p-3" key={space.id}>
                 <label className="flex items-start gap-3">
                   <input
                     checked={selected}

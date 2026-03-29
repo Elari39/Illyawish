@@ -36,7 +36,7 @@ export function ToastViewport({
             toast.variant === 'error' &&
               'border-[var(--danger)]/15 bg-[var(--danger)]/8 text-[var(--foreground)]',
             toast.variant === 'info' &&
-              'border-[var(--line)] bg-white/95 text-[var(--foreground)]',
+              'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--foreground)]',
           )}
           role={toast.variant === 'error' ? 'alert' : 'status'}
         >
@@ -44,7 +44,7 @@ export function ToastViewport({
             <p className="text-sm leading-6">{toast.message}</p>
             <button
               aria-label={t('common.close')}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-black/5"
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)]"
               onClick={() => onDismiss(toast.id)}
               type="button"
             >

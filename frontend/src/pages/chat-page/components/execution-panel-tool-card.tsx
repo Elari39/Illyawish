@@ -19,7 +19,7 @@ export function ExecutionPanelToolCard({
   const { t } = useI18n()
 
   return (
-    <section className="rounded-[1.35rem] border border-[var(--line)] bg-white/90 p-4">
+    <section className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--surface-strong)]/90 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[var(--foreground)]">
@@ -47,12 +47,12 @@ export function ExecutionPanelToolCard({
       ) : null}
 
       {tool.status === 'waiting_confirmation' ? (
-        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/80 p-3">
+        <div className="mt-4 rounded-2xl border border-[var(--status-waiting-border)] bg-[var(--status-waiting-bg)] p-3">
           <div className="flex items-start gap-2">
-            <ShieldAlert className="mt-0.5 h-4 w-4 text-sky-600" />
+            <ShieldAlert className="mt-0.5 h-4 w-4 text-[var(--status-waiting-icon)]" />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-sky-900">{t('executionPanel.confirmationNeeded')}</p>
-              <p className="mt-1 text-sm text-sky-800">
+              <p className="text-sm font-medium text-[var(--status-waiting-text)]">{t('executionPanel.confirmationNeeded')}</p>
+              <p className="mt-1 text-sm text-[var(--status-waiting-text)]">
                 {tool.confirmationLabel || t('executionPanel.confirmationNeeded')}
               </p>
             </div>

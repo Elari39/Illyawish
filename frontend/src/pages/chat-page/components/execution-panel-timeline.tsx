@@ -50,7 +50,7 @@ export function ExecutionPanelTimeline({
                   <span className="mt-1 h-full w-px bg-[var(--line)]" />
                 ) : null}
               </div>
-              <div className="min-w-0 flex-1 rounded-2xl border border-white/70 bg-white/85 px-3 py-3 shadow-[0_1px_0_rgba(15,23,42,0.04)]">
+              <div className="min-w-0 flex-1 rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-3 shadow-[var(--shadow-md)]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-sm font-medium text-[var(--foreground)]">
                     {localizeExecutionEventLabel(t, item.type)}

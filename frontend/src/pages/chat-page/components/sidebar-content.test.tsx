@@ -359,6 +359,8 @@ describe('SidebarContent desktop actions', () => {
   it('renders folder navigation and tag filters in the expanded desktop sidebar', () => {
     const { handlers } = renderSidebarContent('desktop')
 
+    fireEvent.click(screen.getByRole('button', { name: 'Folders' }))
+
     expect(screen.getByRole('button', { name: 'All folders' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Unfiled' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Work' })).toBeInTheDocument()
@@ -508,6 +510,46 @@ describe('SidebarContent desktop actions', () => {
     const deleteButton = screen.getByRole('menuitem', { name: 'Delete' })
     expect(deleteButton.className).toContain('text-[var(--danger)]')
     expect(deleteButton.className).not.toContain('bg-[var(--danger)]')
+  })
+
+  it('uses theme menu tokens for the desktop action menu instead of light color mixing', () => {
+    const { conversations } = renderSidebarContent('desktop')
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `More actions for ${conversations[0]!.title}`,
+      }),
+    )
+
+    const menu = screen.getByRole('menu')
+    expect(menu.className).toContain('bg-[var(--menu-bg)]')
+    expect(menu.className).toContain('border-[var(--menu-border)]')
+    expect(menu.className).toContain('shadow-[var(--menu-shadow)]')
+    expect(menu.className).not.toContain('white_88%')
+  })
+
+  it('uses theme active-state tokens for desktop and mobile conversation items', () => {
+    const { conversations } = renderSidebarContent('desktop')
+    const desktopConversationButton = screen.getByRole('button', {
+      name: conversations[0]!.title,
+    })
+    const desktopConversationItem = desktopConversationButton.closest('.group')
+
+    expect(desktopConversationItem).not.toBeNull()
+    expect(desktopConversationItem!.className).toContain('bg-[var(--sidebar-item-active-bg)]')
+    expect(desktopConversationItem!.className).toContain('shadow-[var(--sidebar-item-active-shadow)]')
+    expect(desktopConversationItem!.className).not.toContain('white)]')
+
+    renderSidebarContent('mobile')
+    const mobileConversationButton = screen.getAllByRole('button', {
+      name: conversations[0]!.title,
+    }).at(-1)
+    const mobileConversationItem = mobileConversationButton?.closest('.group')
+
+    expect(mobileConversationItem).not.toBeNull()
+    expect(mobileConversationItem!.className).toContain('bg-[var(--sidebar-item-active-bg)]')
+    expect(mobileConversationItem!.className).toContain('shadow-[var(--sidebar-item-active-shadow)]')
+    expect(mobileConversationItem!.className).not.toContain('white)]')
   })
 
   it('keeps the desktop menu open when pressing on the delete icon and deletes on click', () => {

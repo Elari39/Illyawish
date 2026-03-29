@@ -103,7 +103,7 @@ export function LoginPage() {
       </div>
       <div className="mx-auto flex min-h-[calc(100vh-7.5rem)] max-w-6xl items-center">
         <div className="grid w-full gap-8 lg:grid-cols-[1.2fr_0.9fr]">
-          <section className="relative overflow-hidden rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-12">
+          <section className="relative overflow-hidden rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-8 shadow-[var(--shadow-md)] xl:p-12">
             <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[radial-gradient(circle_at_top,rgba(193,95,60,0.08),transparent_60%)] lg:block" />
             <div className="relative max-w-2xl space-y-8">
               <div className="inline-flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--sidebar-bg)] px-4 py-2 text-sm font-medium text-[var(--muted-foreground)]">
@@ -137,7 +137,7 @@ export function LoginPage() {
             </div>
           </section>
 
-          <section className="rounded-[2rem] border border-[var(--line)] bg-white p-8 shadow-[var(--shadow-md)] xl:p-10">
+          <section className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-8 shadow-[var(--shadow-md)] xl:p-10">
             <div className="mb-8 space-y-2">
               <p className="text-sm font-semibold uppercase tracking-[0.28em] text-[var(--brand)]">
                 {bootstrapRequired ? t('login.bootstrapEyebrow') : t('login.signIn')}

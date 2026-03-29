@@ -29,7 +29,7 @@ export function TransferSettingsTab({
     <div className="mt-6 grid gap-4 md:grid-cols-2">
       <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
         <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-white p-3 text-[var(--foreground)] shadow-sm">
+          <div className="rounded-2xl bg-[var(--surface-strong)] p-3 text-[var(--foreground)] shadow-sm">
             <Download className="h-5 w-5" />
           </div>
           <div className="min-w-0">
@@ -58,7 +58,7 @@ export function TransferSettingsTab({
 
       <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
         <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-white p-3 text-[var(--foreground)] shadow-sm">
+          <div className="rounded-2xl bg-[var(--surface-strong)] p-3 text-[var(--foreground)] shadow-sm">
             <Upload className="h-5 w-5" />
           </div>
           <div>

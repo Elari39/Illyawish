@@ -83,7 +83,7 @@ export function MessageBubble({
                   <img
                     key={attachment.id}
                     alt={attachment.name}
-                    className="w-full rounded-xl border border-black/10 object-cover"
+                    className="w-full rounded-xl border border-[var(--line-strong)] object-cover"
                     src={attachment.url}
                   />
                 ))}
@@ -94,7 +94,7 @@ export function MessageBubble({
                 {documentAttachments.map((attachment) => (
                   <a
                     key={attachment.id}
-                    className="flex items-center gap-3 rounded-xl border border-black/10 bg-white/70 px-3 py-2 text-left text-[var(--foreground)] transition hover:bg-white"
+                    className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-left text-[var(--foreground)] transition hover:bg-[var(--surface-strong)]"
                     href={attachment.url}
                     rel="noreferrer"
                     target="_blank"

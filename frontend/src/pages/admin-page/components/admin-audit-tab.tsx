@@ -26,7 +26,7 @@ export function AdminAuditTab({
   onResetFilters: () => Promise<void>
 }) {
   return (
-    <section className="rounded-[2rem] border border-[var(--line)] bg-white p-6 shadow-[var(--shadow-md)]">
+    <section className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold">{t('admin.auditTitle')}</h2>

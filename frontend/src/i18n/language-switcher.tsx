@@ -10,7 +10,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
     <div
       aria-label={t('common.language')}
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 shadow-sm',
+        'inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--surface-strong)] p-1 shadow-sm',
         className,
       )}
       role="group"
@@ -25,7 +25,7 @@ export function LanguageSwitcher({ className }: { className?: string }) {
             'rounded-full px-3 py-1.5 text-xs font-medium transition',
             selectedLocale === value
               ? 'bg-[var(--brand)] text-white'
-              : 'text-[var(--muted-foreground)] hover:bg-black/[0.04] hover:text-[var(--foreground)]',
+              : 'text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]',
             pendingLocale === value ? 'cursor-wait opacity-80' : null,
           )}
           disabled={pendingLocale === value}

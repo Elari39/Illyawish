@@ -16,7 +16,7 @@ export function ExecutionPanelRetrievalCard({
   const { t } = useI18n()
 
   return (
-    <section className="rounded-[1.35rem] border border-[var(--line)] bg-white/90 p-4">
+    <section className="rounded-[1.35rem] border border-[var(--line)] bg-[var(--surface-strong)] p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[var(--foreground)]">
@@ -58,7 +58,7 @@ export function ExecutionPanelRetrievalCard({
             </span>
           ))}
           {retrieval.overflowCitationCount > 0 ? (
-            <span className="rounded-full border border-dashed border-[var(--line)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--muted-foreground)]">
+            <span className="rounded-full border border-dashed border-[var(--line)] bg-[var(--surface-strong)] px-2.5 py-1 text-xs font-medium text-[var(--muted-foreground)]">
               {t('executionPanel.citationOverflow', {
                 count: retrieval.overflowCitationCount,
               })}

@@ -22,6 +22,54 @@
   --user-bubble-foreground: #1a1a18;
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --hover-bg: rgba(0, 0, 0, 0.05);
+  --hover-bg-strong: rgba(0, 0, 0, 0.08);
+  --code-inline-bg: rgba(26, 26, 24, 0.06);
+  --code-inline-border: rgba(0, 0, 0, 0.06);
+  --code-inline-color: #8c3d23;
+  --scrollbar-color: rgba(26, 26, 24, 0.15);
+  --overlay-scrim: rgba(17, 17, 15, 0.32);
+  --menu-bg: #fbfaf6;
+  --menu-border: rgba(0, 0, 0, 0.1);
+  --menu-hover-bg: #efebe3;
+  --menu-separator: rgba(0, 0, 0, 0.08);
+  --menu-shadow: 0 18px 40px rgba(26, 26, 24, 0.16);
+  --sidebar-item-active-bg: #ebe7df;
+  --sidebar-item-active-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  --sidebar-item-open-bg: #e4dfd6;
+  --danger-soft: rgba(192, 57, 43, 0.08);
+
+  /* Status colors — light mode */
+  --status-running-bg: rgba(245, 158, 11, 0.08);
+  --status-running-border: rgba(245, 158, 11, 0.35);
+  --status-running-text: #92400e;
+  --status-running-icon: #d97706;
+  --status-running-dot: #f59e0b;
+
+  --status-completed-bg: rgba(16, 185, 129, 0.08);
+  --status-completed-border: rgba(16, 185, 129, 0.35);
+  --status-completed-text: #065f46;
+  --status-completed-icon: #059669;
+  --status-completed-dot: #10b981;
+
+  --status-waiting-bg: rgba(14, 165, 233, 0.08);
+  --status-waiting-border: rgba(14, 165, 233, 0.35);
+  --status-waiting-text: #0369a1;
+  --status-waiting-icon: #0284c7;
+  --status-waiting-dot: #0ea5e9;
+
+  --status-failed-bg: rgba(244, 63, 94, 0.08);
+  --status-failed-border: rgba(244, 63, 94, 0.35);
+  --status-failed-text: #9f1239;
+  --status-failed-icon: #e11d48;
+  --status-failed-dot: #f43f5e;
+
+  --status-cancelled-bg: rgba(148, 163, 184, 0.08);
+  --status-cancelled-border: rgba(148, 163, 184, 0.3);
+  --status-cancelled-text: #475569;
+  --status-cancelled-icon: #64748b;
+  --status-cancelled-dot: #94a3b8;
+
   font-family: 'Inter', sans-serif;
   color: var(--foreground);
   background: var(--app-bg);
@@ -29,6 +77,77 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #1e1e1c;
+  --app-panel: #212120;
+  --app-panel-strong: #2a2a28;
+  --sidebar-bg: #1a1a18;
+  --sidebar-accent: #2d2d2b;
+  --surface: #212120;
+  --surface-strong: #2a2a28;
+  --foreground: #ececea;
+  --muted-foreground: #6e6c67;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --brand: #d4724d;
+  --brand-strong: #c15f3c;
+  --brand-soft: rgba(193, 95, 60, 0.18);
+  --danger: #e05c4b;
+  --assistant-bubble: transparent;
+  --user-bubble: #2d2d2b;
+  --user-bubble-foreground: #ececea;
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.3);
+  --hover-bg: rgba(255, 255, 255, 0.07);
+  --hover-bg-strong: rgba(255, 255, 255, 0.1);
+  --code-inline-bg: rgba(255, 255, 255, 0.08);
+  --code-inline-border: rgba(255, 255, 255, 0.08);
+  --code-inline-color: #e07a5f;
+  --scrollbar-color: rgba(255, 255, 255, 0.15);
+  --overlay-scrim: rgba(0, 0, 0, 0.5);
+  --menu-bg: #2a2a28;
+  --menu-border: rgba(255, 255, 255, 0.08);
+  --menu-hover-bg: #343432;
+  --menu-separator: rgba(255, 255, 255, 0.08);
+  --menu-shadow: 0 20px 44px rgba(0, 0, 0, 0.42);
+  --sidebar-item-active-bg: #2b2b29;
+  --sidebar-item-active-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --sidebar-item-open-bg: #31312f;
+  --danger-soft: rgba(224, 92, 75, 0.14);
+
+  /* Status colors — dark mode */
+  --status-running-bg: rgba(245, 158, 11, 0.12);
+  --status-running-border: rgba(245, 158, 11, 0.28);
+  --status-running-text: #fbbf24;
+  --status-running-icon: #f59e0b;
+  --status-running-dot: #f59e0b;
+
+  --status-completed-bg: rgba(16, 185, 129, 0.12);
+  --status-completed-border: rgba(16, 185, 129, 0.28);
+  --status-completed-text: #34d399;
+  --status-completed-icon: #10b981;
+  --status-completed-dot: #10b981;
+
+  --status-waiting-bg: rgba(14, 165, 233, 0.12);
+  --status-waiting-border: rgba(14, 165, 233, 0.28);
+  --status-waiting-text: #38bdf8;
+  --status-waiting-icon: #0ea5e9;
+  --status-waiting-dot: #0ea5e9;
+
+  --status-failed-bg: rgba(244, 63, 94, 0.12);
+  --status-failed-border: rgba(244, 63, 94, 0.28);
+  --status-failed-text: #fb7185;
+  --status-failed-icon: #f43f5e;
+  --status-failed-dot: #f43f5e;
+
+  --status-cancelled-bg: rgba(148, 163, 184, 0.08);
+  --status-cancelled-border: rgba(148, 163, 184, 0.15);
+  --status-cancelled-text: #94a3b8;
+  --status-cancelled-icon: #64748b;
+  --status-cancelled-dot: #94a3b8;
 }
 
 * {
@@ -70,7 +189,7 @@ button {
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(26, 26, 24, 0.15);
+  background: var(--scrollbar-color);
   background-clip: padding-box;
 }
 
@@ -110,7 +229,7 @@ button {
 
 .markdown h1 {
   font-size: 1.35rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 0.35rem;
 }
 
@@ -175,14 +294,14 @@ button {
 
 .markdown hr {
   border: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--line);
 }
 
 .markdown img {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--line);
   border-radius: 1rem;
   box-shadow: var(--shadow-md);
 }
@@ -196,12 +315,12 @@ button {
 }
 
 .markdown thead {
-  background: rgba(26, 26, 24, 0.05);
+  background: var(--hover-bg);
 }
 
 .markdown th,
 .markdown td {
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--line);
   padding: 0.72rem 0.85rem;
   text-align: left;
   vertical-align: top;
@@ -212,14 +331,14 @@ button {
 }
 
 .markdown tbody tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.4);
+  background: var(--hover-bg);
 }
 
 .markdown-table-wrap {
   overflow-x: auto;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--line);
   border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--surface-strong);
   box-shadow: var(--shadow-md);
 }
 
@@ -228,10 +347,10 @@ button {
 }
 
 .markdown :not(pre) > code {
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid var(--code-inline-border);
   border-radius: 0.5rem;
-  background: rgba(26, 26, 24, 0.06);
-  color: #8c3d23;
+  background: var(--code-inline-bg);
+  color: var(--code-inline-color);
   padding: 0.16rem 0.42rem;
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.86em;
@@ -240,7 +359,7 @@ button {
 .markdown-code {
   margin: 1rem 0;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--line);
   border-radius: 1.1rem;
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.04), transparent 55%),

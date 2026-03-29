@@ -671,7 +671,7 @@ export function ChatPage() {
       <main className="flex min-w-0 flex-1 flex-col bg-[var(--app-bg)]">
         <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 md:px-8">
           <button
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-black/5 md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] md:hidden"
             onClick={() => uiState.setSidebarOpen(true)}
             type="button"
             aria-label={t('chat.openSidebar')}
@@ -686,7 +686,7 @@ export function ChatPage() {
                 ? t('chat.expandSidebar')
                 : t('chat.collapseSidebar')
             }
-            className="hidden h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-black/5 hover:text-[var(--foreground)] md:inline-flex"
+            className="hidden h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)] md:inline-flex"
             onClick={() =>
               uiState.setIsDesktopSidebarCollapsed((previous) => !previous)
             }
@@ -731,21 +731,6 @@ export function ChatPage() {
           </div>
         </header>
 
-        <ChatContextBar
-          chatSettings={chatSession.chatSettingsDraft}
-          settings={contextBarSettings}
-          providerState={providerSettings.providerState}
-          knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
-          workflowPresetId={contextBarWorkflowPresetId}
-          workflowPresets={agentWorkspace.workflowPresets}
-          knowledgeSpaces={agentWorkspace.knowledgeSpaces}
-          isDisabled={interactionDisabled}
-          onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
-          onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
-          onProviderModelChange={(value) => void handleProviderModelChange(value)}
-          onSetAsDefault={() => void handleSetDefaultProviderModel()}
-        />
-
         <ExecutionPanel
           model={executionPanelModel}
           onConfirmToolCall={chatSession.handleConfirmToolCall}
@@ -787,6 +772,23 @@ export function ChatPage() {
           isSending={chatSession.isSending}
           chatError={chatError}
           composerIsComposingRef={chatSession.composerIsComposingRef}
+          contextBar={
+            <ChatContextBar
+              compact
+              chatSettings={chatSession.chatSettingsDraft}
+              settings={contextBarSettings}
+              providerState={providerSettings.providerState}
+              knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+              workflowPresetId={contextBarWorkflowPresetId}
+              workflowPresets={agentWorkspace.workflowPresets}
+              knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+              isDisabled={interactionDisabled}
+              onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
+              onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
+              onProviderModelChange={(value) => void handleProviderModelChange(value)}
+              onSetAsDefault={() => void handleSetDefaultProviderModel()}
+            />
+          }
           onComposerChange={chatSession.setComposerValue}
           onCancelEdit={chatSession.cancelEditingMessage}
           onStopGeneration={() => void chatSession.handleStopGeneration()}
