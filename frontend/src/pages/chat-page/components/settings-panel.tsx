@@ -41,6 +41,7 @@ interface SettingsPanelProps {
   conversationTags: string
   workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
+  pendingKnowledgeSpaceIds?: number[]
   isLoadingProviders: boolean
   isImporting: boolean
   isOpen: boolean
@@ -62,7 +63,7 @@ interface SettingsPanelProps {
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
   setWorkflowPresetId?: Dispatch<SetStateAction<number | null>>
-  setKnowledgeSpaceIds?: Dispatch<SetStateAction<number[]>>
+  onToggleKnowledgeSpace?: (space: KnowledgeSpace) => void | Promise<void>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   onClose: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
@@ -163,6 +164,7 @@ export function SettingsPanel({
   conversationTags,
   workflowPresetId = null,
   knowledgeSpaceIds = [],
+  pendingKnowledgeSpaceIds = [],
   isLoadingProviders,
   isImporting,
   isOpen,
@@ -184,7 +186,7 @@ export function SettingsPanel({
   setConversationFolder,
   setConversationTags,
   setWorkflowPresetId = () => undefined,
-  setKnowledgeSpaceIds = () => undefined,
+  onToggleKnowledgeSpace = async () => undefined,
   setSettings,
   onClose,
   onDeleteProvider,
@@ -436,9 +438,10 @@ export function SettingsPanel({
             knowledgeDocuments={knowledgeDocuments}
             knowledgeSpaces={knowledgeSpaces}
             loadKnowledgeDocuments={onLoadKnowledgeDocuments}
+            onToggleKnowledgeSpace={onToggleKnowledgeSpace}
+            pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
             replaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
             selectedKnowledgeSpaceIds={knowledgeSpaceIds}
-            setSelectedKnowledgeSpaceIds={setKnowledgeSpaceIds}
             uploadKnowledgeDocuments={onUploadKnowledgeDocuments}
             updateKnowledgeDocument={onUpdateKnowledgeDocument}
             updateKnowledgeSpace={onUpdateKnowledgeSpace}

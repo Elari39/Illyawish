@@ -30,41 +30,45 @@ export function ExecutionPanelCollapsedSummary({
   return (
     <section
       className={cn(
-        'mb-4 rounded-[1.5rem] border px-4 py-3 shadow-sm transition-colors',
+        'rounded-2xl border px-3 py-2.5 transition-colors',
         executionStatusPanelClassName(model.run.status),
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <ExecutionStatusIcon status={model.run.status} />
-            <p className="truncate text-sm font-semibold text-[var(--foreground)]">{templateLabel}</p>
-            <span
-              className={cn(
-                'rounded-full border px-2.5 py-1 text-[11px] font-medium',
-                executionStatusBadgeClassName(model.run.status),
-              )}
-            >
-              {t(`executionPanel.status.${model.run.status}`)}
-            </span>
-          </div>
-          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
-            {t('executionPanel.collapsedSummary', {
+        <div className="min-w-0 flex flex-1 flex-wrap items-center gap-2">
+          <ExecutionStatusIcon status={model.run.status} />
+          <p className="truncate text-sm font-semibold text-[var(--foreground)]">{templateLabel}</p>
+          <span
+            className={cn(
+              'rounded-full border px-2.5 py-1 text-[11px] font-medium',
+              executionStatusBadgeClassName(model.run.status),
+            )}
+          >
+            {t(`executionPanel.status.${model.run.status}`)}
+          </span>
+          <SummaryChip
+            label={t('executionPanel.progressValue', {
               completed: model.collapsedSummary.completedStepCount,
               total: model.collapsedSummary.totalStepCount,
             })}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {model.collapsedSummary.hasRetrievalActivity ? (
-              <SummaryChip label={t('executionPanel.retrievalTitle')} />
-            ) : null}
-            {model.collapsedSummary.hasToolActivity ? (
-              <SummaryChip label={t('executionPanel.toolsTitle')} />
-            ) : null}
-          </div>
+          />
+          {model.collapsedSummary.hasRetrievalActivity ? (
+            <SummaryChip
+              label={t('executionPanel.retrievalCompact', {
+                count: model.run.retrievalCount,
+              })}
+            />
+          ) : null}
+          {model.collapsedSummary.hasToolActivity ? (
+            <SummaryChip
+              label={t('executionPanel.toolCompact', {
+                count: model.run.toolCount,
+              })}
+            />
+          ) : null}
         </div>
 
-        <Button onClick={onExpand} type="button" variant="ghost">
+        <Button className="px-2 py-1 text-xs" onClick={onExpand} type="button" variant="ghost">
           {t('executionPanel.showDetails')}
           <ChevronDown className="h-4 w-4" />
         </Button>

@@ -1,10 +1,9 @@
 import {
   useCallback,
+  useEffect,
   useState,
 } from 'react'
 import {
-  ChevronLeft,
-  ChevronRight,
   Menu,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -18,7 +17,6 @@ import type { Conversation } from '../types/chat'
 import { ChatComposer } from './chat-page/components/chat-composer'
 import { ChatContextBar } from './chat-page/components/chat-context-bar'
 import { ChatOverlays } from './chat-page/components/chat-overlays'
-import { ExecutionPanel } from './chat-page/components/execution-panel'
 import { buildExecutionPanelModel } from './chat-page/components/execution-panel-model'
 import { MessageList } from './chat-page/components/message-list'
 import { MobileSidebar } from './chat-page/components/mobile-sidebar'
@@ -52,6 +50,7 @@ export function ChatPage() {
 
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false)
   const uiState = useChatUIState()
 
   const conversationList = useConversationList({
@@ -110,6 +109,20 @@ export function ChatPage() {
     chatSession.executionEvents,
     chatSession.pendingConfirmationId,
   )
+  const isHeroState =
+    activeConversationId == null &&
+    chatSession.messages.length === 0 &&
+    !chatSession.isLoadingMessages
+  const headerTitle = isHeroState
+    ? ''
+    : displayConversation?.title
+      ?? (activeConversationId ? t('chat.loadingConversation') : '')
+
+  useEffect(() => {
+    if (chatSession.composerValue.trim().length === 0) {
+      setIsComposerExpanded(false)
+    }
+  }, [chatSession.composerValue])
 
   function handleOpenSettings(tab: Parameters<typeof uiState.setActiveSettingsTab>[0] = 'chat') {
     uiState.setActiveSettingsTab(tab)
@@ -121,6 +134,7 @@ export function ChatPage() {
     if (interactionDisabled) {
       return
     }
+    setIsComposerExpanded(false)
     conversationList.setSkipAutoResume(true)
     uiState.setSidebarOpen(false)
     conversationList.setShowArchived(false)
@@ -625,6 +639,7 @@ export function ChatPage() {
           key={uiState.isDesktopSidebarCollapsed ? 'desktop-sidebar-collapsed' : 'desktop-sidebar-expanded'}
           collapsed={uiState.isDesktopSidebarCollapsed}
           variant="desktop"
+          desktopSidebarExpanded={!uiState.isDesktopSidebarCollapsed}
           interactionDisabled={interactionDisabled}
           currentConversationId={activeConversationId}
           conversations={conversationList.conversations}
@@ -662,6 +677,9 @@ export function ChatPage() {
           onTogglePinned={handleTogglePinned}
           onToggleArchivedConversation={handleToggleArchived}
           onDeleteConversation={handleDeleteConversation}
+          onToggleDesktopSidebar={() =>
+            uiState.setIsDesktopSidebarCollapsed((previous) => !previous)
+          }
           onCreateChat={handleCreateNewChat}
           username={user?.username ?? ''}
           onLogout={handleLogout}
@@ -669,49 +687,36 @@ export function ChatPage() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-[var(--app-bg)]">
-        <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 md:px-8">
-          <button
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] md:hidden"
-            onClick={() => uiState.setSidebarOpen(true)}
-            type="button"
-            aria-label={t('chat.openSidebar')}
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-
-          <button
-            aria-expanded={!uiState.isDesktopSidebarCollapsed}
-            aria-label={
-              uiState.isDesktopSidebarCollapsed
-                ? t('chat.expandSidebar')
-                : t('chat.collapseSidebar')
-            }
-            className="hidden h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)] md:inline-flex"
-            onClick={() =>
-              uiState.setIsDesktopSidebarCollapsed((previous) => !previous)
-            }
-            title={
-              uiState.isDesktopSidebarCollapsed
-                ? t('chat.expandSidebar')
-                : t('chat.collapseSidebar')
-            }
-            type="button"
-          >
-            {uiState.isDesktopSidebarCollapsed ? (
-              <ChevronRight className="h-5 w-5" />
-            ) : (
-              <ChevronLeft className="h-5 w-5" />
-            )}
-          </button>
-
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-medium text-[var(--foreground)]">
-              {displayConversation?.title
-                ?? (activeConversationId ? t('chat.loadingConversation') : t('chat.newConversation'))}
-            </h1>
+        <header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--line)] bg-[var(--app-bg)] px-4 py-3 md:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)] md:hidden"
+              onClick={() => uiState.setSidebarOpen(true)}
+              type="button"
+              aria-label={t('chat.openSidebar')}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span
+              className="truncate text-sm font-semibold text-[var(--foreground)] md:text-base"
+              data-testid="chat-header-site-name"
+            >
+              {t('app.name')}
+            </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 text-center">
+            {headerTitle ? (
+              <h1
+                className="truncate text-sm font-medium text-[var(--foreground)] md:text-base"
+                data-testid="chat-header-title"
+              >
+                {headerTitle}
+              </h1>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               className="px-3 py-2"
               onClick={() => handleOpenSettings('chat')}
@@ -731,71 +736,169 @@ export function ChatPage() {
           </div>
         </header>
 
-        <ExecutionPanel
-          model={executionPanelModel}
-          onConfirmToolCall={chatSession.handleConfirmToolCall}
-        />
+        {isHeroState ? (
+          <div
+            className={cn(
+              'flex flex-1 px-4 md:px-8',
+              isComposerExpanded
+                ? 'min-h-0 py-6'
+                : 'items-center justify-center py-10',
+            )}
+          >
+            <div
+              className={cn(
+                'w-full max-w-4xl',
+                isComposerExpanded
+                  ? 'mx-auto flex h-full min-h-0 flex-col gap-6'
+                  : 'space-y-8',
+              )}
+            >
+              <div className="mx-auto max-w-2xl">
+                <MessageList
+                  activeConversationId={activeConversationId}
+                  hasMoreMessages={chatSession.hasMoreMessages}
+                  isLoadingMessages={chatSession.isLoadingMessages}
+                  isLoadingOlderMessages={chatSession.isLoadingOlderMessages}
+                  messages={chatSession.messages}
+                  latestUserMessage={chatSession.latestUserMessage}
+                  latestAssistantMessage={chatSession.latestAssistantMessage}
+                  isSending={chatSession.isSending}
+                  editingMessageId={chatSession.editingMessageId}
+                  executionPanelModel={executionPanelModel}
+                  hasConversationShell={displayConversation != null}
+                  viewportRef={chatSession.messageViewportRef}
+                  onShowToast={uiState.showToast}
+                  onEditMessage={chatSession.startEditingMessage}
+                  onLoadMore={() => void chatSession.loadOlderMessages()}
+                  onConfirmToolCall={chatSession.handleConfirmToolCall}
+                  onRetryMessage={(message) => void chatSession.handleRetryAssistant(message)}
+                  onRegenerateMessage={(message) => void chatSession.handleRegenerateAssistant(message)}
+                />
+              </div>
 
-        <MessageList
-          activeConversationId={activeConversationId}
-          hasMoreMessages={chatSession.hasMoreMessages}
-          isLoadingMessages={chatSession.isLoadingMessages}
-          isLoadingOlderMessages={chatSession.isLoadingOlderMessages}
-          messages={chatSession.messages}
-          latestUserMessage={chatSession.latestUserMessage}
-          isSending={chatSession.isSending}
-          editingMessageId={chatSession.editingMessageId}
-          hasConversationShell={displayConversation != null}
-          conversations={conversationList.conversations}
-          restorableConversationId={conversationList.restorableConversationId}
-          viewportRef={chatSession.messageViewportRef}
-          onShowToast={uiState.showToast}
-          onContinueLast={() => {
-            if (conversationList.restorableConversationId) {
-              navigateToConversation(conversationList.restorableConversationId)
-            }
-          }}
-          onEditMessage={chatSession.startEditingMessage}
-          onLoadMore={() => void chatSession.loadOlderMessages()}
-          onRetryMessage={(message) => void chatSession.handleRetryAssistant(message)}
-          onRegenerateMessage={(message) => void chatSession.handleRegenerateAssistant(message)}
-        />
-
-        <ChatComposer
-          composerFormRef={chatSession.composerFormRef}
-          fileInputRef={chatSession.fileInputRef}
-          composerValue={chatSession.composerValue}
-          selectedAttachments={chatSession.selectedAttachments}
-          editingMessageId={chatSession.editingMessageId}
-          hasPendingUploads={chatSession.hasPendingUploads}
-          canSubmitComposer={chatSession.canSubmitComposer}
-          isSending={chatSession.isSending}
-          chatError={chatError}
-          composerIsComposingRef={chatSession.composerIsComposingRef}
-          contextBar={
-            <ChatContextBar
-              compact
-              chatSettings={chatSession.chatSettingsDraft}
-              settings={contextBarSettings}
-              providerState={providerSettings.providerState}
-              knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
-              workflowPresetId={contextBarWorkflowPresetId}
-              workflowPresets={agentWorkspace.workflowPresets}
-              knowledgeSpaces={agentWorkspace.knowledgeSpaces}
-              isDisabled={interactionDisabled}
-              onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
-              onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
-              onProviderModelChange={(value) => void handleProviderModelChange(value)}
-              onSetAsDefault={() => void handleSetDefaultProviderModel()}
+              <ChatComposer
+                composerFormRef={chatSession.composerFormRef}
+                fileInputRef={chatSession.fileInputRef}
+                composerValue={chatSession.composerValue}
+                selectedAttachments={chatSession.selectedAttachments}
+                editingMessageId={chatSession.editingMessageId}
+                hasPendingUploads={chatSession.hasPendingUploads}
+                canSubmitComposer={chatSession.canSubmitComposer}
+                isSending={chatSession.isSending}
+                chatError={chatError}
+                composerIsComposingRef={chatSession.composerIsComposingRef}
+                layoutMode="hero"
+                isExpanded={isComposerExpanded}
+                modelControl={
+                  <ChatContextBar
+                    compact
+                    compactVariant="model"
+                    chatSettings={chatSession.chatSettingsDraft}
+                    settings={contextBarSettings}
+                    providerState={providerSettings.providerState}
+                    knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+                    workflowPresetId={contextBarWorkflowPresetId}
+                    workflowPresets={agentWorkspace.workflowPresets}
+                    knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+                    isDisabled={interactionDisabled}
+                    onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
+                    onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
+                    onProviderModelChange={(value) => void handleProviderModelChange(value)}
+                    onSetAsDefault={() => void handleSetDefaultProviderModel()}
+                  />
+                }
+                onToggleExpanded={setIsComposerExpanded}
+                onComposerChange={chatSession.setComposerValue}
+                onCancelEdit={chatSession.cancelEditingMessage}
+                onStopGeneration={() => void chatSession.handleStopGeneration()}
+                onSubmit={(event) => void chatSession.handleSubmit(event)}
+                onFilesSelected={(files) => void chatSession.handleFilesSelected(files)}
+                onRemoveAttachment={chatSession.removeSelectedAttachment}
+              />
+            </div>
+          </div>
+        ) : (
+          <>
+            <MessageList
+              activeConversationId={activeConversationId}
+              hasMoreMessages={chatSession.hasMoreMessages}
+              isLoadingMessages={chatSession.isLoadingMessages}
+              isLoadingOlderMessages={chatSession.isLoadingOlderMessages}
+              messages={chatSession.messages}
+              latestUserMessage={chatSession.latestUserMessage}
+              latestAssistantMessage={chatSession.latestAssistantMessage}
+              isSending={chatSession.isSending}
+              editingMessageId={chatSession.editingMessageId}
+              executionPanelModel={executionPanelModel}
+              hasConversationShell={displayConversation != null}
+              viewportRef={chatSession.messageViewportRef}
+              onShowToast={uiState.showToast}
+              onEditMessage={chatSession.startEditingMessage}
+              onLoadMore={() => void chatSession.loadOlderMessages()}
+              onConfirmToolCall={chatSession.handleConfirmToolCall}
+              onRetryMessage={(message) => void chatSession.handleRetryAssistant(message)}
+              onRegenerateMessage={(message) => void chatSession.handleRegenerateAssistant(message)}
             />
-          }
-          onComposerChange={chatSession.setComposerValue}
-          onCancelEdit={chatSession.cancelEditingMessage}
-          onStopGeneration={() => void chatSession.handleStopGeneration()}
-          onSubmit={(event) => void chatSession.handleSubmit(event)}
-          onFilesSelected={(files) => void chatSession.handleFilesSelected(files)}
-          onRemoveAttachment={chatSession.removeSelectedAttachment}
-        />
+
+            <ChatComposer
+              composerFormRef={chatSession.composerFormRef}
+              fileInputRef={chatSession.fileInputRef}
+              composerValue={chatSession.composerValue}
+              selectedAttachments={chatSession.selectedAttachments}
+              editingMessageId={chatSession.editingMessageId}
+              hasPendingUploads={chatSession.hasPendingUploads}
+              canSubmitComposer={chatSession.canSubmitComposer}
+              isSending={chatSession.isSending}
+              chatError={chatError}
+              composerIsComposingRef={chatSession.composerIsComposingRef}
+              layoutMode="docked"
+              isExpanded={isComposerExpanded}
+              leftContextBar={
+                <ChatContextBar
+                  compact
+                  compactVariant="secondary"
+                  chatSettings={chatSession.chatSettingsDraft}
+                  settings={contextBarSettings}
+                  providerState={providerSettings.providerState}
+                  knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+                  workflowPresetId={contextBarWorkflowPresetId}
+                  workflowPresets={agentWorkspace.workflowPresets}
+                  knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+                  isDisabled={interactionDisabled}
+                  onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
+                  onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
+                  onProviderModelChange={(value) => void handleProviderModelChange(value)}
+                  onSetAsDefault={() => void handleSetDefaultProviderModel()}
+                />
+              }
+              modelControl={
+                <ChatContextBar
+                  compact
+                  compactVariant="model"
+                  chatSettings={chatSession.chatSettingsDraft}
+                  settings={contextBarSettings}
+                  providerState={providerSettings.providerState}
+                  knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+                  workflowPresetId={contextBarWorkflowPresetId}
+                  workflowPresets={agentWorkspace.workflowPresets}
+                  knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+                  isDisabled={interactionDisabled}
+                  onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
+                  onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
+                  onProviderModelChange={(value) => void handleProviderModelChange(value)}
+                  onSetAsDefault={() => void handleSetDefaultProviderModel()}
+                />
+              }
+              onToggleExpanded={setIsComposerExpanded}
+              onComposerChange={chatSession.setComposerValue}
+              onCancelEdit={chatSession.cancelEditingMessage}
+              onStopGeneration={() => void chatSession.handleStopGeneration()}
+              onSubmit={(event) => void chatSession.handleSubmit(event)}
+              onFilesSelected={(files) => void chatSession.handleFilesSelected(files)}
+              onRemoveAttachment={chatSession.removeSelectedAttachment}
+            />
+          </>
+        )}
       </main>
 
       <ChatOverlays
@@ -806,6 +909,7 @@ export function ChatPage() {
         conversationTags={chatSession.conversationTagsDraft}
         workflowPresetId={chatSession.workflowPresetIdDraft}
         knowledgeSpaceIds={chatSession.knowledgeSpaceIdsDraft}
+        pendingKnowledgeSpaceIds={chatSession.pendingKnowledgeSpaceIds}
         editingProviderId={providerSettings.editingProviderId}
         isLoadingProviders={providerSettings.isLoadingProviders}
         isOpen={uiState.isSettingsOpen}
@@ -820,6 +924,7 @@ export function ChatPage() {
         onCreateRAGProvider={agentWorkspace.createRAGProvider}
         onActivateRAGProvider={agentWorkspace.activateRAGProvider}
         onLoadKnowledgeDocuments={agentWorkspace.loadKnowledgeDocuments}
+        onToggleKnowledgeSpace={(space) => chatSession.toggleKnowledgeSpace(space.id)}
         onCreateKnowledgeSpace={agentWorkspace.createKnowledgeSpace}
         onUpdateKnowledgeSpace={agentWorkspace.updateKnowledgeSpace}
         onDeleteKnowledgeSpace={agentWorkspace.deleteKnowledgeSpace}
@@ -864,7 +969,6 @@ export function ChatPage() {
         setConversationFolder={chatSession.setConversationFolderDraft}
         setConversationTags={chatSession.setConversationTagsDraft}
         setWorkflowPresetId={chatSession.setWorkflowPresetIdDraft}
-        setKnowledgeSpaceIds={chatSession.setKnowledgeSpaceIdsDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}
       />

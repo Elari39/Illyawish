@@ -10,17 +10,21 @@ import {
   formatMessageTimestamp,
   isImageAttachment,
 } from '../utils'
+import type { ExecutionPanelModel } from './execution-panel-model'
+import { ExecutionPanel } from './execution-panel'
 
 interface MessageBubbleProps {
   message: Message
   canEdit: boolean
   canRetry: boolean
   canRegenerate: boolean
+  executionPanelModel: ExecutionPanelModel | null
   isEditing: boolean
   onCopySuccessToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   onEdit: () => void
   onRetry: () => void
   onRegenerate: () => void
+  onConfirmToolCall?: (approved: boolean) => Promise<void>
 }
 
 export function MessageBubble({
@@ -28,11 +32,13 @@ export function MessageBubble({
   canEdit,
   canRetry,
   canRegenerate,
+  executionPanelModel,
   isEditing,
   onCopySuccessToast,
   onEdit,
   onRetry,
   onRegenerate,
+  onConfirmToolCall,
 }: MessageBubbleProps) {
   const { locale, t } = useI18n()
   const [copied, setCopied] = useState(false)
@@ -142,6 +148,14 @@ export function MessageBubble({
         {isFailed ? <span className="text-[var(--danger)]">{t('message.failed')}</span> : null}
         {isCancelled ? <span className="text-[var(--danger)]">{t('message.stopped')}</span> : null}
       </div>
+      {executionPanelModel ? (
+        <div className="mt-3">
+          <ExecutionPanel
+            model={executionPanelModel}
+            onConfirmToolCall={onConfirmToolCall ?? (async () => {})}
+          />
+        </div>
+      ) : null}
       <MarkdownContent content={message.content} />
 
       {canRetry || canRegenerate ? (

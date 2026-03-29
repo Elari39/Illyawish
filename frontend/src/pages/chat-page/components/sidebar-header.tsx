@@ -1,4 +1,4 @@
-import { MessageSquarePlus } from 'lucide-react'
+import { Menu, MessageSquarePlus } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -6,14 +6,18 @@ import { cn } from '../../../lib/utils'
 
 interface SidebarHeaderProps {
   collapsed: boolean
+  desktopSidebarExpanded?: boolean
   interactionDisabled: boolean
   searchValue: string
   showArchived: boolean
   appName: string
+  expandSidebarLabel?: string
+  collapseSidebarLabel?: string
   newChatLabel: string
   searchPlaceholder: string
   activeLabel: string
   archivedLabel: string
+  onToggleDesktopSidebar?: () => void
   onSearchChange: (value: string) => void
   onToggleArchived: (value: boolean) => void
   onCreateChat: () => void
@@ -21,18 +25,25 @@ interface SidebarHeaderProps {
 
 export function SidebarHeader({
   collapsed,
+  desktopSidebarExpanded = !collapsed,
   interactionDisabled,
   searchValue,
   showArchived,
   appName,
+  expandSidebarLabel,
+  collapseSidebarLabel,
   newChatLabel,
   searchPlaceholder,
   activeLabel,
   archivedLabel,
+  onToggleDesktopSidebar,
   onSearchChange,
   onToggleArchived,
   onCreateChat,
 }: SidebarHeaderProps) {
+  const desktopToggleLabel = desktopSidebarExpanded ? collapseSidebarLabel : expandSidebarLabel
+  const showDesktopToggle = onToggleDesktopSidebar && desktopToggleLabel
+
   return (
     <div
       className={cn(
@@ -40,34 +51,65 @@ export function SidebarHeader({
         collapsed ? 'px-2' : 'px-3',
       )}
     >
-      <div
-        className={cn(
-          'flex items-center',
-          collapsed ? 'justify-center' : 'justify-between',
-        )}
-      >
-        <span
-          className={cn(
-            'text-sm font-semibold text-[var(--foreground)] transition-opacity duration-200',
-            collapsed ? 'pointer-events-none w-0 overflow-hidden opacity-0' : 'opacity-100',
-          )}
-        >
-          {appName}
-        </span>
-        <button
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-          disabled={interactionDisabled}
-          onClick={onCreateChat}
-          title={newChatLabel}
-          type="button"
-          aria-label={newChatLabel}
-        >
-          <MessageSquarePlus className="h-4 w-4" />
-        </button>
-      </div>
-
-      {!collapsed ? (
+      {collapsed ? (
+        <div className="flex flex-col items-center gap-2">
+          {showDesktopToggle ? (
+            <button
+              aria-expanded={desktopSidebarExpanded}
+              aria-label={desktopToggleLabel}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
+              disabled={interactionDisabled}
+              onClick={onToggleDesktopSidebar}
+              title={desktopToggleLabel}
+              type="button"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          ) : null}
+          <button
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
+            disabled={interactionDisabled}
+            onClick={onCreateChat}
+            title={newChatLabel}
+            type="button"
+            aria-label={newChatLabel}
+          >
+            <MessageSquarePlus className="h-5 w-5" />
+          </button>
+        </div>
+      ) : (
         <>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold text-[var(--foreground)]">
+              {appName}
+            </span>
+            {showDesktopToggle ? (
+              <button
+                aria-expanded={desktopSidebarExpanded}
+                aria-label={desktopToggleLabel}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
+                disabled={interactionDisabled}
+                onClick={onToggleDesktopSidebar}
+                title={desktopToggleLabel}
+                type="button"
+              >
+                <Menu className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+
+          <button
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--hover-bg)]"
+            disabled={interactionDisabled}
+            onClick={onCreateChat}
+            title={newChatLabel}
+            type="button"
+            aria-label={newChatLabel}
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+            <span>{newChatLabel}</span>
+          </button>
+
           <Input
             placeholder={searchPlaceholder}
             value={searchValue}
@@ -91,7 +133,7 @@ export function SidebarHeader({
             </Button>
           </div>
         </>
-      ) : null}
+      )}
     </div>
   )
 }

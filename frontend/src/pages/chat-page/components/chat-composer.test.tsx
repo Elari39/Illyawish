@@ -7,6 +7,65 @@ import { ChatComposer } from './chat-composer'
 import { ATTACHMENT_INPUT_ACCEPT } from '../utils'
 
 describe('ChatComposer', () => {
+  it('renders a hero composer layout when requested', () => {
+    render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue=""
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer={false}
+          isSending={false}
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          layoutMode="hero"
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-layout', 'hero')
+  })
+
+  it('renders the model control before the send action', () => {
+    render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue="hello"
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer
+          isSending={false}
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          modelControl={<div data-testid="composer-model-control">Model</div>}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    const modelControl = screen.getByTestId('composer-model-control')
+    const sendButton = screen.getByRole('button', { name: 'Send message' })
+
+    expect(modelControl.compareDocumentPosition(sendButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('forwards pasted images to the upload handler', () => {
     const onFilesSelected = vi.fn()
 
@@ -23,6 +82,7 @@ describe('ChatComposer', () => {
           isSending={false}
           chatError={null}
           composerIsComposingRef={{ current: false }}
+          onToggleExpanded={vi.fn()}
           onComposerChange={vi.fn()}
           onCancelEdit={vi.fn()}
           onStopGeneration={vi.fn()}
@@ -169,5 +229,104 @@ describe('ChatComposer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
 
     expect(onStopGeneration).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an expand editor action when the textarea content exceeds the compact max height', async () => {
+    const scrollHeightGetter = vi
+      .spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(420)
+
+    render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue={'Long message\n'.repeat(20)}
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer
+          isSending={false}
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          onToggleExpanded={vi.fn()}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Expand editor' })).toBeInTheDocument()
+    scrollHeightGetter.mockRestore()
+  })
+
+  it('toggles into and out of the page-expanded composer state', async () => {
+    const scrollHeightGetter = vi
+      .spyOn(HTMLTextAreaElement.prototype, 'scrollHeight', 'get')
+      .mockReturnValue(420)
+    const onToggleExpanded = vi.fn()
+
+    const { rerender } = render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue={'Long message\n'.repeat(20)}
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer
+          isSending={false}
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          isExpanded={false}
+          onToggleExpanded={onToggleExpanded}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Expand editor' }))
+    expect(onToggleExpanded).toHaveBeenCalledWith(true)
+
+    rerender(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue={'Long message\n'.repeat(20)}
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer
+          isSending={false}
+          chatError={null}
+          composerIsComposingRef={{ current: false }}
+          isExpanded
+          onToggleExpanded={onToggleExpanded}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-expanded', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse editor' }))
+    expect(onToggleExpanded).toHaveBeenCalledWith(false)
+    scrollHeightGetter.mockRestore()
   })
 })

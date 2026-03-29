@@ -48,6 +48,7 @@ export function useChatSettingsState({
   const [conversationTagsDraft, setConversationTagsDraft] = useState('')
   const [workflowPresetIdDraft, setWorkflowPresetIdDraft] = useState<number | null>(null)
   const [knowledgeSpaceIdsDraft, setKnowledgeSpaceIdsDraft] = useState<number[]>([])
+  const [pendingKnowledgeSpaceIds, setPendingKnowledgeSpaceIds] = useState<number[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -88,6 +89,7 @@ export function useChatSettingsState({
       workflowPresetIdDraft,
       knowledgeSpaceIdsDraft,
       currentConversation,
+      false,
     )
     const previousChatSettings = chatSettings
     const previousConversation = currentConversation
@@ -238,11 +240,54 @@ export function useChatSettingsState({
     setConversationTagsDraft(newConversationTagsInput)
     setWorkflowPresetIdDraft(null)
     setKnowledgeSpaceIdsDraft([])
+    setPendingKnowledgeSpaceIds([])
   }, [
     chatSettings,
     newChatSystemPrompt,
     newConversationFolder,
     newConversationTagsInput,
+  ])
+
+  const toggleKnowledgeSpace = useCallback(async (spaceId: number) => {
+    setChatError(null)
+
+    const previousIds = currentConversation?.knowledgeSpaceIds ?? knowledgeSpaceIdsDraft
+    const nextIds = previousIds.includes(spaceId)
+      ? previousIds.filter((id) => id !== spaceId)
+      : [...previousIds, spaceId]
+
+    setKnowledgeSpaceIdsDraft(nextIds)
+
+    if (!activeConversationId || !currentConversation) {
+      return
+    }
+
+    setPendingKnowledgeSpaceIds((previous) =>
+      previous.includes(spaceId) ? previous : [...previous, spaceId],
+    )
+
+    try {
+      const updatedConversation = await chatApi.updateConversation(activeConversationId, {
+        knowledgeSpaceIds: nextIds,
+      })
+      syncConversationIntoList(updatedConversation)
+      setPendingConversation(updatedConversation)
+      setKnowledgeSpaceIdsDraft(updatedConversation.knowledgeSpaceIds ?? [])
+    } catch (error) {
+      setKnowledgeSpaceIdsDraft(previousIds)
+      setChatError(
+        error instanceof Error ? error.message : t('error.saveSettings'),
+      )
+    } finally {
+      setPendingKnowledgeSpaceIds((previous) => previous.filter((id) => id !== spaceId))
+    }
+  }, [
+    activeConversationId,
+    currentConversation,
+    knowledgeSpaceIdsDraft,
+    setChatError,
+    syncConversationIntoList,
+    t,
   ])
 
   return {
@@ -251,6 +296,7 @@ export function useChatSettingsState({
     conversationTagsDraft,
     workflowPresetIdDraft,
     knowledgeSpaceIdsDraft,
+    pendingKnowledgeSpaceIds,
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
@@ -261,6 +307,7 @@ export function useChatSettingsState({
     setPendingConversation,
     setSettingsDraft,
     applyChatSettings,
+    toggleKnowledgeSpace,
     handleSaveSettings,
     resetForNewChatSettings,
     resetPendingConversation,
@@ -297,6 +344,7 @@ function buildConversationMetadataUpdate(
   workflowPresetId: number | null,
   knowledgeSpaceIds: number[],
   currentConversation: Conversation | null,
+  includeKnowledge = true,
 ) {
   if (!currentConversation) {
     return {}
@@ -315,7 +363,7 @@ function buildConversationMetadataUpdate(
     ...(folderChanged ? { folder } : {}),
     ...(tagsChanged ? { tags } : {}),
     ...(workflowChanged ? { workflowPresetId } : {}),
-    ...(knowledgeChanged ? { knowledgeSpaceIds } : {}),
+    ...(includeKnowledge && knowledgeChanged ? { knowledgeSpaceIds } : {}),
   }
 }
 

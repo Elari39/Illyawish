@@ -3,6 +3,7 @@ import type { RefObject } from 'react'
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n/use-i18n'
 import type { Conversation, Message } from '../../../types/chat'
+import type { ExecutionPanelModel } from './execution-panel-model'
 import { EmptyState } from './empty-state'
 import { MessageBubble } from './message-bubble'
 
@@ -14,15 +15,15 @@ interface MessageListProps {
   isLoadingOlderMessages: boolean
   messages: Message[]
   latestUserMessage: Message | null
+  latestAssistantMessage: Message | null
   isSending: boolean
   editingMessageId: number | null
-  conversations: Conversation[]
-  restorableConversationId: Conversation['id'] | null
+  executionPanelModel: ExecutionPanelModel | null
   viewportRef: RefObject<HTMLDivElement | null>
   onShowToast: (message: string, variant?: 'success' | 'error' | 'info') => void
-  onContinueLast: () => void
   onEditMessage: (message: Message) => void
   onLoadMore: () => void
+  onConfirmToolCall: (approved: boolean) => Promise<void>
   onRetryMessage: (message: Message) => void
   onRegenerateMessage: (message: Message) => void
 }
@@ -35,15 +36,15 @@ export function MessageList({
   isLoadingOlderMessages,
   messages,
   latestUserMessage,
+  latestAssistantMessage,
   isSending,
   editingMessageId,
-  conversations,
-  restorableConversationId,
+  executionPanelModel,
   viewportRef,
   onShowToast,
-  onContinueLast,
   onEditMessage,
   onLoadMore,
+  onConfirmToolCall,
   onRetryMessage,
   onRegenerateMessage,
 }: MessageListProps) {
@@ -92,8 +93,14 @@ export function MessageList({
                 message.role === 'assistant' &&
                 message.status === 'completed'
               }
+              executionPanelModel={
+                message.role === 'assistant' && latestAssistantMessage?.id === message.id
+                  ? executionPanelModel
+                  : null
+              }
               isEditing={editingMessageId === message.id}
               message={message}
+              onConfirmToolCall={onConfirmToolCall}
               onCopySuccessToast={onShowToast}
               onEdit={() => onEditMessage(message)}
               onRegenerate={() => onRegenerateMessage(message)}
@@ -102,11 +109,7 @@ export function MessageList({
           ))}
         </div>
       ) : (
-        <EmptyState
-          hasConversations={conversations.length > 0}
-          hasLastConversation={restorableConversationId != null}
-          onContinueLast={onContinueLast}
-        />
+        <EmptyState />
       )}
     </div>
   )

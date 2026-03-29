@@ -20,7 +20,8 @@ interface KnowledgeSettingsTabProps {
   knowledgeSpaces: KnowledgeSpace[]
   knowledgeDocuments: Record<number, KnowledgeDocument[]>
   selectedKnowledgeSpaceIds: number[]
-  setSelectedKnowledgeSpaceIds: React.Dispatch<React.SetStateAction<number[]>>
+  pendingKnowledgeSpaceIds: number[]
+  onToggleKnowledgeSpace: (space: KnowledgeSpace) => void | Promise<void>
   loadKnowledgeDocuments: (spaceId: number) => Promise<void>
   createKnowledgeSpace: (payload: { name: string; description?: string }) => Promise<KnowledgeSpace | null>
   updateKnowledgeSpace: (
@@ -65,7 +66,8 @@ export function KnowledgeSettingsTab({
   knowledgeSpaces,
   knowledgeDocuments,
   selectedKnowledgeSpaceIds,
-  setSelectedKnowledgeSpaceIds,
+  pendingKnowledgeSpaceIds,
+  onToggleKnowledgeSpace,
   loadKnowledgeDocuments,
   createKnowledgeSpace,
   updateKnowledgeSpace,
@@ -218,7 +220,6 @@ export function KnowledgeSettingsTab({
         if (!deleted) {
           return
         }
-        setSelectedKnowledgeSpaceIds((previous) => previous.filter((value) => value !== space.id))
         if (documentSpaceId === space.id) {
           setDocumentSpaceId(null)
           resetDocumentForm()
@@ -252,14 +253,15 @@ export function KnowledgeSettingsTab({
       <div className="mt-6 grid gap-5">
         <KnowledgeSpaceList
           knowledgeSpaces={knowledgeSpaces}
+          onToggleSpace={onToggleKnowledgeSpace}
           onDeleteSpace={handleDeleteSpace}
           onEditSpace={(space) => {
             setEditingSpace(space)
             setSpaceName(space.name)
             setSpaceDescription(space.description)
           }}
+          pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
           selectedKnowledgeSpaceIds={selectedKnowledgeSpaceIds}
-          setSelectedKnowledgeSpaceIds={setSelectedKnowledgeSpaceIds}
         />
 
         <KnowledgeSpaceForm

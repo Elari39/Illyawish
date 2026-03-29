@@ -15,6 +15,7 @@ export type { SidebarContentProps } from './sidebar-content-types'
 export function SidebarContent({
   collapsed,
   variant,
+  desktopSidebarExpanded = !collapsed,
   interactionDisabled = false,
   currentConversationId,
   conversations,
@@ -47,6 +48,7 @@ export function SidebarContent({
   onTogglePinned,
   onToggleArchivedConversation,
   onDeleteConversation,
+  onToggleDesktopSidebar,
   onCreateChat,
   username,
   onLogout,
@@ -74,14 +76,18 @@ export function SidebarContent({
     <div className="flex h-full flex-col overflow-hidden">
       <SidebarHeader
         collapsed={collapsed}
+        desktopSidebarExpanded={desktopSidebarExpanded}
         interactionDisabled={interactionDisabled}
         searchValue={searchValue}
         showArchived={showArchived}
         appName={t('app.name')}
+        expandSidebarLabel={t('chat.expandSidebar')}
+        collapseSidebarLabel={t('chat.collapseSidebar')}
         newChatLabel={t('sidebar.newChat')}
         searchPlaceholder={t('sidebar.searchPlaceholder')}
         activeLabel={t('sidebar.active')}
         archivedLabel={t('sidebar.archived')}
+        onToggleDesktopSidebar={onToggleDesktopSidebar}
         onSearchChange={onSearchChange}
         onToggleArchived={onToggleArchived}
         onCreateChat={onCreateChat}
@@ -201,55 +207,59 @@ export function SidebarContent({
         </div>
       ) : null}
 
-      <SidebarConversationList
-        collapsed={collapsed}
-        interactionDisabled={interactionDisabled}
-        currentConversationId={currentConversationId}
-        conversations={conversations}
-        hasMoreConversations={hasMoreConversations}
-        showArchived={showArchived}
-        isLoading={isLoading}
-        isLoadingMore={isLoadingMore}
-        isMobileVariant={isMobileVariant}
-        locale={locale}
-        recentsLabel={t('sidebar.recents')}
-        archivedLabel={t('sidebar.archived')}
-        loadingLabel={t('common.loading')}
-        noConversationsLabel={t('sidebar.noConversations')}
-        loadMoreLabel={t('common.loadMore')}
-        pinnedPrefix={t('sidebar.pinnedPrefix')}
-        hideActionsLabel={(title) => t('sidebar.hideActions', { title })}
-        moreActionsLabel={(title) => t('sidebar.moreActions', { title })}
-        pinLabel={t('sidebar.pin')}
-        unpinLabel={t('sidebar.unpin')}
-        renameLabel={t('sidebar.rename')}
-        archiveLabel={t('sidebar.archive')}
-        restoreLabel={t('sidebar.restore')}
-        deleteLabel={t('common.delete')}
-        moveToFolderLabel={t('sidebar.moveToFolder')}
-        addTagsLabel={t('sidebar.addTags')}
-        removeTagsLabel={t('sidebar.removeTags')}
-        selectionMode={selectionMode}
-        selectedConversationIds={selectedConversationIds}
-        onLoadMore={onLoadMore}
-        onSelectConversation={onSelectConversation}
-        onToggleConversationSelection={onToggleConversationSelection}
-        onTogglePinned={onTogglePinned}
-        onRenameConversation={onRenameConversation}
-        onToggleArchivedConversation={onToggleArchivedConversation}
-        onDeleteConversation={onDeleteConversation}
-        onMoveConversationToFolder={onMoveConversationToFolder}
-        onAddConversationTags={onAddConversationTags}
-        onRemoveConversationTags={onRemoveConversationTags}
-        effectiveExpandedConversationId={effectiveExpandedConversationId}
-        desktopMenuDirection={desktopMenuDirection}
-        scrollContainerRef={scrollContainerRef}
-        desktopMenuRef={desktopMenuRef}
-        registerDesktopTrigger={registerDesktopTrigger}
-        onDesktopMenuBlur={handleDesktopMenuBlur}
-        onToggleConversationActions={handleToggleConversationActions}
-        onCloseActions={closeExpandedActions}
-      />
+      {!(variant === 'desktop' && collapsed) ? (
+        <SidebarConversationList
+          collapsed={collapsed}
+          interactionDisabled={interactionDisabled}
+          currentConversationId={currentConversationId}
+          conversations={conversations}
+          hasMoreConversations={hasMoreConversations}
+          showArchived={showArchived}
+          isLoading={isLoading}
+          isLoadingMore={isLoadingMore}
+          isMobileVariant={isMobileVariant}
+          locale={locale}
+          recentsLabel={t('sidebar.recents')}
+          archivedLabel={t('sidebar.archived')}
+          loadingLabel={t('common.loading')}
+          noConversationsLabel={t('sidebar.noConversations')}
+          loadMoreLabel={t('common.loadMore')}
+          pinnedPrefix={t('sidebar.pinnedPrefix')}
+          hideActionsLabel={(title) => t('sidebar.hideActions', { title })}
+          moreActionsLabel={(title) => t('sidebar.moreActions', { title })}
+          pinLabel={t('sidebar.pin')}
+          unpinLabel={t('sidebar.unpin')}
+          renameLabel={t('sidebar.rename')}
+          archiveLabel={t('sidebar.archive')}
+          restoreLabel={t('sidebar.restore')}
+          deleteLabel={t('common.delete')}
+          moveToFolderLabel={t('sidebar.moveToFolder')}
+          addTagsLabel={t('sidebar.addTags')}
+          removeTagsLabel={t('sidebar.removeTags')}
+          selectionMode={selectionMode}
+          selectedConversationIds={selectedConversationIds}
+          onLoadMore={onLoadMore}
+          onSelectConversation={onSelectConversation}
+          onToggleConversationSelection={onToggleConversationSelection}
+          onTogglePinned={onTogglePinned}
+          onRenameConversation={onRenameConversation}
+          onToggleArchivedConversation={onToggleArchivedConversation}
+          onDeleteConversation={onDeleteConversation}
+          onMoveConversationToFolder={onMoveConversationToFolder}
+          onAddConversationTags={onAddConversationTags}
+          onRemoveConversationTags={onRemoveConversationTags}
+          effectiveExpandedConversationId={effectiveExpandedConversationId}
+          desktopMenuDirection={desktopMenuDirection}
+          scrollContainerRef={scrollContainerRef}
+          desktopMenuRef={desktopMenuRef}
+          registerDesktopTrigger={registerDesktopTrigger}
+          onDesktopMenuBlur={handleDesktopMenuBlur}
+          onToggleConversationActions={handleToggleConversationActions}
+          onCloseActions={closeExpandedActions}
+        />
+      ) : (
+        <div className="flex-1" />
+      )}
 
       <SidebarUserFooter
         collapsed={collapsed}

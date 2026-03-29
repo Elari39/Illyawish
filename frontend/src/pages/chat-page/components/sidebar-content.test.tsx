@@ -34,6 +34,7 @@ function createConversation(
 
 function createHandlers() {
   return {
+    onToggleDesktopSidebar: vi.fn(),
     onSearchChange: vi.fn(),
     onToggleArchived: vi.fn(),
     onSelectFolder: vi.fn(),
@@ -702,7 +703,7 @@ describe('SidebarContent desktop actions', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('renders a collapsed desktop variant without search controls and keeps logout accessible', () => {
+  it('renders a collapsed desktop variant without search controls or history items and keeps logout accessible', () => {
     const handlers = createHandlers()
 
     render(
@@ -724,8 +725,85 @@ describe('SidebarContent desktop actions', () => {
     )
 
     expect(screen.queryByPlaceholderText('Search conversations')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Collapsed chat' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand conversation sidebar' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'New chat' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  it('renders a desktop collapse toggle above new chat in the expanded sidebar', () => {
+    const handlers = createHandlers()
+
+    render(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="desktop"
+          interactionDisabled={false}
+          currentConversationId="1"
+          conversations={[createConversation(1, 'Expanded chat')]}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    const collapseButton = screen.getByRole('button', { name: 'Collapse conversation sidebar' })
+    const newChatButton = screen.getByRole('button', { name: 'New chat' })
+
+    expect(collapseButton.compareDocumentPosition(newChatButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('forwards desktop sidebar toggle events from both collapsed and expanded header states', () => {
+    const handlers = createHandlers()
+    const { rerender } = render(
+      <TestProviders>
+        <SidebarContent
+          collapsed
+          variant="desktop"
+          interactionDisabled={false}
+          currentConversationId="1"
+          conversations={[createConversation(1, 'Collapsed chat')]}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand conversation sidebar' }))
+
+    rerender(
+      <TestProviders>
+        <SidebarContent
+          collapsed={false}
+          variant="desktop"
+          interactionDisabled={false}
+          currentConversationId="1"
+          conversations={[createConversation(1, 'Expanded chat')]}
+          hasMoreConversations={false}
+          searchValue=""
+          showArchived={false}
+          isLoading={false}
+          isLoadingMore={false}
+          username="Elaina"
+          {...handlers}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse conversation sidebar' }))
+
+    expect(handlers.onToggleDesktopSidebar).toHaveBeenCalledTimes(2)
   })
 
   it('opens upward when the measured menu would overflow below the scroll container', () => {

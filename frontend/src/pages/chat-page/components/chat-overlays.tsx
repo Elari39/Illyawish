@@ -43,6 +43,7 @@ interface ChatOverlaysProps {
   conversationTags: string
   workflowPresetId: number | null
   knowledgeSpaceIds: number[]
+  pendingKnowledgeSpaceIds: number[]
   isLoadingProviders: boolean
   isOpen: boolean
   isImporting: boolean
@@ -63,7 +64,6 @@ interface ChatOverlaysProps {
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
   setWorkflowPresetId: Dispatch<SetStateAction<number | null>>
-  setKnowledgeSpaceIds: Dispatch<SetStateAction<number[]>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
   toasts: ToastState[]
@@ -91,6 +91,7 @@ interface ChatOverlaysProps {
   }) => Promise<void>
   onActivateRAGProvider: (providerId: number) => Promise<void>
   onLoadKnowledgeDocuments: (spaceId: number) => Promise<void>
+  onToggleKnowledgeSpace: (space: KnowledgeSpace) => void | Promise<void>
   onCreateKnowledgeSpace: (payload: {
     name: string
     description?: string
@@ -163,6 +164,7 @@ export function ChatOverlays({
   conversationTags,
   workflowPresetId,
   knowledgeSpaceIds,
+  pendingKnowledgeSpaceIds,
   isLoadingProviders,
   isOpen,
   isImporting,
@@ -183,7 +185,6 @@ export function ChatOverlays({
   setConversationFolder,
   setConversationTags,
   setWorkflowPresetId,
-  setKnowledgeSpaceIds,
   setSettings,
   transferConversation,
   toasts,
@@ -202,6 +203,7 @@ export function ChatOverlays({
   onCreateRAGProvider,
   onActivateRAGProvider,
   onLoadKnowledgeDocuments,
+  onToggleKnowledgeSpace,
   onCreateKnowledgeSpace,
   onUpdateKnowledgeSpace,
   onDeleteKnowledgeSpace,
@@ -229,6 +231,7 @@ export function ChatOverlays({
         conversationTags={conversationTags}
         workflowPresetId={workflowPresetId}
         knowledgeSpaceIds={knowledgeSpaceIds}
+        pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
         editingProviderId={editingProviderId}
         isLoadingProviders={isLoadingProviders}
         isOpen={isOpen}
@@ -264,7 +267,7 @@ export function ChatOverlays({
         setConversationFolder={setConversationFolder}
         setConversationTags={setConversationTags}
         setWorkflowPresetId={setWorkflowPresetId}
-        setKnowledgeSpaceIds={setKnowledgeSpaceIds}
+        onToggleKnowledgeSpace={onToggleKnowledgeSpace}
         setSettings={setSettings}
         transferConversation={transferConversation}
         onCreateRAGProvider={onCreateRAGProvider}

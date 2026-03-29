@@ -253,7 +253,8 @@ describe('ExecutionPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
 
-    expect(screen.getByText('Current stage')).toBeInTheDocument()
+    expect(screen.getByText('Workflow')).toBeInTheDocument()
+    expect(screen.getByText('4/4 steps')).toBeInTheDocument()
     expect(screen.getByText('Timeline')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Hide details' }))
@@ -273,7 +274,8 @@ describe('ExecutionPanel', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByText('Execution progress')).toBeInTheDocument()
+    expect(screen.getByText('Workflow')).toBeInTheDocument()
+    expect(screen.queryByText('Execution progress')).not.toBeInTheDocument()
     expect(screen.getAllByText('Compose answer').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Knowledge retrieval').length).toBeGreaterThan(0)
     expect(screen.getByText('Fetch URL')).toBeInTheDocument()
@@ -293,7 +295,7 @@ describe('ExecutionPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide timeline' }))
 
     expect(screen.queryByText('Run started')).not.toBeInTheDocument()
-    expect(screen.getByText('Execution progress')).toBeInTheDocument()
+    expect(screen.getByText('Workflow')).toBeInTheDocument()
   })
 
   it('renders confirmation actions inside the tool card', () => {

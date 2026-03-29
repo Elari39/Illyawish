@@ -24,6 +24,7 @@ interface ChatContextBarProps {
   workflowPresets: WorkflowPreset[]
   knowledgeSpaces: KnowledgeSpace[]
   compact?: boolean
+  compactVariant?: 'all' | 'model' | 'secondary'
   isDisabled?: boolean
   onOpenKnowledgeSettings: () => void
   onOpenWorkflowSettings: () => void
@@ -40,6 +41,7 @@ export function ChatContextBar({
   workflowPresets,
   knowledgeSpaces,
   compact = false,
+  compactVariant = 'all',
   isDisabled = false,
   onOpenKnowledgeSettings,
   onOpenWorkflowSettings,
@@ -73,6 +75,9 @@ export function ChatContextBar({
       currentSelection.model !== globalSelection.model)
 
   if (compact) {
+    const showModelControl = compactVariant === 'all' || compactVariant === 'model'
+    const showSecondaryControls =
+      compactVariant === 'all' || compactVariant === 'secondary'
     const knowledgeEnabled = selectedKnowledgeSpaces.length > 0
     const workflowEnabled = selectedWorkflowPreset != null
     const modelLabel = currentSelection.preset && currentSelection.model
@@ -87,67 +92,65 @@ export function ChatContextBar({
 
     return (
       <div className="flex items-center gap-0.5">
-        {/* Provider/Model: icon button with hidden select overlay */}
-        <div className="relative" title={modelLabel}>
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-            tabIndex={-1}
-            type="button"
-            aria-hidden="true"
-          >
-            <Cpu className="h-4 w-4" />
-          </button>
-          <select
-            aria-label={t('chatContext.providerModelLabel')}
-            className="absolute inset-0 cursor-pointer opacity-0"
-            disabled={isDisabled || providerModelOptions.length === 0}
-            value={currentSelection.value}
-            onChange={(event) => onProviderModelChange(event.target.value)}
-          >
-            {providerModelOptions.length === 0 ? (
-              <option value="">{t('chatContext.noProviderOptions')}</option>
+        {showModelControl ? (
+          <label className="relative block min-w-[132px] max-w-[180px]" title={modelLabel}>
+            <Cpu className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+            <Select
+              aria-label={t('chatContext.providerModelLabel')}
+              className="h-8 rounded-full border-none bg-[var(--app-bg)] py-1 pl-9 pr-8 text-xs shadow-none"
+              disabled={isDisabled || providerModelOptions.length === 0}
+              value={currentSelection.value}
+              onChange={(event) => onProviderModelChange(event.target.value)}
+            >
+              {providerModelOptions.length === 0 ? (
+                <option value="">{t('chatContext.noProviderOptions')}</option>
+              ) : null}
+              {providerModelOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+
+        {showSecondaryControls ? (
+          <>
+            <button
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${knowledgeEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
+              disabled={isDisabled}
+              onClick={onOpenKnowledgeSettings}
+              title={knowledgeLabel}
+              type="button"
+              aria-label={knowledgeLabel}
+            >
+              <Database className="h-4 w-4" />
+            </button>
+
+            <button
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${workflowEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
+              disabled={isDisabled}
+              onClick={onOpenWorkflowSettings}
+              title={workflowLabel}
+              type="button"
+              aria-label={workflowLabel}
+            >
+              <GitBranch className="h-4 w-4" />
+            </button>
+
+            {canSetAsDefault ? (
+              <button
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--brand)] transition hover:bg-[var(--hover-bg)]"
+                disabled={isDisabled}
+                onClick={onSetAsDefault}
+                title={t('chatContext.setAsDefault')}
+                type="button"
+                aria-label={t('chatContext.setAsDefault')}
+              >
+                <Sparkles className="h-4 w-4" />
+              </button>
             ) : null}
-            {providerModelOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <button
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${knowledgeEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-          disabled={isDisabled}
-          onClick={onOpenKnowledgeSettings}
-          title={knowledgeLabel}
-          type="button"
-          aria-label={knowledgeLabel}
-        >
-          <Database className="h-4 w-4" />
-        </button>
-
-        <button
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${workflowEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-          disabled={isDisabled}
-          onClick={onOpenWorkflowSettings}
-          title={workflowLabel}
-          type="button"
-          aria-label={workflowLabel}
-        >
-          <GitBranch className="h-4 w-4" />
-        </button>
-
-        {canSetAsDefault ? (
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--brand)] transition hover:bg-[var(--hover-bg)]"
-            disabled={isDisabled}
-            onClick={onSetAsDefault}
-            title={t('chatContext.setAsDefault')}
-            type="button"
-            aria-label={t('chatContext.setAsDefault')}
-          >
-            <Sparkles className="h-4 w-4" />
-          </button>
+          </>
         ) : null}
       </div>
     )

@@ -3,6 +3,7 @@ import type { Conversation } from '../../../types/chat'
 export interface SidebarContentProps {
   collapsed: boolean
   variant: 'desktop' | 'mobile'
+  desktopSidebarExpanded?: boolean
   interactionDisabled?: boolean
   currentConversationId: Conversation['id'] | null
   conversations: Conversation[]
@@ -35,6 +36,7 @@ export interface SidebarContentProps {
   onTogglePinned: (conversation: Conversation) => void
   onToggleArchivedConversation: (conversation: Conversation) => void
   onDeleteConversation: (conversationId: Conversation['id']) => void
+  onToggleDesktopSidebar?: () => void
   onCreateChat: () => void
   username: string
   onLogout: () => void

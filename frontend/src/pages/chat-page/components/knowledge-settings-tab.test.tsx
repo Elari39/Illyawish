@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -52,6 +53,32 @@ const documents: Record<number, KnowledgeDocument[]> = {
   ],
 }
 
+function renderKnowledgeSettingsTab(
+  overrides: Partial<ComponentProps<typeof KnowledgeSettingsTab>> = {},
+) {
+  return render(
+    <TestProviders>
+      <KnowledgeSettingsTab
+        deleteKnowledgeDocument={vi.fn()}
+        deleteKnowledgeSpace={vi.fn()}
+        knowledgeSpaces={spaces}
+        knowledgeDocuments={{}}
+        selectedKnowledgeSpaceIds={[]}
+        pendingKnowledgeSpaceIds={[]}
+        onToggleKnowledgeSpace={vi.fn()}
+        loadKnowledgeDocuments={vi.fn()}
+        createKnowledgeSpace={vi.fn()}
+        updateKnowledgeSpace={vi.fn()}
+        createKnowledgeDocument={vi.fn()}
+        updateKnowledgeDocument={vi.fn()}
+        uploadKnowledgeDocuments={vi.fn()}
+        replaceKnowledgeDocumentFile={vi.fn()}
+        {...overrides}
+      />
+    </TestProviders>,
+  )
+}
+
 describe('KnowledgeSettingsTab', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -60,25 +87,7 @@ describe('KnowledgeSettingsTab', () => {
   it('renders localized knowledge labels in Chinese', async () => {
     window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, 'zh-CN')
 
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={vi.fn()}
-          deleteKnowledgeSpace={vi.fn()}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={{}}
-          selectedKnowledgeSpaceIds={[]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={vi.fn()}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={vi.fn()}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={vi.fn()}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab()
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '知识空间' })).toBeInTheDocument()
@@ -88,25 +97,7 @@ describe('KnowledgeSettingsTab', () => {
   })
 
   it('shows knowledge space actions and document actions from the API response', async () => {
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={vi.fn()}
-          deleteKnowledgeSpace={vi.fn()}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={documents}
-          selectedKnowledgeSpaceIds={[]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={vi.fn()}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={vi.fn()}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={vi.fn()}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab({ knowledgeDocuments: documents })
 
     fireEvent.change(await screen.findByRole('combobox', { name: 'Knowledge space' }), {
       target: { value: '11' },
@@ -127,25 +118,7 @@ describe('KnowledgeSettingsTab', () => {
       description: 'Updated',
     })
 
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={vi.fn()}
-          deleteKnowledgeSpace={vi.fn()}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={{}}
-          selectedKnowledgeSpaceIds={[]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={updateKnowledgeSpace}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={vi.fn()}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={vi.fn()}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab({ updateKnowledgeSpace })
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit space' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Space name' }), {
@@ -167,25 +140,10 @@ describe('KnowledgeSettingsTab', () => {
   it('confirms before deleting a knowledge space', async () => {
     const deleteKnowledgeSpace = vi.fn().mockResolvedValue(true)
 
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={vi.fn()}
-          deleteKnowledgeSpace={deleteKnowledgeSpace}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={{}}
-          selectedKnowledgeSpaceIds={[11]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={vi.fn()}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={vi.fn()}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={vi.fn()}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab({
+      deleteKnowledgeSpace,
+      selectedKnowledgeSpaceIds: [11],
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete space' }))
     const dialog = await screen.findByRole('dialog', { name: 'Delete space' })
@@ -200,25 +158,11 @@ describe('KnowledgeSettingsTab', () => {
     const updateKnowledgeDocument = vi.fn().mockResolvedValue(documents[11][0])
     const replaceKnowledgeDocumentFile = vi.fn().mockResolvedValue(documents[11][1])
 
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={vi.fn()}
-          deleteKnowledgeSpace={vi.fn()}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={documents}
-          selectedKnowledgeSpaceIds={[]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={vi.fn()}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={updateKnowledgeDocument}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={replaceKnowledgeDocumentFile}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab({
+      knowledgeDocuments: documents,
+      updateKnowledgeDocument,
+      replaceKnowledgeDocumentFile,
+    })
 
     fireEvent.change(await screen.findByRole('combobox', { name: 'Knowledge space' }), {
       target: { value: '11' },
@@ -255,25 +199,10 @@ describe('KnowledgeSettingsTab', () => {
   it('confirms before deleting a knowledge document', async () => {
     const deleteKnowledgeDocument = vi.fn().mockResolvedValue(true)
 
-    render(
-      <TestProviders>
-        <KnowledgeSettingsTab
-          deleteKnowledgeDocument={deleteKnowledgeDocument}
-          deleteKnowledgeSpace={vi.fn()}
-          knowledgeSpaces={spaces}
-          knowledgeDocuments={documents}
-          selectedKnowledgeSpaceIds={[]}
-          setSelectedKnowledgeSpaceIds={vi.fn()}
-          loadKnowledgeDocuments={vi.fn()}
-          createKnowledgeSpace={vi.fn()}
-          updateKnowledgeSpace={vi.fn()}
-          createKnowledgeDocument={vi.fn()}
-          updateKnowledgeDocument={vi.fn()}
-          uploadKnowledgeDocuments={vi.fn()}
-          replaceKnowledgeDocumentFile={vi.fn()}
-        />
-      </TestProviders>,
-    )
+    renderKnowledgeSettingsTab({
+      deleteKnowledgeDocument,
+      knowledgeDocuments: documents,
+    })
 
     fireEvent.change(await screen.findByRole('combobox', { name: 'Knowledge space' }), {
       target: { value: '11' },
@@ -285,5 +214,48 @@ describe('KnowledgeSettingsTab', () => {
     await waitFor(() => {
       expect(deleteKnowledgeDocument).toHaveBeenCalledWith(11, 1)
     })
+  })
+
+  it('toggles a knowledge space from the card body and not from action buttons', async () => {
+    const onToggleKnowledgeSpace = vi.fn()
+
+    renderKnowledgeSettingsTab({
+      onToggleKnowledgeSpace,
+      selectedKnowledgeSpaceIds: [11],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disable knowledge space Engineering' }))
+    expect(onToggleKnowledgeSpace).toHaveBeenCalledTimes(1)
+    expect(onToggleKnowledgeSpace).toHaveBeenCalledWith(spaces[0])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit space' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete space' }))
+    expect(onToggleKnowledgeSpace).toHaveBeenCalledTimes(1)
+  })
+
+  it('disables toggle interactions while a knowledge space save is pending', async () => {
+    const onToggleKnowledgeSpace = vi.fn()
+
+    renderKnowledgeSettingsTab({
+      onToggleKnowledgeSpace,
+      pendingKnowledgeSpaceIds: [11],
+    })
+
+    const toggle = screen.getByRole('switch', { name: 'Enable knowledge space Engineering' })
+    expect(toggle).toBeDisabled()
+
+    fireEvent.click(toggle)
+    expect(onToggleKnowledgeSpace).not.toHaveBeenCalled()
+    expect(screen.getByText('Saving...')).toBeInTheDocument()
+  })
+
+  it('does not render an inner highlight ring on the selected card body', () => {
+    renderKnowledgeSettingsTab({
+      selectedKnowledgeSpaceIds: [11],
+    })
+
+    const cardBody = screen.getByRole('button', { name: 'Disable knowledge space Engineering' })
+    expect(cardBody.className).not.toContain('focus-within:ring-2')
+    expect(cardBody.className).not.toContain('focus-within:ring-[var(--brand)]/30')
   })
 })

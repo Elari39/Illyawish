@@ -173,6 +173,29 @@ textarea {
   font: inherit;
 }
 
+select,
+option,
+optgroup {
+  color: var(--foreground);
+}
+
+select {
+  color-scheme: light dark;
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] option,
+[data-theme="dark"] optgroup {
+  background-color: var(--surface-strong);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] select:disabled,
+[data-theme="dark"] option:disabled {
+  background-color: var(--surface);
+  color: var(--muted-foreground);
+}
+
 button {
   cursor: pointer;
 }

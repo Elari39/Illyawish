@@ -14,6 +14,7 @@ import type {
   ConversationSettings,
   Message,
 } from '../types/chat'
+import { buildExecutionPanelStorageKey } from './chat-page/execution-panel-storage'
 
 const defaultSettings: ConversationSettings = {
   systemPrompt: '',
@@ -239,6 +240,56 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.queryByText('Loading conversation...')).not.toBeInTheDocument()
   })
 
+  it('renders a centered hero state on a fresh chat route', async () => {
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [],
+      total: 0,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation: createConversation(1, 'Unused'),
+      messages: [],
+    })
+
+    renderChatPage(['/chat'])
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'How can I help you today?' })).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-layout', 'hero')
+    expect(screen.getByTestId('chat-header-site-name')).toHaveTextContent('Illyawish')
+    expect(screen.queryByTestId('chat-header-title')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Select a conversation from the sidebar, or start a new chat below.'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Continue last conversation' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the conversation title in the top center once a chat is open', async () => {
+    const activeConversation = createConversation(3, 'Centered title chat')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [activeConversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation: activeConversation,
+      messages: [createMessage(31, 3, 'assistant', 'Loaded message')],
+    })
+
+    renderChatPage([chatPath(3)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Loaded message')).toBeInTheDocument()
+    })
+
+    expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-layout', 'docked')
+    expect(screen.getByTestId('chat-header-site-name')).toHaveTextContent('Illyawish')
+    expect(screen.getByTestId('chat-header-title')).toHaveTextContent('Centered title chat')
+  })
+
   it('opens a clicked history conversation exactly once', async () => {
     const firstConversation = createConversation(1, 'First chat')
     const secondConversation = createConversation(2, 'Second chat', {
@@ -286,6 +337,34 @@ describe('ChatPage conversation navigation', () => {
     expect(
       getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '2'),
     ).toHaveLength(1)
+  })
+
+  it('uses the desktop sidebar header as the only desktop collapse toggle', async () => {
+    const firstConversation = createConversation(1, 'First chat')
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [firstConversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation: firstConversation,
+      messages: [createMessage(11, 1, 'assistant', 'Loaded')],
+    })
+
+    renderChatPage([chatPath(1)])
+
+    const collapseButtons = await screen.findAllByRole('button', {
+      name: 'Collapse conversation sidebar',
+    })
+
+    expect(collapseButtons).toHaveLength(1)
+
+    await act(async () => {
+      fireEvent.click(collapseButtons[0]!)
+    })
+
+    expect(screen.getByRole('button', { name: 'Expand conversation sidebar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'First chat' })).not.toBeInTheDocument()
   })
 
   it('does not switch conversations while a reply is streaming', async () => {
@@ -406,6 +485,10 @@ describe('ChatPage conversation navigation', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Hi there')).toBeInTheDocument()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-header-title')).toHaveTextContent('Fresh chat')
     })
 
     expect(createConversationMock).toHaveBeenCalledTimes(1)
@@ -1499,5 +1582,78 @@ describe('ChatPage conversation navigation', () => {
         workflowPresetId: null,
       })
     })
+  })
+
+  it('renders execution state inside the latest assistant message instead of above the message list', async () => {
+    const conversation = createConversation(9, 'Knowledge run')
+    const messages = [
+      createMessage(91, 9, 'user', 'What is Viper?'),
+      createMessage(92, 9, 'assistant', 'Viper is a Go configuration library.'),
+    ]
+
+    window.sessionStorage.setItem(
+      buildExecutionPanelStorageKey('9'),
+      JSON.stringify({
+        events: [
+          {
+            type: 'run_started',
+            metadata: {
+              templateKey: 'knowledge_qa',
+            },
+          },
+          {
+            type: 'workflow_step_started',
+            stepName: 'question',
+            metadata: {
+              stepIndex: 0,
+            },
+          },
+          {
+            type: 'workflow_step_completed',
+            stepName: 'question',
+            metadata: {
+              stepIndex: 0,
+            },
+          },
+          {
+            type: 'workflow_step_started',
+            stepName: 'retrieve_knowledge',
+            metadata: {
+              stepIndex: 1,
+            },
+          },
+          {
+            type: 'workflow_step_completed',
+            stepName: 'retrieve_knowledge',
+            metadata: {
+              stepIndex: 1,
+            },
+          },
+          {
+            type: 'done',
+          },
+        ],
+        pendingConfirmationId: null,
+      }),
+    )
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages,
+    })
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Viper is a Go configuration library.')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText('Execution progress')).not.toBeInTheDocument()
+    expect(screen.getByText('Knowledge Q&A')).toBeInTheDocument()
+    expect(screen.getByText('2/2 steps')).toBeInTheDocument()
   })
 })
