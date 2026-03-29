@@ -658,6 +658,138 @@ func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
 	}
 }
 
+func TestUpdateConversationPersistsWorkflowPresetAndKnowledgeSpaces(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	workflowPreset := models.WorkflowPreset{
+		UserID:      user.ID,
+		Name:        "Knowledge QA",
+		TemplateKey: workflow.TemplateKnowledgeQA,
+	}
+	if err := db.Create(&workflowPreset).Error; err != nil {
+		t.Fatalf("create workflow preset: %v", err)
+	}
+	knowledgeSpaces := []models.KnowledgeSpace{
+		{UserID: user.ID, Name: "Docs"},
+		{UserID: user.ID, Name: "Runbooks"},
+	}
+	if err := db.Create(&knowledgeSpaces).Error; err != nil {
+		t.Fatalf("create knowledge spaces: %v", err)
+	}
+
+	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
+		WorkflowPresetID:  nullableUintValue(workflowPreset.ID),
+		KnowledgeSpaceIDs: &[]uint{knowledgeSpaces[0].ID, knowledgeSpaces[1].ID},
+	})
+	if err != nil {
+		t.Fatalf("UpdateConversation() error = %v", err)
+	}
+
+	if updatedConversation.WorkflowPresetID == nil || *updatedConversation.WorkflowPresetID != workflowPreset.ID {
+		t.Fatalf("expected workflow preset id to update, got %#v", updatedConversation.WorkflowPresetID)
+	}
+	if len(updatedConversation.KnowledgeSpaceIDs) != 2 ||
+		updatedConversation.KnowledgeSpaceIDs[0] != knowledgeSpaces[0].ID ||
+		updatedConversation.KnowledgeSpaceIDs[1] != knowledgeSpaces[1].ID {
+		t.Fatalf("expected knowledge space ids to update, got %#v", updatedConversation.KnowledgeSpaceIDs)
+	}
+}
+
+func TestCreateConversationRejectsWorkflowPresetFromAnotherUser(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	foreignPreset := models.WorkflowPreset{
+		UserID:      user.ID + 99,
+		Name:        "Foreign preset",
+		TemplateKey: workflow.TemplateKnowledgeQA,
+	}
+	if err := db.Create(&foreignPreset).Error; err != nil {
+		t.Fatalf("create foreign workflow preset: %v", err)
+	}
+
+	_, err := service.CreateConversation(user.ID, CreateConversationInput{
+		WorkflowPresetID: &foreignPreset.ID,
+	})
+	if err == nil {
+		t.Fatal("expected workflow preset ownership validation error")
+	}
+	if !isRequestError(err) || err.Error() != "workflow preset not found" {
+		t.Fatalf("expected workflow preset not found request error, got %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected no extra conversation to be created, got %d", count)
+	}
+}
+
+func TestCreateConversationRejectsKnowledgeSpaceFromAnotherUser(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	foreignSpace := models.KnowledgeSpace{
+		UserID: user.ID + 1,
+		Name:   "Foreign docs",
+	}
+	if err := db.Create(&foreignSpace).Error; err != nil {
+		t.Fatalf("create foreign knowledge space: %v", err)
+	}
+
+	_, err := service.CreateConversation(user.ID, CreateConversationInput{
+		KnowledgeSpaceIDs: &[]uint{foreignSpace.ID},
+	})
+	if err == nil {
+		t.Fatal("expected knowledge space ownership validation error")
+	}
+	if !isRequestError(err) || err.Error() != "knowledge space not found" {
+		t.Fatalf("expected knowledge space not found request error, got %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected no extra conversation to be created, got %d", count)
+	}
+}
+
+func TestUpdateConversationRejectsKnowledgeSpaceFromAnotherUser(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	foreignSpace := models.KnowledgeSpace{
+		UserID: user.ID + 1,
+		Name:   "Foreign docs",
+	}
+	if err := db.Create(&foreignSpace).Error; err != nil {
+		t.Fatalf("create foreign knowledge space: %v", err)
+	}
+
+	_, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
+		KnowledgeSpaceIDs: &[]uint{foreignSpace.ID},
+	})
+	if err == nil {
+		t.Fatal("expected knowledge space ownership validation error")
+	}
+	if !isRequestError(err) || err.Error() != "knowledge space not found" {
+		t.Fatalf("expected knowledge space not found request error, got %v", err)
+	}
+
+	reloadedConversation, err := service.GetConversation(user.ID, conversation.ID)
+	if err != nil {
+		t.Fatalf("GetConversation() error = %v", err)
+	}
+	if len(reloadedConversation.KnowledgeSpaceIDs) != 0 {
+		t.Fatalf("expected knowledge spaces to remain unchanged, got %#v", reloadedConversation.KnowledgeSpaceIDs)
+	}
+}
+
 func TestCreateConversationGeneratesConversationPublicID(t *testing.T) {
 	db, user, _ := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
@@ -706,6 +838,79 @@ func TestImportConversationGeneratesConversationPublicID(t *testing.T) {
 	}
 }
 
+func TestImportConversationRejectsWorkflowPresetFromAnotherUser(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	foreignPreset := models.WorkflowPreset{
+		UserID:      user.ID + 99,
+		Name:        "Foreign preset",
+		TemplateKey: workflow.TemplateKnowledgeQA,
+	}
+	if err := db.Create(&foreignPreset).Error; err != nil {
+		t.Fatalf("create foreign workflow preset: %v", err)
+	}
+
+	_, err := service.ImportConversation(user.ID, ImportConversationInput{
+		Title:            "Imported chat",
+		WorkflowPresetID: &foreignPreset.ID,
+		Messages: []ImportMessageInput{
+			{Role: models.RoleUser, Content: "Hello"},
+			{Role: models.RoleAssistant, Content: "Hi"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected workflow preset ownership validation error")
+	}
+	if !isRequestError(err) || err.Error() != "workflow preset not found" {
+		t.Fatalf("expected workflow preset not found request error, got %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected no extra conversation to be created, got %d", count)
+	}
+}
+
+func TestImportConversationRejectsKnowledgeSpaceFromAnotherUser(t *testing.T) {
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	foreignSpace := models.KnowledgeSpace{
+		UserID: user.ID + 1,
+		Name:   "Foreign docs",
+	}
+	if err := db.Create(&foreignSpace).Error; err != nil {
+		t.Fatalf("create foreign knowledge space: %v", err)
+	}
+
+	_, err := service.ImportConversation(user.ID, ImportConversationInput{
+		Title:             "Imported chat",
+		KnowledgeSpaceIDs: &[]uint{foreignSpace.ID},
+		Messages: []ImportMessageInput{
+			{Role: models.RoleUser, Content: "Hello"},
+			{Role: models.RoleAssistant, Content: "Hi"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected knowledge space ownership validation error")
+	}
+	if !isRequestError(err) || err.Error() != "knowledge space not found" {
+		t.Fatalf("expected knowledge space not found request error, got %v", err)
+	}
+
+	var count int64
+	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count conversations: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected no extra conversation to be created, got %d", count)
+	}
+}
+
 func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	db, user, _ := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
@@ -713,7 +918,6 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	temperature := float32(0.6)
 	maxTokens := 1536
 	contextWindowTurns := 8
-	workflowPresetID := uint(11)
 	providerPresetID := uint(27)
 	providerPreset := models.LLMProviderPreset{
 		ID:              providerPresetID,
@@ -728,12 +932,27 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	if err := db.Create(&providerPreset).Error; err != nil {
 		t.Fatalf("create provider preset: %v", err)
 	}
+	workflowPreset := models.WorkflowPreset{
+		UserID:      user.ID,
+		Name:        "Knowledge QA",
+		TemplateKey: workflow.TemplateKnowledgeQA,
+	}
+	if err := db.Create(&workflowPreset).Error; err != nil {
+		t.Fatalf("create workflow preset: %v", err)
+	}
+	knowledgeSpaces := []models.KnowledgeSpace{
+		{UserID: user.ID, Name: "Docs"},
+		{UserID: user.ID, Name: "Runbooks"},
+	}
+	if err := db.Create(&knowledgeSpaces).Error; err != nil {
+		t.Fatalf("create knowledge spaces: %v", err)
+	}
 
 	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{
 		Folder:            ptrString("  Work  "),
 		Tags:              &[]string{" urgent ", "backend", "URGENT"},
-		WorkflowPresetID:  &workflowPresetID,
-		KnowledgeSpaceIDs: &[]uint{3, 5},
+		WorkflowPresetID:  &workflowPreset.ID,
+		KnowledgeSpaceIDs: &[]uint{knowledgeSpaces[0].ID, knowledgeSpaces[1].ID},
 		Settings: &ConversationSettings{
 			ProviderPresetID:   &providerPresetID,
 			SystemPrompt:       "  Draft prompt  ",
@@ -756,13 +975,15 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	if len(createdConversation.Tags) != 3 || createdConversation.Tags[0] != "urgent" || createdConversation.Tags[1] != "backend" || createdConversation.Tags[2] != "URGENT" {
 		t.Fatalf("expected tags to be sanitized, got %#v", createdConversation.Tags)
 	}
-	if createdConversation.WorkflowPresetID == nil || *createdConversation.WorkflowPresetID != workflowPresetID {
+	if createdConversation.WorkflowPresetID == nil || *createdConversation.WorkflowPresetID != workflowPreset.ID {
 		t.Fatalf("expected workflow preset id to persist, got %#v", createdConversation.WorkflowPresetID)
 	}
 	if createdConversation.ProviderPresetID == nil || *createdConversation.ProviderPresetID != providerPresetID {
 		t.Fatalf("expected provider preset id to persist, got %#v", createdConversation.ProviderPresetID)
 	}
-	if len(createdConversation.KnowledgeSpaceIDs) != 2 || createdConversation.KnowledgeSpaceIDs[0] != 3 || createdConversation.KnowledgeSpaceIDs[1] != 5 {
+	if len(createdConversation.KnowledgeSpaceIDs) != 2 ||
+		createdConversation.KnowledgeSpaceIDs[0] != knowledgeSpaces[0].ID ||
+		createdConversation.KnowledgeSpaceIDs[1] != knowledgeSpaces[1].ID {
 		t.Fatalf("expected knowledge space ids to persist, got %#v", createdConversation.KnowledgeSpaceIDs)
 	}
 	if createdConversation.SystemPrompt != "Draft prompt" {
@@ -1405,7 +1626,16 @@ func newChatTestContext(t *testing.T) (*gorm.DB, models.User, models.Conversatio
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Conversation{}, &models.Message{}, &models.MessageAttachment{}, &models.StoredAttachment{}, &models.LLMProviderPreset{}); err != nil {
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Conversation{},
+		&models.Message{},
+		&models.MessageAttachment{},
+		&models.StoredAttachment{},
+		&models.LLMProviderPreset{},
+		&models.WorkflowPreset{},
+		&models.KnowledgeSpace{},
+	); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}
 

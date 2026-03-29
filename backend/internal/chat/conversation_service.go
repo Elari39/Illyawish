@@ -83,6 +83,12 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 	if err := s.enforceConversationQuota(userID); err != nil {
 		return nil, err
 	}
+	if err := s.validateWorkflowPresetOwnership(userID, input.WorkflowPresetID); err != nil {
+		return nil, err
+	}
+	if err := s.validateKnowledgeSpaceOwnership(userID, valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)); err != nil {
+		return nil, err
+	}
 
 	var settings ConversationSettings
 	if input.Settings != nil {
@@ -139,6 +145,12 @@ func (s *Service) ImportConversation(
 	input ImportConversationInput,
 ) (*models.Conversation, error) {
 	if err := s.enforceConversationQuota(userID); err != nil {
+		return nil, err
+	}
+	if err := s.validateWorkflowPresetOwnership(userID, input.WorkflowPresetID); err != nil {
+		return nil, err
+	}
+	if err := s.validateKnowledgeSpaceOwnership(userID, valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)); err != nil {
 		return nil, err
 	}
 
@@ -253,6 +265,14 @@ func valueOrEmptyUintSlice(values *[]uint) []uint {
 	return *values
 }
 
+func serializeKnowledgeSpaceIDs(values []uint) (string, error) {
+	payload, err := json.Marshal(cloneUintSlice(values))
+	if err != nil {
+		return "", fmt.Errorf("serialize knowledge space ids: %w", err)
+	}
+	return string(payload), nil
+}
+
 func (s *Service) UpdateConversation(
 	userID uint,
 	conversationID uint,
@@ -297,6 +317,24 @@ func (s *Service) UpdateConversation(
 			return nil, err
 		}
 		updates["tags"] = serializedTags
+	}
+	if input.WorkflowPresetID.IsSet() {
+		workflowPresetID := input.WorkflowPresetID.Value()
+		if err := s.validateWorkflowPresetOwnership(userID, workflowPresetID); err != nil {
+			return nil, err
+		}
+		updates["workflow_preset_id"] = workflowPresetID
+	}
+	if input.KnowledgeSpaceIDs != nil {
+		knowledgeSpaceIDs := cloneUintSlice(*input.KnowledgeSpaceIDs)
+		if err := s.validateKnowledgeSpaceOwnership(userID, knowledgeSpaceIDs); err != nil {
+			return nil, err
+		}
+		serializedKnowledgeSpaceIDs, err := serializeKnowledgeSpaceIDs(knowledgeSpaceIDs)
+		if err != nil {
+			return nil, err
+		}
+		updates["knowledge_space_ids"] = serializedKnowledgeSpaceIDs
 	}
 	if input.Settings != nil {
 		settings, err := sanitizeConversationSettings(input.Settings)

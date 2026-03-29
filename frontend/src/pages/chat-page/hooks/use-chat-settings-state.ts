@@ -89,10 +89,14 @@ export function useChatSettingsState({
       knowledgeSpaceIdsDraft,
       currentConversation,
     )
+    const previousChatSettings = chatSettings
+    const previousConversation = currentConversation
+    let globalSettingsSaved = false
 
     try {
       const updatedChatSettings =
         await chatApi.updateChatSettings(chatSettingsDraft)
+      globalSettingsSaved = true
       setChatSettings(updatedChatSettings)
       setChatSettingsDraft(updatedChatSettings)
 
@@ -121,26 +125,52 @@ export function useChatSettingsState({
         {
           ...metadataUpdate,
           settings: {
-            ...defaultConversationSettings,
+            systemPrompt: settingsDraft.systemPrompt,
             providerPresetId: settingsDraft.providerPresetId ?? null,
             model: settingsDraft.model,
-            systemPrompt: settingsDraft.systemPrompt,
+            temperature: settingsDraft.temperature,
+            maxTokens: settingsDraft.maxTokens,
+            contextWindowTurns: settingsDraft.contextWindowTurns,
           },
         },
       )
       syncConversationIntoList(updatedConversation)
       setPendingConversation(updatedConversation)
       setSettingsDraft(updatedConversation.settings)
+      setConversationFolderDraft(updatedConversation.folder)
+      setConversationTagsDraft(updatedConversation.tags.join(', '))
       setWorkflowPresetIdDraft(updatedConversation.workflowPresetId ?? null)
       setKnowledgeSpaceIdsDraft(updatedConversation.knowledgeSpaceIds ?? [])
       onSaved()
     } catch (error) {
+      if (activeConversationId && globalSettingsSaved) {
+        try {
+          const rolledBackChatSettings =
+            await chatApi.updateChatSettings(previousChatSettings)
+          setChatSettings(rolledBackChatSettings)
+          setChatSettingsDraft(rolledBackChatSettings)
+        } catch {
+          setChatSettings(previousChatSettings)
+          setChatSettingsDraft(previousChatSettings)
+        }
+
+        if (previousConversation) {
+          setPendingConversation(previousConversation)
+          setSettingsDraft(previousConversation.settings)
+          setConversationFolderDraft(previousConversation.folder)
+          setConversationTagsDraft(previousConversation.tags.join(', '))
+          setWorkflowPresetIdDraft(previousConversation.workflowPresetId ?? null)
+          setKnowledgeSpaceIdsDraft(previousConversation.knowledgeSpaceIds ?? [])
+        }
+      }
+
       setChatError(
         error instanceof Error ? error.message : t('error.saveSettings'),
       )
     }
   }, [
     activeConversationId,
+    chatSettings,
     chatSettingsDraft,
     conversationFolderDraft,
     conversationTagsDraft,

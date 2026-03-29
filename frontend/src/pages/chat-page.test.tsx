@@ -96,6 +96,32 @@ function chatPath(id: number | string) {
   return `/chat/s/${id}`
 }
 
+function createWorkflowPreset(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 5,
+    userId: 1,
+    name: 'Knowledge Q&A',
+    templateKey: 'knowledge_qa',
+    defaultInputs: {},
+    knowledgeSpaceIds: [],
+    toolEnablements: {},
+    outputMode: 'markdown',
+    createdAt: '2026-03-26T09:08:00Z',
+    updatedAt: '2026-03-26T09:08:00Z',
+    ...overrides,
+  }
+}
+
+function createWorkflowTemplate(overrides: Record<string, unknown> = {}) {
+  return {
+    key: 'knowledge_qa',
+    name: 'Knowledge Q&A',
+    description: 'Answer questions from knowledge spaces.',
+    nodes: [],
+    ...overrides,
+  }
+}
+
 function LocationProbe() {
   const location = useLocation()
 
@@ -1411,6 +1437,63 @@ describe('ChatPage conversation navigation', () => {
           systemPrompt: 'Keep provider selection',
         },
       }))
+    })
+  })
+
+  it('clears the current conversation workflow preset after deleting that preset', async () => {
+    const workflowPreset = createWorkflowPreset()
+    const conversation = createConversation(9, 'Workflow chat', {
+      workflowPresetId: Number(workflowPreset.id),
+    })
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages: [createMessage(91, 9, 'assistant', 'Workflow reply')],
+    })
+    vi.spyOn(workflowApi, 'listTemplates').mockResolvedValue([
+      createWorkflowTemplate(),
+    ])
+    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([
+      workflowPreset,
+    ])
+    const deletePresetMock = vi
+      .spyOn(workflowApi, 'deletePreset')
+      .mockResolvedValue(undefined)
+    const updateConversationMock = vi
+      .spyOn(chatApi, 'updateConversation')
+      .mockResolvedValue(createConversation(9, 'Workflow chat', {
+        workflowPresetId: null,
+      }))
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Workflow reply')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    const settingsDialog = await screen.findByRole('dialog', { name: 'Settings' })
+    fireEvent.click(await within(settingsDialog).findByRole('button', { name: 'Workflow' }))
+    fireEvent.click(await within(settingsDialog).findByRole('button', { name: 'Delete preset Knowledge Q&A' }))
+
+    const confirmationDialogs = await screen.findAllByRole('dialog')
+    const confirmationDialog = confirmationDialogs[confirmationDialogs.length - 1]
+    if (!confirmationDialog) {
+      throw new Error('Confirmation dialog not found')
+    }
+    fireEvent.click(within(confirmationDialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(deletePresetMock).toHaveBeenCalledWith(5)
+    })
+    await waitFor(() => {
+      expect(updateConversationMock).toHaveBeenCalledWith('9', {
+        workflowPresetId: null,
+      })
     })
   })
 })

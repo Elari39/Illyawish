@@ -121,7 +121,7 @@ type ConversationUpdateInput struct {
 	IsArchived        *bool                 `json:"isArchived"`
 	Folder            *string               `json:"folder"`
 	Tags              *[]string             `json:"tags"`
-	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
+	WorkflowPresetID  optionalNullableUint  `json:"workflowPresetId"`
 	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
 	Settings          *ConversationSettings `json:"settings"`
 }
@@ -624,6 +624,43 @@ func (s *Service) validateProviderPresetOwnership(userID uint, providerPresetID 
 	}
 	if count == 0 {
 		return requestError{message: "provider preset not found"}
+	}
+
+	return nil
+}
+
+func (s *Service) validateWorkflowPresetOwnership(userID uint, workflowPresetID *uint) error {
+	if workflowPresetID == nil || *workflowPresetID == 0 {
+		return nil
+	}
+
+	var count int64
+	if err := s.db.Model(&models.WorkflowPreset{}).
+		Where("id = ? AND user_id = ?", *workflowPresetID, userID).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("validate workflow preset: %w", err)
+	}
+	if count == 0 {
+		return requestError{message: "workflow preset not found"}
+	}
+
+	return nil
+}
+
+func (s *Service) validateKnowledgeSpaceOwnership(userID uint, knowledgeSpaceIDs []uint) error {
+	knowledgeSpaceIDs = cloneUintSlice(knowledgeSpaceIDs)
+	if len(knowledgeSpaceIDs) == 0 {
+		return nil
+	}
+
+	var count int64
+	if err := s.db.Model(&models.KnowledgeSpace{}).
+		Where("user_id = ? AND id IN ?", userID, knowledgeSpaceIDs).
+		Count(&count).Error; err != nil {
+		return fmt.Errorf("validate knowledge spaces: %w", err)
+	}
+	if count != int64(len(knowledgeSpaceIDs)) {
+		return requestError{message: "knowledge space not found"}
 	}
 
 	return nil
