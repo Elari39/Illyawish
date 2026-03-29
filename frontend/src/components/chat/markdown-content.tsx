@@ -2,6 +2,7 @@ import {
   Children,
   isValidElement,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -99,16 +100,31 @@ export function MarkdownContent({ content }: MarkdownContentProps) {
 function CodeBlock({ children }: { children: ReactNode }) {
   const { t } = useI18n()
   const [copied, setCopied] = useState(false)
+  const resetCopiedTimerRef = useRef<number | null>(null)
   const codeElement = findCodeElement(children)
   const codeClassName = codeElement?.props.className
   const codeChildren = codeElement?.props.children ?? children
   const code = extractTextContent(codeChildren).replace(/\n$/, '')
   const language = getLanguageLabel(codeClassName) || t('message.code')
 
+  useEffect(() => {
+    return () => {
+      if (resetCopiedTimerRef.current != null) {
+        window.clearTimeout(resetCopiedTimerRef.current)
+      }
+    }
+  }, [])
+
   async function handleCopy() {
     await navigator.clipboard.writeText(code)
     setCopied(true)
-    window.setTimeout(() => setCopied(false), 1200)
+    if (resetCopiedTimerRef.current != null) {
+      window.clearTimeout(resetCopiedTimerRef.current)
+    }
+    resetCopiedTimerRef.current = window.setTimeout(() => {
+      setCopied(false)
+      resetCopiedTimerRef.current = null
+    }, 1200)
   }
 
   return (

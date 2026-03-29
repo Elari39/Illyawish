@@ -180,6 +180,52 @@ describe('buildExecutionPanelModel', () => {
     })
   })
 
+  it('does not restore waiting confirmation state once the pending confirmation id is cleared', () => {
+    const model = buildExecutionPanelModel([
+      createEvent({
+        type: 'run_started',
+        metadata: {
+          templateKey: 'webpage_digest',
+        },
+      }),
+      createEvent({
+        type: 'workflow_step_started',
+        stepName: 'fetch_page',
+        metadata: {
+          stepIndex: 1,
+        },
+      }),
+      createEvent({
+        type: 'tool_call_started',
+        toolName: 'http_request',
+      }),
+      createEvent({
+        type: 'tool_call_confirmation_required',
+        toolName: 'http_request',
+        confirmationId: 'confirm-1',
+        metadata: {
+          confirmationLabel: 'Confirm HTTP request',
+        },
+      }),
+    ], null)
+    expect(model).not.toBeNull()
+    if (!model) {
+      throw new Error('expected execution panel model')
+    }
+
+    expect(model.run.status).toBe('running')
+    expect(model.tools[0]).toMatchObject({
+      toolName: 'http_request',
+      status: 'running',
+      confirmationId: undefined,
+      confirmationLabel: undefined,
+    })
+    expect(model.latestTool).toMatchObject({
+      toolName: 'http_request',
+      status: 'running',
+    })
+  })
+
   it('prefers the latest retrieval and trims citation chips for dashboard display', () => {
     const model = buildExecutionPanelModel([
       createEvent({

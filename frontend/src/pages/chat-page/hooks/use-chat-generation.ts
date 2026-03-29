@@ -53,6 +53,7 @@ interface UseChatGenerationOptions {
   conversationTagsDraft: string
   workflowPresetIdDraft?: number | null
   knowledgeSpaceIdsDraft?: number[]
+  pendingKnowledgeSpaceIds?: number[]
   settingsDraft: ConversationSettings
   setChatError: (value: string | null) => void
   t: I18nContextValue['t']
@@ -110,6 +111,12 @@ export function useChatGeneration({
   const [pendingConfirmationId, setPendingConfirmationId] = useState<string | null>(null)
   const executionEventsRef = useRef<StreamEvent[]>([])
   const pendingConfirmationIdRef = useRef<string | null>(null)
+  const bufferedDeltaRef = useRef<{
+    conversationId: Conversation['id']
+    placeholderId: number
+    content: string
+  } | null>(null)
+  const bufferedDeltaFrameRef = useRef<number | null>(null)
 
   function applyExecutionState(nextState: StoredExecutionPanelState) {
     executionEventsRef.current = nextState.events
@@ -126,8 +133,78 @@ export function useChatGeneration({
     writeExecutionPanelState(conversationId, nextState)
   }
 
+  function flushBufferedMessageDelta() {
+    const bufferedDelta = bufferedDeltaRef.current
+    if (!bufferedDelta) {
+      return
+    }
+
+    bufferedDeltaRef.current = null
+    setMessages((previous) =>
+      appendToStreamingMessage(
+        previous,
+        buildMessageTarget(
+          bufferedDelta.conversationId,
+          bufferedDelta.placeholderId,
+        ),
+        bufferedDelta.content,
+      ),
+    )
+  }
+
+  function cancelBufferedMessageDeltaFrame() {
+    if (bufferedDeltaFrameRef.current != null) {
+      window.cancelAnimationFrame(bufferedDeltaFrameRef.current)
+      bufferedDeltaFrameRef.current = null
+    }
+  }
+
+  function scheduleBufferedMessageDeltaFlush() {
+    if (bufferedDeltaFrameRef.current != null) {
+      return
+    }
+
+    bufferedDeltaFrameRef.current = window.requestAnimationFrame(() => {
+      bufferedDeltaFrameRef.current = null
+      flushBufferedMessageDelta()
+    })
+  }
+
+  function queueBufferedMessageDelta(
+    conversationId: Conversation['id'],
+    placeholderId: number,
+    content: string,
+  ) {
+    const bufferedDelta = bufferedDeltaRef.current
+    if (
+      bufferedDelta &&
+      bufferedDelta.conversationId === conversationId &&
+      bufferedDelta.placeholderId === placeholderId
+    ) {
+      bufferedDelta.content += content
+    } else {
+      flushBufferedMessageDelta()
+      bufferedDeltaRef.current = {
+        conversationId,
+        placeholderId,
+        content,
+      }
+    }
+
+    scheduleBufferedMessageDeltaFlush()
+  }
+
+  useEffect(() => {
+    return () => {
+      cancelBufferedMessageDeltaFrame()
+      bufferedDeltaRef.current = null
+    }
+  }, [])
+
   useEffect(() => {
     if (!activeConversationId) {
+      cancelBufferedMessageDeltaFrame()
+      bufferedDeltaRef.current = null
       executionEventsRef.current = []
       pendingConfirmationIdRef.current = null
       setExecutionEvents([])
@@ -195,6 +272,8 @@ export function useChatGeneration({
       return
     }
 
+    cancelBufferedMessageDeltaFrame()
+    flushBufferedMessageDelta()
     activeGenerationRef.current = null
     setIsSending(false)
   }
@@ -226,6 +305,9 @@ export function useChatGeneration({
 
   async function settleStoppedGeneration(generation: ActiveGenerationState) {
     let clearErrorOnSuccess = true
+
+    cancelBufferedMessageDeltaFrame()
+    flushBufferedMessageDelta()
 
     try {
       await chatApi.cancelGeneration(generation.conversationId)
@@ -292,18 +374,12 @@ export function useChatGeneration({
     }
 
     if (event.type === 'delta' && typeof event.content === 'string') {
-      const deltaContent = event.content
-      setMessages((previous) =>
-        appendToStreamingMessage(previous, target, deltaContent),
-      )
+      queueBufferedMessageDelta(conversationId, placeholderId, event.content)
       return
     }
 
     if (event.type === 'message_delta' && typeof event.content === 'string') {
-      const deltaContent = event.content
-      setMessages((previous) =>
-        appendToStreamingMessage(previous, target, deltaContent),
-      )
+      queueBufferedMessageDelta(conversationId, placeholderId, event.content)
       return
     }
 
@@ -331,6 +407,8 @@ export function useChatGeneration({
     }
 
     if (event.type === 'done' || event.type === 'cancelled') {
+      cancelBufferedMessageDeltaFrame()
+      flushBufferedMessageDelta()
       persistExecutionState(conversationId, {
         events: [...executionEventsRef.current, event],
         pendingConfirmationId: null,
@@ -354,6 +432,8 @@ export function useChatGeneration({
     }
 
     if (event.type === 'error') {
+      cancelBufferedMessageDeltaFrame()
+      flushBufferedMessageDelta()
       persistExecutionState(conversationId, {
         events: [...executionEventsRef.current, event],
         pendingConfirmationId: null,
@@ -765,13 +845,16 @@ export function useChatGeneration({
   }
 
   async function handleConfirmToolCall(approved: boolean) {
-    if (!pendingConfirmationId) {
+    if (!pendingConfirmationId || !activeConversationId) {
       return
     }
 
     try {
       await agentApi.confirmToolCall(pendingConfirmationId, approved)
-      setPendingConfirmationId(null)
+      persistExecutionState(activeConversationId, {
+        events: executionEventsRef.current,
+        pendingConfirmationId: null,
+      })
     } catch (error) {
       setChatError(
         error instanceof Error ? error.message : t('error.streamingFailed'),

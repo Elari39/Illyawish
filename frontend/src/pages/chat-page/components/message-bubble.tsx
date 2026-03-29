@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, RefreshCw } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
@@ -21,13 +21,13 @@ interface MessageBubbleProps {
   executionPanelModel: ExecutionPanelModel | null
   isEditing: boolean
   onCopySuccessToast: (message: string, variant?: 'success' | 'error' | 'info') => void
-  onEdit: () => void
-  onRetry: () => void
-  onRegenerate: () => void
+  onEditMessage: (message: Message) => void
+  onRetryMessage: (message: Message) => void
+  onRegenerateMessage: (message: Message) => void
   onConfirmToolCall?: (approved: boolean) => Promise<void>
 }
 
-export function MessageBubble({
+function MessageBubbleComponent({
   message,
   canEdit,
   canRetry,
@@ -35,9 +35,9 @@ export function MessageBubble({
   executionPanelModel,
   isEditing,
   onCopySuccessToast,
-  onEdit,
-  onRetry,
-  onRegenerate,
+  onEditMessage,
+  onRetryMessage,
+  onRegenerateMessage,
   onConfirmToolCall,
 }: MessageBubbleProps) {
   const { locale, t } = useI18n()
@@ -46,12 +46,12 @@ export function MessageBubble({
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
-  const imageAttachments = message.attachments.filter((attachment) =>
-    isImageAttachment(attachment),
-  )
-  const documentAttachments = message.attachments.filter(
-    (attachment) => !isImageAttachment(attachment),
-  )
+  const imageAttachments = useMemo(() => (
+    message.attachments.filter((attachment) => isImageAttachment(attachment))
+  ), [message.attachments])
+  const documentAttachments = useMemo(() => (
+    message.attachments.filter((attachment) => !isImageAttachment(attachment))
+  ), [message.attachments])
 
   useEffect(() => {
     return () => {
@@ -131,7 +131,11 @@ export function MessageBubble({
               {copied ? t('message.copied') : t('message.copy')}
             </Button>
             {canEdit ? (
-              <Button className="px-2 py-1 text-xs" onClick={onEdit} variant="ghost">
+              <Button
+                className="px-2 py-1 text-xs"
+                onClick={() => onEditMessage(message)}
+                variant="ghost"
+              >
                 {t('message.edit')}
               </Button>
             ) : null}
@@ -170,7 +174,7 @@ export function MessageBubble({
           {canRetry ? (
             <Button
               className="rounded-full px-3 py-1.5 text-xs"
-              onClick={onRetry}
+              onClick={() => onRetryMessage(message)}
               variant="secondary"
             >
               {t('message.retry')}
@@ -179,7 +183,7 @@ export function MessageBubble({
           {canRegenerate ? (
             <Button
               className="rounded-full px-3 py-1.5 text-xs"
-              onClick={onRegenerate}
+              onClick={() => onRegenerateMessage(message)}
               variant="secondary"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -201,3 +205,22 @@ export function MessageBubble({
     </article>
   )
 }
+
+function areMessageBubblePropsEqual(
+  previous: MessageBubbleProps,
+  next: MessageBubbleProps,
+) {
+  return previous.message === next.message &&
+    previous.canEdit === next.canEdit &&
+    previous.canRetry === next.canRetry &&
+    previous.canRegenerate === next.canRegenerate &&
+    previous.executionPanelModel === next.executionPanelModel &&
+    previous.isEditing === next.isEditing &&
+    previous.onCopySuccessToast === next.onCopySuccessToast &&
+    previous.onEditMessage === next.onEditMessage &&
+    previous.onRetryMessage === next.onRetryMessage &&
+    previous.onRegenerateMessage === next.onRegenerateMessage &&
+    previous.onConfirmToolCall === next.onConfirmToolCall
+}
+
+export const MessageBubble = memo(MessageBubbleComponent, areMessageBubblePropsEqual)

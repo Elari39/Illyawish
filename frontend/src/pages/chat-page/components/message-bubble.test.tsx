@@ -8,6 +8,9 @@ import { MessageBubble } from './message-bubble'
 describe('MessageBubble', () => {
   const writeText = vi.fn<(_: string) => Promise<void>>()
   const showToast = vi.fn()
+  const editMessage = vi.fn()
+  const regenerateMessage = vi.fn()
+  const retryMessage = vi.fn()
   const executionModel: ExecutionPanelModel = {
     displayState: 'collapsed',
     run: {
@@ -62,6 +65,9 @@ describe('MessageBubble', () => {
   beforeEach(() => {
     writeText.mockReset()
     showToast.mockReset()
+    editMessage.mockReset()
+    regenerateMessage.mockReset()
+    retryMessage.mockReset()
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -107,10 +113,10 @@ describe('MessageBubble', () => {
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={vi.fn()}
-          onRetry={vi.fn()}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
         />
       </TestProviders>,
     )
@@ -150,10 +156,10 @@ describe('MessageBubble', () => {
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={vi.fn()}
-          onRetry={vi.fn()}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
         />
       </TestProviders>,
     )
@@ -196,10 +202,10 @@ describe('MessageBubble', () => {
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={regenerateSpy}
-          onRetry={retrySpy}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateSpy}
+          onRetryMessage={retrySpy}
         />
       </TestProviders>,
     )
@@ -226,10 +232,10 @@ describe('MessageBubble', () => {
             status: 'cancelled',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={regenerateSpy}
-          onRetry={retrySpy}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateSpy}
+          onRetryMessage={retrySpy}
         />
       </TestProviders>,
     )
@@ -258,10 +264,10 @@ describe('MessageBubble', () => {
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={vi.fn()}
-          onRetry={vi.fn()}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
         />
       </TestProviders>,
     )
@@ -291,10 +297,10 @@ describe('MessageBubble', () => {
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
           }}
-          onEdit={vi.fn()}
           onCopySuccessToast={showToast}
-          onRegenerate={vi.fn()}
-          onRetry={vi.fn()}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
         />
       </TestProviders>,
     )

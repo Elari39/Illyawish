@@ -179,20 +179,27 @@ export function buildExecutionPanelModel(
     }
 
     if (event.type === 'tool_call_confirmation_required') {
+      const isActivePendingConfirmation =
+        pendingConfirmationId != null &&
+        (event.confirmationId == null || event.confirmationId === pendingConfirmationId)
       const tool = findLastTool(tools, event.toolName)
       if (tool) {
-        tool.status = 'waiting_confirmation'
-        tool.confirmationId = event.confirmationId ?? ''
-        tool.confirmationLabel = stringMetadata(event, 'confirmationLabel')
+        tool.status = isActivePendingConfirmation ? 'waiting_confirmation' : 'running'
+        tool.confirmationId = isActivePendingConfirmation ? (event.confirmationId ?? '') : undefined
+        tool.confirmationLabel = isActivePendingConfirmation
+          ? stringMetadata(event, 'confirmationLabel')
+          : undefined
       }
-      const currentStep = findLatestIncompleteStep(stepsByName)
-      if (currentStep) {
-        currentStep.status = 'waiting_confirmation'
+      if (isActivePendingConfirmation) {
+        const currentStep = findLatestIncompleteStep(stepsByName)
+        if (currentStep) {
+          currentStep.status = 'waiting_confirmation'
+        }
+        runStatus = 'waiting_confirmation'
       }
-      runStatus = 'waiting_confirmation'
       timeline.push({
         type: event.type,
-        status: 'waiting_confirmation',
+        status: isActivePendingConfirmation ? 'waiting_confirmation' : 'running',
         title: 'Tool confirmation required',
         description: event.toolName ?? '',
       })

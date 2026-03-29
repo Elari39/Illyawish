@@ -207,6 +207,7 @@ export function useChatSession({
     conversationTagsDraft,
     workflowPresetIdDraft,
     knowledgeSpaceIdsDraft,
+    pendingKnowledgeSpaceIds,
     selectedAttachments,
     settingsDraft,
     pendingConversation,

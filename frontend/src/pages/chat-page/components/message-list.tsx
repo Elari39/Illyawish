@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useCallback, useEffect, useRef, type RefObject } from 'react'
 
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n/use-i18n'
@@ -49,6 +49,49 @@ export function MessageList({
   onRegenerateMessage,
 }: MessageListProps) {
   const { t } = useI18n()
+  const actionHandlersRef = useRef({
+    onEditMessage,
+    onRetryMessage,
+    onRegenerateMessage,
+    onConfirmToolCall,
+    onShowToast,
+  })
+
+  useEffect(() => {
+    actionHandlersRef.current = {
+      onEditMessage,
+      onRetryMessage,
+      onRegenerateMessage,
+      onConfirmToolCall,
+      onShowToast,
+    }
+  }, [
+    onConfirmToolCall,
+    onEditMessage,
+    onRegenerateMessage,
+    onRetryMessage,
+    onShowToast,
+  ])
+
+  const handleEditMessage = useCallback((message: Message) => {
+    actionHandlersRef.current.onEditMessage(message)
+  }, [])
+
+  const handleRetryMessage = useCallback((message: Message) => {
+    actionHandlersRef.current.onRetryMessage(message)
+  }, [])
+
+  const handleRegenerateMessage = useCallback((message: Message) => {
+    actionHandlersRef.current.onRegenerateMessage(message)
+  }, [])
+
+  const handleConfirmToolCall = useCallback((approved: boolean) => {
+    return actionHandlersRef.current.onConfirmToolCall(approved)
+  }, [])
+
+  const handleCopySuccessToast = useCallback((message: string, variant?: 'success' | 'error' | 'info') => {
+    actionHandlersRef.current.onShowToast(message, variant)
+  }, [])
 
   return (
     <div
@@ -100,11 +143,11 @@ export function MessageList({
               }
               isEditing={editingMessageId === message.id}
               message={message}
-              onConfirmToolCall={onConfirmToolCall}
-              onCopySuccessToast={onShowToast}
-              onEdit={() => onEditMessage(message)}
-              onRegenerate={() => onRegenerateMessage(message)}
-              onRetry={() => onRetryMessage(message)}
+              onConfirmToolCall={handleConfirmToolCall}
+              onCopySuccessToast={handleCopySuccessToast}
+              onEditMessage={handleEditMessage}
+              onRegenerateMessage={handleRegenerateMessage}
+              onRetryMessage={handleRetryMessage}
             />
           ))}
         </div>

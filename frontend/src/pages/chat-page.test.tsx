@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '../components/auth/auth-context'
 import { I18nProvider } from '../i18n/provider'
 import { APP_LOCALE_STORAGE_KEY } from '../i18n/config'
-import { AUTH_UNAUTHORIZED_EVENT, chatApi, providerApi, ragApi, workflowApi } from '../lib/api'
+import { AUTH_UNAUTHORIZED_EVENT, agentApi, chatApi, providerApi, ragApi, workflowApi } from '../lib/api'
 import { LAST_CONVERSATION_STORAGE_KEY } from './chat-page/types'
 import { ChatPage } from './chat-page'
 import type {
@@ -1200,6 +1200,84 @@ describe('ChatPage conversation navigation', () => {
     })
   })
 
+  it('renders streamed assistant deltas before the done event and preserves the final content', async () => {
+    const conversation = createConversation(5, 'Fresh chat')
+    const initialMessages = [
+      createMessage(51, 5, 'assistant', 'Earlier reply'),
+    ]
+    const finalMessages = [
+      ...initialMessages,
+      createMessage(53, 5, 'user', 'Hello from test'),
+      createMessage(52, 5, 'assistant', 'Hello there'),
+    ]
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    let resolveDone: (() => void) | null = null
+    vi.spyOn(chatApi, 'streamMessage').mockImplementation(async (conversationId, _payload, onEvent) => {
+      await onEvent({
+        type: 'message_start',
+        message: createMessage(52, conversationId, 'assistant', '', {
+          status: 'streaming',
+        }),
+      })
+      await onEvent({
+        type: 'delta',
+        content: 'Hello',
+      })
+      await onEvent({
+        type: 'message_delta',
+        content: ' there',
+      })
+
+      await new Promise<void>((resolve) => {
+        resolveDone = () => {
+          void Promise.resolve(onEvent({
+            type: 'done',
+            message: createMessage(52, conversationId, 'assistant', 'Hello there'),
+          })).then(resolve)
+        }
+      })
+    })
+    const getConversationMessagesMock = vi
+      .spyOn(chatApi, 'getConversationMessages')
+      .mockResolvedValueOnce({
+        conversation,
+        messages: initialMessages,
+      })
+      .mockResolvedValue({
+        conversation,
+        messages: finalMessages,
+      })
+
+    renderChatPage([chatPath(5)])
+
+    const textarea = await screen.findByPlaceholderText('Message Illyawish...')
+    fireEvent.change(textarea, { target: { value: 'Hello from test' } })
+
+    const form = textarea.closest('form')
+    if (!form) {
+      throw new Error('Composer form not found')
+    }
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Hello there')).toHaveLength(1)
+    })
+
+    await act(async () => {
+      resolveDone?.()
+    })
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Hello there')).toHaveLength(1)
+    })
+    expect(getConversationMessagesMock).toHaveBeenCalledWith('5')
+  })
+
   it('saves the global prompt and current conversation session prompt together', async () => {
     const conversation = createConversation(9, 'Session settings test')
 
@@ -1655,5 +1733,90 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.queryByText('Execution progress')).not.toBeInTheDocument()
     expect(screen.getByText('Knowledge Q&A')).toBeInTheDocument()
     expect(screen.getByText('2/2 steps')).toBeInTheDocument()
+  })
+
+  it('clears persisted tool confirmation state after approving and does not restore it on remount', async () => {
+    const conversation = createConversation(9, 'Knowledge run')
+    const messages = [
+      createMessage(91, 9, 'user', 'Run a tool'),
+      createMessage(92, 9, 'assistant', 'Working on it', {
+        status: 'streaming',
+      }),
+    ]
+
+    window.sessionStorage.setItem(
+      buildExecutionPanelStorageKey('9'),
+      JSON.stringify({
+        events: [
+          {
+            type: 'run_started',
+            metadata: {
+              templateKey: 'knowledge_qa',
+            },
+          },
+          {
+            type: 'workflow_step_started',
+            stepName: 'run_tool',
+            metadata: {
+              stepIndex: 0,
+            },
+          },
+          {
+            type: 'tool_call_started',
+            toolName: 'web_search',
+          },
+          {
+            type: 'tool_call_confirmation_required',
+            toolName: 'web_search',
+            confirmationId: 'confirm-1',
+            metadata: {
+              confirmationLabel: 'Allow this tool call?',
+            },
+          },
+        ],
+        pendingConfirmationId: 'confirm-1',
+      }),
+    )
+
+    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
+      conversations: [conversation],
+      total: 1,
+    })
+    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
+      conversation,
+      messages,
+    })
+    const confirmToolCallMock = vi
+      .spyOn(agentApi, 'confirmToolCall')
+      .mockResolvedValue({ ok: true })
+
+    const view = renderChatPage([chatPath(9)])
+
+    const approveButton = await screen.findByRole('button', { name: 'Approve' })
+    fireEvent.click(approveButton)
+
+    await waitFor(() => {
+      expect(confirmToolCallMock).toHaveBeenCalledWith('confirm-1', true)
+    })
+    await waitFor(() => {
+      expect(
+        JSON.parse(
+          window.sessionStorage.getItem(buildExecutionPanelStorageKey('9')) ?? 'null',
+        ),
+      ).toMatchObject({
+        pendingConfirmationId: null,
+      })
+    })
+
+    view.unmount()
+
+    renderChatPage([chatPath(9)])
+
+    await waitFor(() => {
+      expect(screen.getByText('Working on it')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Allow this tool call?')).not.toBeInTheDocument()
   })
 })
