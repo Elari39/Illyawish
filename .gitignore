@@ -1,68 +1,81 @@
-# Environment files
+# Environment files and local secrets
 .env
+.env.local
 .env.*
-
-# Local assistant config
-.claude/*
-.superpowers/
-AGENTS.md
-CLAUDE.md
-
-# Frontend dependencies and build output
-frontend/node_modules/
-frontend/dist/
-frontend/dist-ssr/
-coverage/
-.eslintcache
-.vite/
-frontend/.cache/
-frontend/.turbo/
-frontend/.parcel-cache/
-
-# Package manager caches
-.pnpm-store/
-npm-cache/
-yarn-cache/
-
-# Local environment and secret files
+!.env.example
+!.env.*.example
 .envrc
 .secrets/
 *.pem
 *.key
 *.crt
 
-# Local databases
+# Local assistant and agent tooling state
+.claude/
+.superpowers/
+.cursor/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Runtime data and local databases
 data/
-backend/data/*.db
-backend/data/*.db-*
+backend/data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 docker-data/
 
-# Logs
+# Frontend dependencies, caches, and build output
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.cache/
+frontend/.turbo/
+frontend/.parcel-cache/
+coverage/
+.eslintcache
+
+# Package manager caches
+.pnpm-store/
+npm-cache/
+yarn-cache/
+
+# Logs and process state
 logs/
 *.log
+*.log.*
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-*.log.*
 *.pid
 *.pid.lock
 *.seed
 
-# Go build/test artifacts
+# Go build and test artifacts
 *.out
 *.test
 coverage.out
+.coverprofile
 backend/bin/
 backend/tmp/
 tmp/
 temp/
 
-# Local config files
+# Local Docker overrides
+docker-compose.override.yml
+compose.override.yml
+
+# Local config and temporary files
 *.local
 *.local.*
 *.bak
+*.tmp
+*.orig
 *.swp
 *.swo
 *~
@@ -74,8 +87,6 @@ temp/
 .DS_Store
 Thumbs.db
 Desktop.ini
-*.tmp
-*.orig
 *.suo
 *.ntvs*
 *.njsproj

@@ -1,112 +1,56 @@
 # Illyawish
 
-Illyawish is a local AI chat workspace built with a Go backend and a React/Vite frontend.
+Illyawish is a local AI chat workspace with a Go backend and a React/Vite frontend.
 
-## What is included
+## Highlights
 
 - Session-based authentication with first-user bootstrap
-- Persistent conversations stored in SQLite
+- SQLite-backed conversations and settings
 - Streaming chat responses over SSE
 - Provider preset management for OpenAI-compatible endpoints
-- Image upload flow with server-side storage and authenticated image delivery
-- Conversation export, archive, pin, retry, regenerate, and edit flows
+- Attachment upload and authenticated file delivery
+- Conversation archive, pin, export, retry, regenerate, and edit flows
 
-## Docker deployment
+## Runtime Layout
 
-Start the full stack:
+- Public app entry: `http://localhost:10170`
+- Internal backend port: `5721`
+- Persistent runtime data: project-root `data/`
+- Browser traffic always enters through the frontend, and `/api` is proxied internally to the backend
+
+## Quick Start
 
 ```bash
 docker compose up -d --build
 ```
 
-Open `http://localhost:10170`.
+Then open `http://localhost:10170`.
 
-The Docker stack publishes only the frontend on host port `10170`. The backend listens on `5721` inside Docker and is reached through Nginx at `/api`.
+## Deployment Paths
 
-Guide:
+| Path | When to use it | Core steps |
+| --- | --- | --- |
+| `1Panel Orchestration Mode` | You want 1Panel to manage the Compose stack lifecycle | Import `docker-compose.yml` in `Containers -> Orchestration`, keep the public entry on `10170`, and point the 1Panel website reverse proxy to `http://127.0.0.1:10170` |
+| `Direct Git Clone + Docker Compose` | You prefer SSH + Git + Compose on the server | Clone to a fixed path such as `/opt/illyawish`, run `docker compose up -d --build`, and optionally use 1Panel only for website reverse proxy / HTTPS |
 
-- 中文文档: [`docs/local-docker-run.zh-CN.md`](docs/local-docker-run.zh-CN.md)
+Do not manage the same stack through both 1Panel orchestration and shell `docker compose` at the same time.
 
-Useful commands:
+## Documentation
 
-```bash
-docker compose ps
-docker compose logs -f
-docker compose down
-```
+- Chinese guide: [`docs/README.zh-CN.md`](docs/README.zh-CN.md)
+- Japanese guide: [`docs/README.ja-JP.md`](docs/README.ja-JP.md)
+- Compatibility redirect for old 1Panel guide links: [`docs/1panel-deploy.md`](docs/1panel-deploy.md)
 
-## 1Panel deployment
+## Local Development
 
-This project is a good fit for 1Panel's Compose deployment flow. The recommended setup is:
-
-- Import the existing `docker-compose.yml` from this repository through `Containers -> Orchestration`
-- Keep the frontend published on host port `10170`
-- Keep the backend internal-only on `5721`
-- Use a 1Panel website reverse proxy to point your domain at `http://127.0.0.1:10170`
-
-Guides:
-
-- English guide: [`docs/1panel-deploy.md`](docs/1panel-deploy.md)
-- 中文指南: [`docs/1panel-deploy.zh-CN.md`](docs/1panel-deploy.zh-CN.md)
-
-## Persistent data
-
-All runtime data is stored in the project root `data/` directory:
-
-- `data/app.json`: generated application config and secrets
-- `data/aichat.db`: SQLite database
-- `data/uploads/`: uploaded images
-
-On first startup, the backend creates `data/app.json` automatically and generates secure values for:
-
-- `sessionSecret`
-- `settingsEncryptionKey`
-
-## Optional server fallback
-
-If you want a server-wide OpenAI-compatible fallback provider, start the stack once and then edit `data/app.json`:
-
-```json
-{
-  "openAIBaseURL": "https://api.openai.com/v1",
-  "openAIApiKey": "sk-...",
-  "model": "gpt-4.1-mini"
-}
-```
-
-If these fields are empty, users can still configure provider presets from the UI.
-
-You can also optionally preconfigure first-user bootstrap credentials in `data/app.json`:
-
-```json
-{
-  "bootstrapUsername": "admin",
-  "bootstrapPassword": "change-me"
-}
-```
-
-If you deploy behind an HTTPS reverse proxy that forwards plain HTTP to the Go backend, also set:
-
-```json
-{
-  "trustProxyHeadersForSecureCookies": true
-}
-```
-
-Keep this value `false` for direct local HTTP access such as `http://localhost:5721` or `http://localhost:10170`.
-
-## Local development
-
-Start the backend:
+Backend:
 
 ```bash
 cd backend
 go run ./cmd/server
 ```
 
-If you are upgrading a local checkout that still has an older `data/aichat.db` without conversation UUID support, delete only `data/aichat.db` and then start the backend again. Keep `data/app.json` and `data/uploads/`.
-
-Start the frontend:
+Frontend:
 
 ```bash
 cd frontend
@@ -118,12 +62,11 @@ Development defaults:
 
 - Frontend: `http://localhost:10170`
 - Backend: `http://localhost:5721`
-
-The frontend uses relative `/api` requests, and Vite proxies them to `http://localhost:5721`.
+- Vite proxies relative `/api` requests to `http://localhost:5721`
 
 ## Verification
 
-- Backend: `cd backend && GOCACHE=/tmp/go-build go test ./...`
+- Backend tests: `cd backend && GOCACHE=/tmp/go-build go test ./...`
 - Frontend lint: `cd frontend && pnpm lint`
 - Frontend tests: `cd frontend && pnpm test:run`
 - Frontend build: `cd frontend && pnpm build`
