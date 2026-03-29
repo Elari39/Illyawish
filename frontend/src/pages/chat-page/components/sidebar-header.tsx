@@ -1,6 +1,5 @@
 import { Menu, MessageSquarePlus } from 'lucide-react'
 
-import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { cn } from '../../../lib/utils'
 
@@ -9,17 +8,13 @@ interface SidebarHeaderProps {
   desktopSidebarExpanded?: boolean
   interactionDisabled: boolean
   searchValue: string
-  showArchived: boolean
   appName: string
   expandSidebarLabel?: string
   collapseSidebarLabel?: string
   newChatLabel: string
   searchPlaceholder: string
-  activeLabel: string
-  archivedLabel: string
   onToggleDesktopSidebar?: () => void
   onSearchChange: (value: string) => void
-  onToggleArchived: (value: boolean) => void
   onCreateChat: () => void
 }
 
@@ -28,17 +23,13 @@ export function SidebarHeader({
   desktopSidebarExpanded = !collapsed,
   interactionDisabled,
   searchValue,
-  showArchived,
   appName,
   expandSidebarLabel,
   collapseSidebarLabel,
   newChatLabel,
   searchPlaceholder,
-  activeLabel,
-  archivedLabel,
   onToggleDesktopSidebar,
   onSearchChange,
-  onToggleArchived,
   onCreateChat,
 }: SidebarHeaderProps) {
   const desktopToggleLabel = desktopSidebarExpanded ? collapseSidebarLabel : expandSidebarLabel
@@ -115,23 +106,6 @@ export function SidebarHeader({
             value={searchValue}
             onChange={(event) => onSearchChange(event.target.value)}
           />
-
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              className="px-3 py-2"
-              onClick={() => onToggleArchived(false)}
-              variant={showArchived ? 'secondary' : 'primary'}
-            >
-              {activeLabel}
-            </Button>
-            <Button
-              className="px-3 py-2"
-              onClick={() => onToggleArchived(true)}
-              variant={showArchived ? 'primary' : 'secondary'}
-            >
-              {archivedLabel}
-            </Button>
-          </div>
         </>
       )}
     </div>

@@ -115,9 +115,12 @@ export const jaJPMessages = {
     'settings.title': '設定',
     'settings.chatDescription':
       'アカウント全体のグローバルプロンプトと、現在の会話または次の新しいチャット向けの任意のセッションプロンプトを設定します。',
+    'settings.historyDescription':
+      'サイドバーを詰め込まずに、履歴表示と一括管理の操作をここにまとめます。',
     'settings.providerDescription':
       '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
     'settings.chatTab': 'チャット',
+    'settings.historyTab': '履歴',
     'settings.providerTab': 'AI プロバイダー',
     'settings.ragTab': 'RAG',
     'settings.knowledgeTab': 'ナレッジ',
@@ -132,8 +135,29 @@ export const jaJPMessages = {
       'ワークスペース全体で使う表示言語を切り替えます。変更はすぐに反映されます。',
     'settings.securityDescription':
       'パスワード変更と、このアカウントのアクティブなセッションの失効を行います。',
+    'settings.securityChangePasswordTitle': 'パスワード変更',
+    'settings.securityChangePasswordDescription':
+      '現在のパスワードを更新し、ワークスペースアカウントの安全性を保ちます。',
+    'settings.securityCurrentPassword': '現在のパスワード',
+    'settings.securityNewPassword': '新しいパスワード',
+    'settings.securitySubmitPasswordChange': 'パスワードを変更',
+    'settings.securityPasswordChanged': 'パスワードを更新しました。',
+    'settings.securitySessionTitle': 'セッション管理',
+    'settings.securitySessionDescription':
+      'このアカウントで有効なすべてのセッションからサインアウトします。すべての端末で再ログインが必要になります。',
+    'settings.securityLogoutAllSessions': 'すべてのセッションからサインアウト',
     'settings.transferDescription':
       '現在の会話を Markdown として書き出すか、Markdown ファイルを新しい会話として取り込みます。',
+    'settings.historyViewSection': '履歴表示',
+    'settings.historyViewHelp':
+      'サイドバーの会話一覧に進行中とアーカイブのどちらを表示するか切り替えます。',
+    'settings.historyFiltersSection': '履歴フィルター',
+    'settings.historyFiltersHelp':
+      '現在読み込まれている会話履歴をフォルダーやタグで絞り込みます。',
+    'settings.historyNoTags': '現在の履歴表示では利用できるタグがありません。',
+    'settings.bulkManageSection': '一括管理',
+    'settings.bulkManageHelp':
+      'ここで選択モードに入り、サイドバーの会話一覧から対象を選んで一括操作します。',
     'settings.languageHelp':
       'ここで表示言語を切り替えます。選択内容はローカルに保存され、次回も引き継がれます。',
     'settings.exportSectionTitle': '会話をエクスポート',
@@ -558,6 +582,11 @@ export const jaJPMessages = {
     'error.uploadAttachment': '添付ファイル「{{name}}」をアップロードできません',
     'error.uploadAttachmentGeneric': '選択した添付ファイルをアップロードできません',
     'error.importConversation': '選択した Markdown ファイルをインポートできません',
+    'error.securityCurrentPasswordIncorrect': '現在のパスワードが正しくありません。',
+    'error.securityPasswordRequired': 'パスワードを入力してください。',
+    'error.securityPasswordTooShort': 'パスワードは 8 文字以上で入力してください。',
+    'error.securityInvalidChangePasswordPayload':
+      'パスワード変更リクエストが正しくありません。',
     'error.sessionExpired': 'セッションの有効期限が切れました。もう一度サインインしてください。',
     'error.loadAdminData': '管理データを読み込めません。',
     'error.createUser': 'ユーザーを作成できません。',

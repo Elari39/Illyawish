@@ -113,9 +113,12 @@ export const enUSMessages = {
   'settings.title': 'Settings',
   'settings.chatDescription':
     'Set a global prompt for your account and an optional session prompt for the current conversation or the next new chat.',
+  'settings.historyDescription':
+    'Control which conversations appear in history and manage bulk history actions without crowding the sidebar.',
   'settings.providerDescription':
     'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
   'settings.chatTab': 'Chat',
+  'settings.historyTab': 'History',
   'settings.providerTab': 'AI Provider',
   'settings.ragTab': 'RAG',
   'settings.knowledgeTab': 'Knowledge',
@@ -133,8 +136,29 @@ export const enUSMessages = {
     'Choose the interface language used across the workspace. Changes apply immediately.',
   'settings.securityDescription':
     'Change your password and revoke active sessions for this account.',
+  'settings.securityChangePasswordTitle': 'Change password',
+  'settings.securityChangePasswordDescription':
+    'Update your current password and keep your workspace account secure.',
+  'settings.securityCurrentPassword': 'Current password',
+  'settings.securityNewPassword': 'New password',
+  'settings.securitySubmitPasswordChange': 'Change password',
+  'settings.securityPasswordChanged': 'Password updated.',
+  'settings.securitySessionTitle': 'Session security',
+  'settings.securitySessionDescription':
+    'Sign out every active session for this account. You will need to log in again on all devices.',
+  'settings.securityLogoutAllSessions': 'Log out all sessions',
   'settings.transferDescription':
     'Export the current conversation as Markdown, or import a Markdown file as a new conversation.',
+  'settings.historyViewSection': 'History view',
+  'settings.historyViewHelp':
+    'Switch between active and archived conversations for the sidebar list.',
+  'settings.historyFiltersSection': 'History filters',
+  'settings.historyFiltersHelp':
+    'Filter the loaded conversation history by folder or tag.',
+  'settings.historyNoTags': 'No tags are available for the current history view.',
+  'settings.bulkManageSection': 'Bulk management',
+  'settings.bulkManageHelp':
+    'Enter selection mode here, then choose conversations from the sidebar list for bulk actions.',
   'settings.languageHelp':
     'Switch the interface language here. Your selection is saved locally for the next visit.',
   'settings.exportSectionTitle': 'Export conversation',
@@ -568,6 +592,12 @@ export const enUSMessages = {
   'error.uploadAttachment': 'Unable to upload attachment "{{name}}"',
   'error.uploadAttachmentGeneric': 'Unable to upload the selected attachment',
   'error.importConversation': 'Unable to import the selected Markdown file',
+  'error.securityCurrentPasswordIncorrect': 'Current password is incorrect.',
+  'error.securityPasswordRequired': 'Enter a password.',
+  'error.securityPasswordTooShort':
+    'Password must be at least 8 characters long.',
+  'error.securityInvalidChangePasswordPayload':
+    'The password change request is invalid.',
   'error.sessionExpired': 'Session expired. Please sign in again.',
   'error.loadAdminData': 'Unable to load admin data.',
   'error.createUser': 'Unable to create user.',

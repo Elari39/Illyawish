@@ -907,6 +907,11 @@ export function ChatPage() {
         confirmation={uiState.confirmation}
         conversationFolder={chatSession.conversationFolderDraft}
         conversationTags={chatSession.conversationTagsDraft}
+        showArchived={conversationList.showArchived}
+        availableFolders={conversationList.availableFolders}
+        availableTags={conversationList.availableTags}
+        selectedFolder={conversationList.selectedFolder}
+        selectedTags={conversationList.selectedTags}
         workflowPresetId={chatSession.workflowPresetIdDraft}
         knowledgeSpaceIds={chatSession.knowledgeSpaceIdsDraft}
         pendingKnowledgeSpaceIds={chatSession.pendingKnowledgeSpaceIds}
@@ -918,6 +923,8 @@ export function ChatPage() {
         isSavingProvider={providerSettings.isSavingProvider}
         isTestingProvider={providerSettings.isTestingProvider}
         messageCount={chatSession.messages.length}
+        selectedConversationIds={conversationList.selectedConversationIds}
+        selectionMode={conversationList.selectionMode}
         onExport={chatSession.handleExportConversation}
         onImport={(file) => void handleImportConversation(file)}
         onActivateProvider={providerSettings.handleActivateProvider}
@@ -968,6 +975,13 @@ export function ChatPage() {
         setChatSettings={chatSession.setChatSettingsDraft}
         setConversationFolder={chatSession.setConversationFolderDraft}
         setConversationTags={chatSession.setConversationTagsDraft}
+        onToggleArchived={conversationList.setShowArchived}
+        onSelectFolder={conversationList.setSelectedFolder}
+        onToggleTag={conversationList.toggleSelectedTag}
+        onSetSelectionMode={conversationList.setSelectionMode}
+        onBulkMoveToFolder={handleBulkMoveToFolder}
+        onBulkAddTags={handleBulkAddTags}
+        onBulkRemoveTags={handleBulkRemoveTags}
         setWorkflowPresetId={chatSession.setWorkflowPresetIdDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}

@@ -66,11 +66,18 @@ describe('overlay accessibility', () => {
           chatSettings={chatSettings}
           conversationFolder=""
           conversationTags=""
+          showArchived={false}
+          availableFolders={['Work']}
+          availableTags={['planning']}
+          selectedFolder={null}
+          selectedTags={[]}
           editingProviderId={null}
           isLoadingProviders={false}
           isImporting={false}
           isOpen
           messageCount={2}
+          selectedConversationIds={[]}
+          selectionMode={false}
           isSaving={false}
           isSavingProvider={false}
           isTestingProvider={false}
@@ -102,6 +109,13 @@ describe('overlay accessibility', () => {
           setChatSettings={vi.fn()}
           setConversationFolder={vi.fn()}
           setConversationTags={vi.fn()}
+          onToggleArchived={vi.fn()}
+          onSelectFolder={vi.fn()}
+          onToggleTag={vi.fn()}
+          onSetSelectionMode={vi.fn()}
+          onBulkMoveToFolder={vi.fn()}
+          onBulkAddTags={vi.fn()}
+          onBulkRemoveTags={vi.fn()}
           setSettings={vi.fn()}
           transferConversation={conversation}
         />
@@ -113,6 +127,7 @@ describe('overlay accessibility', () => {
       'true',
     )
     expect(screen.getByRole('button', { name: 'Chat' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'AI Provider' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Import / Export' })).toBeInTheDocument()

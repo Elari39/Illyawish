@@ -26,6 +26,7 @@ import type {
 import type { ProviderFormState, SettingsTab } from '../types'
 import { canReuseActivePresetAPIKey } from '../utils'
 import { ChatSettingsTab } from './chat-settings-tab'
+import { HistorySettingsTab } from './history-settings-tab'
 import { KnowledgeSettingsTab } from './knowledge-settings-tab'
 import { ProviderSettingsTab } from './provider-settings-tab'
 import { RAGProviderSettingsTab } from './rag-provider-settings-tab'
@@ -39,6 +40,11 @@ interface SettingsPanelProps {
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
+  showArchived: boolean
+  availableFolders: string[]
+  availableTags: string[]
+  selectedFolder: string | null
+  selectedTags: string[]
   workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
   pendingKnowledgeSpaceIds?: number[]
@@ -46,6 +52,8 @@ interface SettingsPanelProps {
   isImporting: boolean
   isOpen: boolean
   messageCount: number
+  selectedConversationIds: Conversation['id'][]
+  selectionMode: boolean
   isSavingProvider: boolean
   isTestingProvider: boolean
   isSaving: boolean
@@ -62,6 +70,13 @@ interface SettingsPanelProps {
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
+  onToggleArchived: (value: boolean) => void
+  onSelectFolder: (value: string | null) => void
+  onToggleTag: (value: string) => void
+  onSetSelectionMode: (value: boolean) => void
+  onBulkMoveToFolder: () => void
+  onBulkAddTags: () => void
+  onBulkRemoveTags: () => void
   setWorkflowPresetId?: Dispatch<SetStateAction<number | null>>
   onToggleKnowledgeSpace?: (space: KnowledgeSpace) => void | Promise<void>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
@@ -162,6 +177,11 @@ export function SettingsPanel({
   chatSettings,
   conversationFolder,
   conversationTags,
+  showArchived,
+  availableFolders,
+  availableTags,
+  selectedFolder,
+  selectedTags,
   workflowPresetId = null,
   knowledgeSpaceIds = [],
   pendingKnowledgeSpaceIds = [],
@@ -169,6 +189,8 @@ export function SettingsPanel({
   isImporting,
   isOpen,
   messageCount,
+  selectedConversationIds,
+  selectionMode,
   isSavingProvider,
   isTestingProvider,
   isSaving,
@@ -185,6 +207,13 @@ export function SettingsPanel({
   setChatSettings,
   setConversationFolder,
   setConversationTags,
+  onToggleArchived,
+  onSelectFolder,
+  onToggleTag,
+  onSetSelectionMode,
+  onBulkMoveToFolder,
+  onBulkAddTags,
+  onBulkRemoveTags,
   setWorkflowPresetId = () => undefined,
   onToggleKnowledgeSpace = async () => undefined,
   setSettings,
@@ -262,19 +291,21 @@ export function SettingsPanel({
   const descriptionText =
     activeTab === 'chat'
       ? t('settings.chatDescription')
+      : activeTab === 'history'
+        ? t('settings.historyDescription')
         : activeTab === 'provider'
           ? t('settings.providerDescription')
-        : activeTab === 'rag'
-          ? t('settings.ragDescription')
-          : activeTab === 'knowledge'
-            ? t('settings.knowledgeDescription')
-            : activeTab === 'workflow'
-              ? t('settings.workflowDescription')
-        : activeTab === 'security'
-          ? t('settings.securityDescription')
-        : activeTab === 'language'
-          ? t('settings.languageDescription')
-          : t('settings.transferDescription')
+          : activeTab === 'rag'
+            ? t('settings.ragDescription')
+            : activeTab === 'knowledge'
+              ? t('settings.knowledgeDescription')
+              : activeTab === 'workflow'
+                ? t('settings.workflowDescription')
+                : activeTab === 'security'
+                  ? t('settings.securityDescription')
+                  : activeTab === 'language'
+                    ? t('settings.languageDescription')
+                    : t('settings.transferDescription')
 
   return (
     <div
@@ -312,103 +343,52 @@ export function SettingsPanel({
           </button>
         </div>
 
-        <div className="mt-6 inline-flex rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'chat'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+        <div className="mt-6 inline-flex flex-wrap rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
+          <TabButton
+            active={activeTab === 'chat'}
+            label={t('settings.chatTab')}
             onClick={() => onProviderTabChange('chat')}
-            type="button"
-          >
-            {t('settings.chatTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'provider'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'history'}
+            label={t('settings.historyTab')}
+            onClick={() => onProviderTabChange('history')}
+          />
+          <TabButton
+            active={activeTab === 'provider'}
+            label={t('settings.providerTab')}
             onClick={() => onProviderTabChange('provider')}
-            type="button"
-          >
-            {t('settings.providerTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'rag'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'rag'}
+            label={t('settings.ragTab')}
             onClick={() => onProviderTabChange('rag')}
-            type="button"
-          >
-            {t('settings.ragTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'knowledge'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'knowledge'}
+            label={t('settings.knowledgeTab')}
             onClick={() => onProviderTabChange('knowledge')}
-            type="button"
-          >
-            {t('settings.knowledgeTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'workflow'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'workflow'}
+            label={t('settings.workflowTab')}
             onClick={() => onProviderTabChange('workflow')}
-            type="button"
-          >
-            {t('settings.workflowTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'security'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'security'}
+            label={t('settings.securityTab')}
             onClick={() => onProviderTabChange('security')}
-            type="button"
-          >
-            {t('settings.securityTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'language'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'language'}
+            label={t('settings.languageTab')}
             onClick={() => onProviderTabChange('language')}
-            type="button"
-          >
-            {t('settings.languageTab')}
-          </button>
-          <button
-            className={cn(
-              'rounded-xl px-4 py-2 text-sm font-medium transition',
-              activeTab === 'transfer'
-                ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
-                : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
-            )}
+          />
+          <TabButton
+            active={activeTab === 'transfer'}
+            label={t('settings.transferTab')}
             onClick={() => onProviderTabChange('transfer')}
-            type="button"
-          >
-            {t('settings.transferTab')}
-          </button>
+          />
         </div>
 
         {activeTab === 'chat' ? (
@@ -422,6 +402,23 @@ export function SettingsPanel({
             setConversationTags={setConversationTags}
             setChatSettings={setChatSettings}
             setSettings={setSettings}
+          />
+        ) : activeTab === 'history' ? (
+          <HistorySettingsTab
+            availableFolders={availableFolders}
+            availableTags={availableTags}
+            selectedConversationIds={selectedConversationIds}
+            selectedFolder={selectedFolder}
+            selectedTags={selectedTags}
+            selectionMode={selectionMode}
+            showArchived={showArchived}
+            onBulkAddTags={onBulkAddTags}
+            onBulkMoveToFolder={onBulkMoveToFolder}
+            onBulkRemoveTags={onBulkRemoveTags}
+            onSelectFolder={onSelectFolder}
+            onSetSelectionMode={onSetSelectionMode}
+            onToggleArchived={onToggleArchived}
+            onToggleTag={onToggleTag}
           />
         ) : activeTab === 'rag' ? (
           <RAGProviderSettingsTab
@@ -544,5 +541,30 @@ export function SettingsPanel({
         </div>
       </div>
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      className={cn(
+        'rounded-xl px-4 py-2 text-sm font-medium transition',
+        active
+          ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
+          : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      {label}
+    </button>
   )
 }

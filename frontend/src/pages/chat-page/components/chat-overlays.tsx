@@ -41,6 +41,11 @@ interface ChatOverlaysProps {
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
+  showArchived: boolean
+  availableFolders: string[]
+  availableTags: string[]
+  selectedFolder: string | null
+  selectedTags: string[]
   workflowPresetId: number | null
   knowledgeSpaceIds: number[]
   pendingKnowledgeSpaceIds: number[]
@@ -51,6 +56,8 @@ interface ChatOverlaysProps {
   isSavingProvider: boolean
   isTestingProvider: boolean
   messageCount: number
+  selectedConversationIds: Conversation['id'][]
+  selectionMode: boolean
   promptState: PromptState | null
   providerForm: ProviderFormState
   providerState: ProviderState | null
@@ -63,6 +70,13 @@ interface ChatOverlaysProps {
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
+  onToggleArchived: (value: boolean) => void
+  onSelectFolder: (value: string | null) => void
+  onToggleTag: (value: string) => void
+  onSetSelectionMode: (value: boolean) => void
+  onBulkMoveToFolder: () => void
+  onBulkAddTags: () => void
+  onBulkRemoveTags: () => void
   setWorkflowPresetId: Dispatch<SetStateAction<number | null>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
@@ -162,6 +176,11 @@ export function ChatOverlays({
   chatSettings,
   conversationFolder,
   conversationTags,
+  showArchived,
+  availableFolders,
+  availableTags,
+  selectedFolder,
+  selectedTags,
   workflowPresetId,
   knowledgeSpaceIds,
   pendingKnowledgeSpaceIds,
@@ -172,6 +191,8 @@ export function ChatOverlays({
   isSavingProvider,
   isTestingProvider,
   messageCount,
+  selectedConversationIds,
+  selectionMode,
   promptState,
   providerForm,
   providerState,
@@ -184,6 +205,13 @@ export function ChatOverlays({
   setChatSettings,
   setConversationFolder,
   setConversationTags,
+  onToggleArchived,
+  onSelectFolder,
+  onToggleTag,
+  onSetSelectionMode,
+  onBulkMoveToFolder,
+  onBulkAddTags,
+  onBulkRemoveTags,
   setWorkflowPresetId,
   setSettings,
   transferConversation,
@@ -229,6 +257,11 @@ export function ChatOverlays({
         chatSettings={chatSettings}
         conversationFolder={conversationFolder}
         conversationTags={conversationTags}
+        showArchived={showArchived}
+        availableFolders={availableFolders}
+        availableTags={availableTags}
+        selectedFolder={selectedFolder}
+        selectedTags={selectedTags}
         workflowPresetId={workflowPresetId}
         knowledgeSpaceIds={knowledgeSpaceIds}
         pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
@@ -240,6 +273,8 @@ export function ChatOverlays({
         isTestingProvider={isTestingProvider}
         isSaving={isSaving}
         messageCount={messageCount}
+        selectedConversationIds={selectedConversationIds}
+        selectionMode={selectionMode}
         onActivateProvider={(providerId) => void onActivateProvider(providerId)}
         onClose={onCloseSettings}
         onDeleteProvider={onDeleteProvider}
@@ -266,6 +301,13 @@ export function ChatOverlays({
         setChatSettings={setChatSettings}
         setConversationFolder={setConversationFolder}
         setConversationTags={setConversationTags}
+        onToggleArchived={onToggleArchived}
+        onSelectFolder={onSelectFolder}
+        onToggleTag={onToggleTag}
+        onSetSelectionMode={onSetSelectionMode}
+        onBulkMoveToFolder={onBulkMoveToFolder}
+        onBulkAddTags={onBulkAddTags}
+        onBulkRemoveTags={onBulkRemoveTags}
         setWorkflowPresetId={setWorkflowPresetId}
         onToggleKnowledgeSpace={onToggleKnowledgeSpace}
         setSettings={setSettings}

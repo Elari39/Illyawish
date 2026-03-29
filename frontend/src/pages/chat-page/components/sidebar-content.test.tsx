@@ -357,21 +357,13 @@ describe('SidebarContent mobile actions', () => {
 })
 
 describe('SidebarContent desktop actions', () => {
-  it('renders folder navigation and tag filters in the expanded desktop sidebar', () => {
-    const { handlers } = renderSidebarContent('desktop')
+  it('keeps the desktop sidebar header focused on new chat and search only', () => {
+    renderSidebarContent('desktop')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Folders' }))
-
-    expect(screen.getByRole('button', { name: 'All folders' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Unfiled' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Work' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'planning' })).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
-    fireEvent.click(screen.getByRole('button', { name: 'planning' }))
-
-    expect(handlers.onSelectFolder).toHaveBeenCalledWith('Work')
-    expect(handlers.onToggleTag).toHaveBeenCalledWith('planning')
+    expect(screen.queryByRole('button', { name: 'Active' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Archived' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Folders' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Select' })).not.toBeInTheDocument()
   })
 
   it('does not render inline action buttons before opening the menu', () => {
@@ -437,22 +429,13 @@ describe('SidebarContent desktop actions', () => {
     expect(handlers.onRemoveConversationTags).toHaveBeenCalledWith(conversations[0])
   })
 
-  it('switches to selection mode and routes clicks to bulk selection', () => {
+  it('routes clicks to bulk selection when selection mode is already active', () => {
     const { conversations, handlers } = createDesktopSelectionModeSidebar()
-
-    expect(screen.getByText('2 selected')).toBeInTheDocument()
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: conversations[0]!.title }))
     expect(handlers.onToggleConversationSelection).toHaveBeenCalledWith(conversations[0]!.id)
     expect(handlers.onSelectConversation).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Move selected' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add tags to selected' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove tags from selected' }))
-
-    expect(handlers.onBulkMoveToFolder).toHaveBeenCalled()
-    expect(handlers.onBulkAddTags).toHaveBeenCalled()
-    expect(handlers.onBulkRemoveTags).toHaveBeenCalled()
   })
 
   it('exposes desktop menu semantics and focuses the trigger again after escape', () => {

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
+import { vi } from 'vitest'
 
 import type {
   ChatSettings,
@@ -40,6 +41,16 @@ const providerState: ProviderState = {
   },
 }
 
+const historyHandlers = {
+  onToggleArchived: vi.fn(),
+  onSelectFolder: vi.fn(),
+  onToggleTag: vi.fn(),
+  onSetSelectionMode: vi.fn(),
+  onBulkMoveToFolder: vi.fn(),
+  onBulkAddTags: vi.fn(),
+  onBulkRemoveTags: vi.fn(),
+}
+
 function ProviderSettingsHarness() {
   const [chatSettings, setChatSettings] = useState(initialChatSettings)
   const [conversationFolder, setConversationFolder] = useState('')
@@ -60,11 +71,18 @@ function ProviderSettingsHarness() {
       chatSettings={chatSettings}
       conversationFolder={conversationFolder}
       conversationTags={conversationTags}
+      showArchived={false}
+      availableFolders={['Work']}
+      availableTags={['planning']}
+      selectedFolder={null}
+      selectedTags={[]}
       editingProviderId={null}
       isLoadingProviders={false}
       isImporting={false}
       isOpen
       messageCount={0}
+      selectedConversationIds={[]}
+      selectionMode={false}
       isSaving={false}
       isSavingProvider={false}
       isTestingProvider={false}
@@ -87,6 +105,7 @@ function ProviderSettingsHarness() {
           defaultModel,
         }))
       }}
+      {...historyHandlers}
       onProviderTabChange={() => {}}
       onReset={() => {}}
       onResetProvider={() => {}}
@@ -122,11 +141,18 @@ function ChatSettingsHarness() {
       chatSettings={chatSettings}
       conversationFolder={conversationFolder}
       conversationTags={conversationTags}
+      showArchived={false}
+      availableFolders={['Work']}
+      availableTags={['planning']}
+      selectedFolder={null}
+      selectedTags={[]}
       editingProviderId={null}
       isLoadingProviders={false}
       isImporting={false}
       isOpen
       messageCount={0}
+      selectedConversationIds={[]}
+      selectionMode={false}
       isSaving={false}
       isSavingProvider={false}
       isTestingProvider={false}
@@ -138,6 +164,7 @@ function ChatSettingsHarness() {
       onImport={() => {}}
       onProviderFieldChange={() => {}}
       onProviderModelsChange={() => {}}
+      {...historyHandlers}
       onProviderTabChange={() => {}}
       onReset={() => {}}
       onResetProvider={() => {}}
@@ -182,7 +209,73 @@ function ChatSettingsHarness() {
   )
 }
 
+function HistorySettingsHarness() {
+  const [chatSettings, setChatSettings] = useState(initialChatSettings)
+  const [conversationFolder, setConversationFolder] = useState('')
+  const [conversationTags, setConversationTags] = useState('')
+  const [settings, setSettings] = useState(initialSettings)
+
+  return (
+    <SettingsPanel
+      activeTab="history"
+      chatSettings={chatSettings}
+      conversationFolder={conversationFolder}
+      conversationTags={conversationTags}
+      showArchived={false}
+      availableFolders={['Work']}
+      availableTags={['planning']}
+      selectedFolder={null}
+      selectedTags={[]}
+      editingProviderId={null}
+      isLoadingProviders={false}
+      isImporting={false}
+      isOpen
+      messageCount={0}
+      selectedConversationIds={['1', '2']}
+      selectionMode
+      isSaving={false}
+      isSavingProvider={false}
+      isTestingProvider={false}
+      onActivateProvider={() => {}}
+      onClose={() => {}}
+      onDeleteProvider={() => {}}
+      onEditProvider={() => {}}
+      onExport={() => {}}
+      onImport={() => {}}
+      onProviderFieldChange={() => {}}
+      onProviderModelsChange={() => {}}
+      {...historyHandlers}
+      onProviderTabChange={() => {}}
+      onReset={() => {}}
+      onResetProvider={() => {}}
+      onSave={() => {}}
+      onSaveProvider={() => {}}
+      onStartNewProvider={() => {}}
+      onTestProvider={() => {}}
+      providerForm={{
+        name: '',
+        baseURL: '',
+        apiKey: '',
+        models: [''],
+        defaultModel: '',
+        errors: createProviderFormErrors(),
+      }}
+      providerState={providerState}
+      settings={settings}
+      setChatSettings={setChatSettings}
+      setConversationFolder={setConversationFolder}
+      setConversationTags={setConversationTags}
+      setSettings={setSettings}
+      transferConversation={null}
+    />
+  )
+}
+
 describe('SettingsPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('focuses the close button when the panel opens', () => {
     render(
       <TestProviders>
@@ -244,5 +337,43 @@ describe('SettingsPanel', () => {
     expect(
       screen.getByRole('option', { name: 'gpt-4.1-mini' }),
     ).toBeInTheDocument()
+  })
+
+  it('exposes a dedicated history tab in settings', () => {
+    render(
+      <TestProviders>
+        <HistorySettingsHarness />
+      </TestProviders>,
+    )
+
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+    expect(screen.getByText('History view')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Active' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Archived' })).toBeInTheDocument()
+    expect(screen.getByText('2 selected')).toBeInTheDocument()
+  })
+
+  it('routes history filter and bulk action controls through the existing handlers', () => {
+    render(
+      <TestProviders>
+        <HistorySettingsHarness />
+      </TestProviders>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archived' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+    fireEvent.click(screen.getByRole('button', { name: 'planning' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Move selected' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add tags to selected' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove tags from selected' }))
+
+    expect(historyHandlers.onToggleArchived).toHaveBeenCalledWith(true)
+    expect(historyHandlers.onSelectFolder).toHaveBeenCalledWith('Work')
+    expect(historyHandlers.onToggleTag).toHaveBeenCalledWith('planning')
+    expect(historyHandlers.onSetSelectionMode).toHaveBeenCalledWith(false)
+    expect(historyHandlers.onBulkMoveToFolder).toHaveBeenCalled()
+    expect(historyHandlers.onBulkAddTags).toHaveBeenCalled()
+    expect(historyHandlers.onBulkRemoveTags).toHaveBeenCalled()
   })
 })

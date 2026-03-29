@@ -5,7 +5,15 @@ import { useAuth } from '../../../components/auth/use-auth'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { useI18n } from '../../../i18n/use-i18n'
-import { authApi } from '../../../lib/api'
+import { authApi, isNetworkError } from '../../../lib/api'
+import type { TranslationKey } from '../../../i18n/messages'
+
+const SECURITY_ERROR_MESSAGE_KEYS: Record<string, TranslationKey> = {
+  'current password is incorrect': 'error.securityCurrentPasswordIncorrect',
+  'password is required': 'error.securityPasswordRequired',
+  'password must be at least 8 characters long': 'error.securityPasswordTooShort',
+  'invalid change password payload': 'error.securityInvalidChangePasswordPayload',
+}
 
 export function SecuritySettingsTab() {
   const { logout } = useAuth()
@@ -17,6 +25,24 @@ export function SecuritySettingsTab() {
   const [isSaving, setIsSaving] = useState(false)
   const [isRevoking, setIsRevoking] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  function getSecurityErrorMessage(nextError: unknown) {
+    if (isNetworkError(nextError)) {
+      return t('error.backendUnavailable')
+    }
+
+    if (nextError instanceof Error) {
+      const messageKey = SECURITY_ERROR_MESSAGE_KEYS[nextError.message]
+      if (messageKey) {
+        return t(messageKey)
+      }
+      if (nextError.message.trim()) {
+        return nextError.message
+      }
+    }
+
+    return t('error.saveSettings')
+  }
 
   async function handleChangePassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -31,9 +57,9 @@ export function SecuritySettingsTab() {
       })
       setCurrentPassword('')
       setNewPassword('')
-      setSuccessMessage('Password updated.')
+      setSuccessMessage(t('settings.securityPasswordChanged'))
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : t('error.saveSettings'))
+      setError(getSecurityErrorMessage(nextError))
     } finally {
       setIsSaving(false)
     }
@@ -49,7 +75,7 @@ export function SecuritySettingsTab() {
       await logout()
       navigate('/login', { replace: true })
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : t('error.saveSettings'))
+      setError(getSecurityErrorMessage(nextError))
       setIsRevoking(false)
     }
   }
@@ -58,15 +84,15 @@ export function SecuritySettingsTab() {
     <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
         <h3 className="text-lg font-semibold text-[var(--foreground)]">
-          Change password
+          {t('settings.securityChangePasswordTitle')}
         </h3>
         <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
-          Update your current password and keep your workspace account secure.
+          {t('settings.securityChangePasswordDescription')}
         </p>
 
         <form className="mt-5 space-y-4" onSubmit={handleChangePassword}>
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Current password</span>
+            <span className="text-sm font-medium">{t('settings.securityCurrentPassword')}</span>
             <Input
               type="password"
               value={currentPassword}
@@ -75,7 +101,7 @@ export function SecuritySettingsTab() {
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium">New password</span>
+            <span className="text-sm font-medium">{t('settings.securityNewPassword')}</span>
             <Input
               type="password"
               value={newPassword}
@@ -95,17 +121,17 @@ export function SecuritySettingsTab() {
           ) : null}
 
           <Button disabled={isSaving} type="submit">
-            {isSaving ? t('common.saving') : 'Change password'}
+            {isSaving ? t('common.saving') : t('settings.securitySubmitPasswordChange')}
           </Button>
         </form>
       </section>
 
       <section className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
         <h3 className="text-lg font-semibold text-[var(--foreground)]">
-          Session security
+          {t('settings.securitySessionTitle')}
         </h3>
         <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
-          Sign out every active session for this account. You will need to log in again on all devices.
+          {t('settings.securitySessionDescription')}
         </p>
 
         <Button
@@ -114,7 +140,7 @@ export function SecuritySettingsTab() {
           onClick={() => void handleLogoutAll()}
           variant="secondary"
         >
-          {isRevoking ? t('common.loading') : 'Log out all sessions'}
+          {isRevoking ? t('common.loading') : t('settings.securityLogoutAllSessions')}
         </Button>
       </section>
     </div>

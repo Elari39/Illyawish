@@ -26,6 +26,7 @@ export interface ComposerAttachment {
 
 export type SettingsTab =
   | 'chat'
+  | 'history'
   | 'provider'
   | 'rag'
   | 'knowledge'
