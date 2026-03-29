@@ -1,0 +1,265 @@
+package chat
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"backend/internal/llm"
+	"backend/internal/models"
+
+	"gorm.io/gorm"
+)
+
+func (s *Service) prepareAssistantReplay(
+	conversationID uint,
+	assistantMessageID uint,
+	invalidAction error,
+	allowedStatuses ...string,
+) (*models.Message, []models.Message, error) {
+	var (
+		assistantMessage models.Message
+		cleanupMessages  []models.Message
+	)
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		message, err := conversationMessageByID(tx, conversationID, assistantMessageID)
+		if err != nil {
+			return err
+		}
+		if message.Role != models.RoleAssistant {
+			return invalidAction
+		}
+		if len(allowedStatuses) > 0 && !containsStatus(allowedStatuses, message.Status) {
+			return invalidAction
+		}
+
+		if _, err := previousUserMessage(tx, conversationID, message.ID); err != nil {
+			return invalidAction
+		}
+
+		var trailingMessages []models.Message
+		if err := tx.Where("conversation_id = ? AND id >= ?", conversationID, message.ID).
+			Order("id asc").
+			Find(&trailingMessages).Error; err != nil {
+			return fmt.Errorf("load trailing messages: %w", err)
+		}
+		if err := hydrateMessageAttachments(tx, trailingMessages); err != nil {
+			return err
+		}
+		cleanupMessages = trailingMessages
+
+		if err := updateMessageRecord(
+			tx,
+			message,
+			"",
+			nil,
+			models.MessageStatusStreaming,
+		); err != nil {
+			return fmt.Errorf("reset assistant message: %w", err)
+		}
+
+		if err := tx.Where("conversation_id = ? AND id > ?", conversationID, message.ID).
+			Delete(&models.Message{}).Error; err != nil {
+			return fmt.Errorf("delete trailing messages: %w", err)
+		}
+
+		if err := tx.Model(&models.Conversation{}).
+			Where("id = ?", conversationID).
+			Update("updated_at", time.Now()).Error; err != nil {
+			return fmt.Errorf("touch conversation: %w", err)
+		}
+
+		assistantMessage = *message
+		assistantMessage.Content = ""
+		assistantMessage.LegacyAttachments = nil
+		assistantMessage.Attachments = nil
+		assistantMessage.Status = models.MessageStatusStreaming
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+
+	return &assistantMessage, cleanupMessages, nil
+}
+
+func (s *Service) streamIntoAssistantMessage(
+	ctx context.Context,
+	assistantMessage *models.Message,
+	conversationPublicID string,
+	providerConfig llm.ProviderConfig,
+	history []llm.ChatMessage,
+	settings ConversationSettings,
+	emit func(StreamEvent) error,
+) error {
+	if err := emit(StreamEvent{
+		Type:    "message_start",
+		Message: ToMessageDTO(assistantMessage, conversationPublicID),
+	}); err != nil {
+		return err
+	}
+
+	streamOptions := llm.RequestOptions{
+		Model:       settings.Model,
+		Temperature: cloneFloat32(settings.Temperature),
+		MaxTokens:   cloneInt(settings.MaxTokens),
+	}
+
+	accumulatedContent := ""
+	streamResult, streamErr := s.model.Stream(ctx, providerConfig, history, streamOptions, func(delta string) {
+		accumulatedContent += delta
+		_ = emit(StreamEvent{
+			Type:    "delta",
+			Content: delta,
+		})
+	})
+
+	finalContent := streamResult.Content
+	if finalContent == "" {
+		finalContent = accumulatedContent
+	}
+
+	if shouldAutoContinue(streamResult, streamErr) {
+		continueHistory := append(history, llm.ChatMessage{
+			Role:    models.RoleAssistant,
+			Content: finalContent,
+		}, llm.ChatMessage{
+			Role:    models.RoleUser,
+			Content: continueAssistantPrompt,
+		})
+
+		continueResult, continueErr := s.model.Stream(ctx, providerConfig, continueHistory, streamOptions, func(delta string) {
+			finalContent += delta
+			_ = emit(StreamEvent{
+				Type:    "delta",
+				Content: delta,
+			})
+		})
+		if continueResult.Content != "" && !strings.HasSuffix(finalContent, continueResult.Content) {
+			finalContent += continueResult.Content
+		}
+		streamResult = continueResult
+		streamErr = continueErr
+	}
+
+	if streamErr != nil {
+		status := models.MessageStatusFailed
+		eventType := "error"
+		if errors.Is(streamErr, context.Canceled) {
+			status = models.MessageStatusCancelled
+			eventType = "cancelled"
+		}
+
+		if err := s.db.Model(assistantMessage).Updates(map[string]any{
+			"content": finalContent,
+			"status":  status,
+		}).Error; err != nil {
+			return fmt.Errorf("finalize assistant message: %w", err)
+		}
+
+		assistantMessage.Content = finalContent
+		assistantMessage.Status = status
+		_ = emit(StreamEvent{
+			Type:    eventType,
+			Error:   streamErr.Error(),
+			Message: ToMessageDTO(assistantMessage, conversationPublicID),
+		})
+		return nil
+	}
+
+	if err := s.db.Model(assistantMessage).Updates(map[string]any{
+		"content": finalContent,
+		"status":  models.MessageStatusCompleted,
+	}).Error; err != nil {
+		return fmt.Errorf("complete assistant message: %w", err)
+	}
+
+	assistantMessage.Content = finalContent
+	assistantMessage.Status = models.MessageStatusCompleted
+	return emit(StreamEvent{
+		Type:    "done",
+		Message: ToMessageDTO(assistantMessage, conversationPublicID),
+	})
+}
+
+func (s *Service) historyForModel(
+	conversationID uint,
+	beforeMessageID uint,
+	systemPrompt string,
+	contextWindowTurns *int,
+) ([]llm.ChatMessage, error) {
+	query := s.db.Where("conversation_id = ?", conversationID).Order("id asc")
+	if beforeMessageID > 0 {
+		query = query.Where("id < ?", beforeMessageID)
+	}
+
+	var messages []models.Message
+	if err := query.Find(&messages).Error; err != nil {
+		return nil, fmt.Errorf("load conversation history: %w", err)
+	}
+	if err := hydrateMessageAttachments(s.db, messages); err != nil {
+		return nil, err
+	}
+
+	history := make([]llm.ChatMessage, 0, len(messages))
+
+	for _, message := range messages {
+		if !includeMessageInHistory(message) {
+			continue
+		}
+
+		modelAttachments := []llm.Attachment{}
+		if len(message.Attachments) > 0 {
+			if s.uploads == nil {
+				return nil, requestError{message: "attachments are unavailable"}
+			}
+
+			var err error
+			modelAttachments, err = s.uploads.BuildModelAttachments(message.Attachments)
+			if err != nil {
+				return nil, err
+			}
+		}
+		history = append(history, llm.ChatMessage{
+			Role:        message.Role,
+			Content:     message.Content,
+			Attachments: modelAttachments,
+		})
+	}
+
+	history = trimHistoryToRecentTurns(history, contextWindowTurns)
+	if strings.TrimSpace(systemPrompt) != "" {
+		history = append([]llm.ChatMessage{{
+			Role:    models.RoleSystem,
+			Content: systemPrompt,
+		}}, history...)
+	}
+
+	return history, nil
+}
+
+func (s *Service) registerActiveStream(
+	parent context.Context,
+	conversationID uint,
+) (context.Context, func(), error) {
+	ctx, cancel := context.WithCancel(parent)
+
+	s.activeMu.Lock()
+	if _, exists := s.activeStreams[conversationID]; exists {
+		s.activeMu.Unlock()
+		cancel()
+		return nil, nil, ErrConversationBusy
+	}
+	s.activeStreams[conversationID] = cancel
+	s.activeMu.Unlock()
+
+	cleanup := func() {
+		s.activeMu.Lock()
+		delete(s.activeStreams, conversationID)
+		s.activeMu.Unlock()
+		cancel()
+	}
+
+	return ctx, cleanup, nil
+}

@@ -90,6 +90,53 @@ describe('chat page utils', () => {
     ])
   })
 
+  it('collapses placeholder and real streamed assistant messages into one entry', () => {
+    const result = upsertMessage(
+      [
+        {
+          id: -1,
+          conversationId: '1',
+          role: 'assistant',
+          content: 'Hello there',
+          attachments: [],
+          status: 'streaming',
+          createdAt: '2026-03-26T00:00:00Z',
+        },
+        {
+          id: 99,
+          conversationId: '1',
+          role: 'assistant',
+          content: 'Hello there',
+          attachments: [],
+          status: 'streaming',
+          createdAt: '2026-03-26T00:00:01Z',
+        },
+      ],
+      {
+        id: 99,
+        conversationId: '1',
+        role: 'assistant',
+        content: 'Hello there',
+        attachments: [],
+        status: 'completed',
+        createdAt: '2026-03-26T00:00:02Z',
+      },
+      {
+        conversationId: '1',
+        placeholderId: -1,
+        messageId: 99,
+      },
+    )
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 99,
+        content: 'Hello there',
+        status: 'completed',
+      }),
+    ])
+  })
+
   it('exports conversation history as markdown', () => {
     const markdown = buildConversationMarkdown(
       {

@@ -209,22 +209,7 @@ export interface TestProviderResult {
   resolvedModel: string
 }
 
-export interface StreamEvent {
-  type:
-    | 'message_start'
-    | 'delta'
-    | 'done'
-    | 'error'
-    | 'cancelled'
-    | 'run_started'
-    | 'workflow_step_started'
-    | 'workflow_step_completed'
-    | 'retrieval_started'
-    | 'retrieval_completed'
-    | 'tool_call_started'
-    | 'tool_call_confirmation_required'
-    | 'tool_call_completed'
-    | 'message_delta'
+interface BaseStreamEvent {
   content?: string
   error?: string
   message?: Message
@@ -234,6 +219,59 @@ export interface StreamEvent {
   citations?: AgentCitation[]
   metadata?: Record<string, unknown>
 }
+
+export interface MessageStartStreamEvent extends BaseStreamEvent {
+  type: 'message_start'
+  message: Message
+}
+
+export interface MessageDeltaStreamEvent extends BaseStreamEvent {
+  type: 'delta' | 'message_delta'
+  content: string
+}
+
+export interface CompletedStreamEvent extends BaseStreamEvent {
+  type: 'done' | 'cancelled'
+  message?: Message
+}
+
+export interface ErrorStreamEvent extends BaseStreamEvent {
+  type: 'error'
+  error?: string
+  message?: Message
+}
+
+export interface RunStartedStreamEvent extends BaseStreamEvent {
+  type: 'run_started'
+}
+
+export interface WorkflowStepStreamEvent extends BaseStreamEvent {
+  type: 'workflow_step_started' | 'workflow_step_completed'
+  stepName?: string
+}
+
+export interface RetrievalStreamEvent extends BaseStreamEvent {
+  type: 'retrieval_started' | 'retrieval_completed'
+}
+
+export interface ToolCallStreamEvent extends BaseStreamEvent {
+  type: 'tool_call_started' | 'tool_call_completed'
+}
+
+export interface ToolCallConfirmationStreamEvent extends BaseStreamEvent {
+  type: 'tool_call_confirmation_required'
+}
+
+export type StreamEvent =
+  | MessageStartStreamEvent
+  | MessageDeltaStreamEvent
+  | CompletedStreamEvent
+  | ErrorStreamEvent
+  | RunStartedStreamEvent
+  | WorkflowStepStreamEvent
+  | RetrievalStreamEvent
+  | ToolCallStreamEvent
+  | ToolCallConfirmationStreamEvent
 
 export interface ChangePasswordPayload {
   currentPassword: string

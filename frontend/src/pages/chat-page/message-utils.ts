@@ -43,7 +43,8 @@ export function upsertMessage(
     return item
   })
 
-  return replaced ? nextMessages : [...nextMessages, message]
+  const mergedMessages = replaced ? nextMessages : [...nextMessages, message]
+  return dedupeMessages(mergedMessages)
 }
 
 export function isSameMessage(

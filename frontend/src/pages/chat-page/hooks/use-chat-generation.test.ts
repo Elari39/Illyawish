@@ -417,6 +417,58 @@ describe('useChatGeneration saved settings behavior', () => {
     expect(result.current.executionEvents).toHaveLength(0)
     expect(result.current.pendingConfirmationId).toBeNull()
   })
+
+  it('keeps persisting execution state for the generating conversation after navigating away', async () => {
+    const activeConversationIdRef = { current: '7' }
+
+    const { result, rerender } = renderHook(
+      (options: ReturnType<typeof createOptions>) => useChatGeneration(options),
+      {
+        initialProps: createOptions({
+          composerValue: 'First message',
+          activeConversationId: '7',
+          currentConversation: createConversation(7),
+          activeConversationIdRef,
+        }),
+      },
+    )
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+
+    activeConversationIdRef.current = '9'
+    rerender(createOptions({
+      composerValue: 'First message',
+      activeConversationId: '9',
+      currentConversation: createConversation(9),
+      activeConversationIdRef,
+    }))
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'tool_call_confirmation_required',
+        toolName: 'http_request',
+        confirmationId: 'confirm-background',
+      })
+    })
+
+    expect(JSON.parse(window.sessionStorage.getItem('aichat:execution-panel:7') ?? 'null')).toMatchObject({
+      pendingConfirmationId: 'confirm-background',
+      events: [
+        {
+          type: 'tool_call_confirmation_required',
+          confirmationId: 'confirm-background',
+        },
+      ],
+    })
+  })
 })
 
 type MessageStreamEvent = {

@@ -1,47 +1,34 @@
 import {
-  useEffect,
-  useRef,
-  useState,
   type FormEvent,
+  type Dispatch,
   type MutableRefObject,
+  type SetStateAction,
 } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { agentApi, chatApi } from '../../../lib/api'
-import { ApiError, isAbortError } from '../../../lib/http'
+import { isAbortError } from '../../../lib/http'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
   Attachment,
   Conversation,
   ConversationSettings,
   Message,
-  StreamEvent,
 } from '../../../types/chat'
 import {
-  appendToStreamingMessage,
   buildAttachmentPayload,
-  isSameMessage,
-  upsertMessage,
 } from '../utils'
 import type { ComposerAttachment } from '../types'
 import { buildConversationMetadataUpdate } from './chat-session-helpers'
 import { defaultAgentRunSummary } from '../types'
 import {
-  clearExecutionPanelState,
-  readExecutionPanelState,
-  writeExecutionPanelState,
-  type StoredExecutionPanelState,
-} from '../execution-panel-storage'
-
-export interface ActiveGenerationState {
-  id: number
-  conversationId: Conversation['id']
-  placeholderId: number
-  messageId: number | null
-  controller: AbortController
-  stopRequested: boolean
-  stopPromise: Promise<void> | null
-}
+  beginGeneration,
+  finalizeGeneration,
+  isIgnorableStopError,
+  settleGenerationCleanup,
+} from './chat-generation-lifecycle'
+import type { ActiveGenerationState } from './chat-generation-types'
+import { useChatGenerationStreamState } from './use-chat-generation-stream-state'
 
 interface UseChatGenerationOptions {
   activeConversationId: Conversation['id'] | null
@@ -62,7 +49,7 @@ interface UseChatGenerationOptions {
   navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
   setPendingConversation: (conversation: Conversation | null) => void
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
-  setIsSending: (value: boolean) => void
+  setIsSending: Dispatch<SetStateAction<boolean>>
   resetComposer: () => void
   activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
   activeGenerationRef: MutableRefObject<ActiveGenerationState | null>
@@ -105,209 +92,26 @@ export function useChatGeneration({
   waitForConversationToSettle,
   cleanupEmptyCreatedConversation,
 }: UseChatGenerationOptions) {
-  const tRef = useRef(t)
-  tRef.current = t
-  const [executionEvents, setExecutionEvents] = useState<StreamEvent[]>([])
-  const [pendingConfirmationId, setPendingConfirmationId] = useState<string | null>(null)
-  const executionEventsRef = useRef<StreamEvent[]>([])
-  const pendingConfirmationIdRef = useRef<string | null>(null)
-  const bufferedDeltaRef = useRef<{
-    conversationId: Conversation['id']
-    placeholderId: number
-    content: string
-  } | null>(null)
-  const bufferedDeltaFrameRef = useRef<number | null>(null)
-
-  function applyExecutionState(nextState: StoredExecutionPanelState) {
-    executionEventsRef.current = nextState.events
-    pendingConfirmationIdRef.current = nextState.pendingConfirmationId
-    setExecutionEvents(nextState.events)
-    setPendingConfirmationId(nextState.pendingConfirmationId)
-  }
-
-  function persistExecutionState(
-    conversationId: Conversation['id'],
-    nextState: StoredExecutionPanelState,
-  ) {
-    applyExecutionState(nextState)
-    writeExecutionPanelState(conversationId, nextState)
-  }
-
-  function flushBufferedMessageDelta() {
-    const bufferedDelta = bufferedDeltaRef.current
-    if (!bufferedDelta) {
-      return
-    }
-
-    bufferedDeltaRef.current = null
-    setMessages((previous) =>
-      appendToStreamingMessage(
-        previous,
-        buildMessageTarget(
-          bufferedDelta.conversationId,
-          bufferedDelta.placeholderId,
-        ),
-        bufferedDelta.content,
-      ),
-    )
-  }
-
-  function cancelBufferedMessageDeltaFrame() {
-    if (bufferedDeltaFrameRef.current != null) {
-      window.cancelAnimationFrame(bufferedDeltaFrameRef.current)
-      bufferedDeltaFrameRef.current = null
-    }
-  }
-
-  function scheduleBufferedMessageDeltaFlush() {
-    if (bufferedDeltaFrameRef.current != null) {
-      return
-    }
-
-    bufferedDeltaFrameRef.current = window.requestAnimationFrame(() => {
-      bufferedDeltaFrameRef.current = null
-      flushBufferedMessageDelta()
-    })
-  }
-
-  function queueBufferedMessageDelta(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-    content: string,
-  ) {
-    const bufferedDelta = bufferedDeltaRef.current
-    if (
-      bufferedDelta &&
-      bufferedDelta.conversationId === conversationId &&
-      bufferedDelta.placeholderId === placeholderId
-    ) {
-      bufferedDelta.content += content
-    } else {
-      flushBufferedMessageDelta()
-      bufferedDeltaRef.current = {
-        conversationId,
-        placeholderId,
-        content,
-      }
-    }
-
-    scheduleBufferedMessageDeltaFlush()
-  }
-
-  useEffect(() => {
-    return () => {
-      cancelBufferedMessageDeltaFrame()
-      bufferedDeltaRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!activeConversationId) {
-      cancelBufferedMessageDeltaFrame()
-      bufferedDeltaRef.current = null
-      executionEventsRef.current = []
-      pendingConfirmationIdRef.current = null
-      setExecutionEvents([])
-      setPendingConfirmationId(null)
-      return
-    }
-
-    const restoredState = readExecutionPanelState(activeConversationId)
-    executionEventsRef.current = restoredState.events
-    pendingConfirmationIdRef.current = restoredState.pendingConfirmationId
-    setExecutionEvents(restoredState.events)
-    setPendingConfirmationId(restoredState.pendingConfirmationId)
-  }, [activeConversationId])
-
-  function beginGeneration(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ) {
-    const generation: ActiveGenerationState = {
-      id: nextGenerationIdRef.current + 1,
-      conversationId,
-      placeholderId,
-      messageId: null,
-      controller: new AbortController(),
-      stopRequested: false,
-      stopPromise: null,
-    }
-
-    nextGenerationIdRef.current = generation.id
-    activeGenerationRef.current = generation
-    setIsSending(true)
-    setChatError(null)
-    clearExecutionPanelState(conversationId)
-    persistExecutionState(conversationId, {
-      events: [],
-      pendingConfirmationId: null,
-    })
-    return generation
-  }
-
-  function syncGenerationMessageId(
-    placeholderId: number,
-    message: Message | undefined,
-  ) {
-    const activeGeneration = activeGenerationRef.current
-    if (
-      !activeGeneration ||
-      !message ||
-      activeGeneration.conversationId !== message.conversationId
-    ) {
-      return
-    }
-
-    if (
-      activeGeneration.placeholderId === placeholderId ||
-      activeGeneration.messageId === placeholderId ||
-      activeGeneration.messageId === message.id
-    ) {
-      activeGeneration.messageId = message.id
-    }
-  }
-
-  async function finalizeGeneration(generationId: number) {
-    if (activeGenerationRef.current?.id !== generationId) {
-      return
-    }
-
-    cancelBufferedMessageDeltaFrame()
-    flushBufferedMessageDelta()
-    activeGenerationRef.current = null
-    setIsSending(false)
-  }
-
-  async function settleGenerationCleanup(
-    generation: ActiveGenerationState | null,
-  ) {
-    if (!generation) {
-      setIsSending(false)
-      return
-    }
-
-    if (generation.stopRequested && generation.stopPromise) {
-      await generation.stopPromise
-      return
-    }
-
-    await finalizeGeneration(generation.id)
-  }
-
-  function isIgnorableStopError(error: unknown) {
-    return (
-      isAbortError(error) ||
-      (error instanceof ApiError &&
-        error.status === 409 &&
-        error.message === 'no active generation for this conversation')
-    )
-  }
+  const {
+    executionEvents,
+    pendingConfirmationId,
+    flushActiveMessageDelta,
+    handleStreamEventForConversation,
+    persistExecutionState,
+    resetExecutionState,
+  } = useChatGenerationStreamState({
+    activeConversationId,
+    activeConversationIdRef,
+    activeGenerationRef,
+    setMessages,
+    setChatError,
+    t,
+  })
 
   async function settleStoppedGeneration(generation: ActiveGenerationState) {
     let clearErrorOnSuccess = true
 
-    cancelBufferedMessageDeltaFrame()
-    flushBufferedMessageDelta()
+    flushActiveMessageDelta()
 
     try {
       await chatApi.cancelGeneration(generation.conversationId)
@@ -330,131 +134,12 @@ export function useChatGeneration({
         error instanceof Error ? error.message : t('error.stopGeneration'),
       )
     } finally {
-      await finalizeGeneration(generation.id)
-    }
-  }
-
-  function buildMessageTarget(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ) {
-    const activeGeneration = activeGenerationRef.current
-    return {
-      conversationId,
-      placeholderId,
-      messageId:
-        activeGeneration?.conversationId === conversationId
-          ? activeGeneration.messageId
-          : null,
-    }
-  }
-
-  function handleStreamEventForConversation(
-    event: StreamEvent,
-    conversationId: Conversation['id'] | null,
-    placeholderId: number,
-  ) {
-    if (!conversationId) {
-      return
-    }
-
-    const eventMessage = event.message
-    syncGenerationMessageId(placeholderId, eventMessage)
-    if (activeConversationIdRef.current !== conversationId) {
-      return
-    }
-
-    const target = buildMessageTarget(conversationId, placeholderId)
-
-    if (event.type === 'message_start' && eventMessage) {
-      setMessages((previous) =>
-        upsertMessage(previous, eventMessage, target),
-      )
-      return
-    }
-
-    if (event.type === 'delta' && typeof event.content === 'string') {
-      queueBufferedMessageDelta(conversationId, placeholderId, event.content)
-      return
-    }
-
-    if (event.type === 'message_delta' && typeof event.content === 'string') {
-      queueBufferedMessageDelta(conversationId, placeholderId, event.content)
-      return
-    }
-
-    if (
-      event.type === 'run_started' ||
-      event.type === 'workflow_step_started' ||
-      event.type === 'workflow_step_completed' ||
-      event.type === 'retrieval_started' ||
-      event.type === 'retrieval_completed' ||
-      event.type === 'tool_call_started' ||
-      event.type === 'tool_call_confirmation_required' ||
-      event.type === 'tool_call_completed'
-    ) {
-      const nextState: StoredExecutionPanelState = {
-        events: [...executionEventsRef.current, event],
-        pendingConfirmationId:
-          event.type === 'tool_call_confirmation_required'
-            ? (event.confirmationId ?? null)
-            : event.type === 'tool_call_completed'
-              ? null
-              : pendingConfirmationIdRef.current,
-      }
-      persistExecutionState(conversationId, nextState)
-      return
-    }
-
-    if (event.type === 'done' || event.type === 'cancelled') {
-      cancelBufferedMessageDeltaFrame()
-      flushBufferedMessageDelta()
-      persistExecutionState(conversationId, {
-        events: [...executionEventsRef.current, event],
-        pendingConfirmationId: null,
+      await finalizeGeneration({
+        generationId: generation.id,
+        activeGenerationRef,
+        flushActiveMessageDelta,
+        setIsSending,
       })
-      if (
-        event.type === 'cancelled' &&
-        !activeGenerationRef.current?.stopRequested
-      ) {
-        setChatError(t('error.generationStopped'))
-      }
-      if (eventMessage) {
-        setMessages((previous) =>
-          previous.map((message) =>
-            isSameMessage(message, target)
-              ? eventMessage
-              : message,
-          ),
-        )
-      }
-      return
-    }
-
-    if (event.type === 'error') {
-      cancelBufferedMessageDeltaFrame()
-      flushBufferedMessageDelta()
-      persistExecutionState(conversationId, {
-        events: [...executionEventsRef.current, event],
-        pendingConfirmationId: null,
-      })
-      setChatError(event.error ?? t('error.streamingFailed'))
-      setMessages((previous) =>
-        previous.map((message) => {
-          if (isSameMessage(message, target)) {
-            return {
-              ...(eventMessage ?? message),
-              content:
-                eventMessage?.content ||
-                message.content ||
-                t('error.assistantEndedUnexpectedly'),
-              status: 'failed',
-            }
-          }
-
-          return message
-        }),
-      )
     }
   }
 
@@ -502,7 +187,15 @@ export function useChatGeneration({
 
       const conversationSettings =
         conversation?.settings ?? resolveSavedGenerationSettings()
-      generation = beginGeneration(conversationId, optimisticAssistantId)
+      generation = beginGeneration({
+        conversationId,
+        placeholderId: optimisticAssistantId,
+        activeGenerationRef,
+        nextGenerationIdRef,
+        setIsSending,
+        setChatError,
+        resetExecutionState,
+      })
       const optimisticUserMessage: Message = {
         id: -Date.now(),
         conversationId,
@@ -584,7 +277,16 @@ export function useChatGeneration({
         })
       }
     } finally {
-      await settleGenerationCleanup(generation)
+      await settleGenerationCleanup({
+        generation,
+        finalizeGeneration: (generationId) => finalizeGeneration({
+          generationId,
+          activeGenerationRef,
+          flushActiveMessageDelta,
+          setIsSending,
+        }),
+        setIsSending,
+      })
     }
   }
 
@@ -597,7 +299,15 @@ export function useChatGeneration({
     setChatError(null)
     setIsSending(true)
     const optimisticAssistantId = -(Date.now() + 1)
-    const generation = beginGeneration(conversationId, optimisticAssistantId)
+    const generation = beginGeneration({
+      conversationId,
+      placeholderId: optimisticAssistantId,
+      activeGenerationRef,
+      nextGenerationIdRef,
+      setIsSending,
+      setChatError,
+      resetExecutionState,
+    })
 
     try {
       setMessages((previous) => {
@@ -676,7 +386,16 @@ export function useChatGeneration({
         clearErrorOnSuccess: false,
       })
     } finally {
-      await settleGenerationCleanup(generation)
+      await settleGenerationCleanup({
+        generation,
+        finalizeGeneration: (generationId) => finalizeGeneration({
+          generationId,
+          activeGenerationRef,
+          flushActiveMessageDelta,
+          setIsSending,
+        }),
+        setIsSending,
+      })
     }
   }
 
@@ -691,7 +410,15 @@ export function useChatGeneration({
 
     setChatError(null)
     setIsSending(true)
-    const generation = beginGeneration(message.conversationId, message.id)
+    const generation = beginGeneration({
+      conversationId: message.conversationId,
+      placeholderId: message.id,
+      activeGenerationRef,
+      nextGenerationIdRef,
+      setIsSending,
+      setChatError,
+      resetExecutionState,
+    })
 
     try {
       setMessages((previous) =>
@@ -750,7 +477,16 @@ export function useChatGeneration({
         clearErrorOnSuccess: false,
       })
     } finally {
-      await settleGenerationCleanup(generation)
+      await settleGenerationCleanup({
+        generation,
+        finalizeGeneration: (generationId) => finalizeGeneration({
+          generationId,
+          activeGenerationRef,
+          flushActiveMessageDelta,
+          setIsSending,
+        }),
+        setIsSending,
+      })
     }
   }
 
@@ -765,7 +501,15 @@ export function useChatGeneration({
 
     setChatError(null)
     setIsSending(true)
-    const generation = beginGeneration(message.conversationId, message.id)
+    const generation = beginGeneration({
+      conversationId: message.conversationId,
+      placeholderId: message.id,
+      activeGenerationRef,
+      nextGenerationIdRef,
+      setIsSending,
+      setChatError,
+      resetExecutionState,
+    })
 
     try {
       setMessages((previous) =>
@@ -824,7 +568,16 @@ export function useChatGeneration({
         clearErrorOnSuccess: false,
       })
     } finally {
-      await settleGenerationCleanup(generation)
+      await settleGenerationCleanup({
+        generation,
+        finalizeGeneration: (generationId) => finalizeGeneration({
+          generationId,
+          activeGenerationRef,
+          flushActiveMessageDelta,
+          setIsSending,
+        }),
+        setIsSending,
+      })
     }
   }
 
@@ -852,7 +605,7 @@ export function useChatGeneration({
     try {
       await agentApi.confirmToolCall(pendingConfirmationId, approved)
       persistExecutionState(activeConversationId, {
-        events: executionEventsRef.current,
+        events: executionEvents,
         pendingConfirmationId: null,
       })
     } catch (error) {
