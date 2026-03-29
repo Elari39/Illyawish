@@ -72,6 +72,7 @@ export const zhCNMessages = {
     'chat.attachFile': '添加附件',
     'chat.removeAttachment': '移除附件 {{name}}',
     'chat.sendMessage': '发送消息',
+    'chat.toolsTrigger': '工具',
     'chat.expandComposer': '展开编辑器',
     'chat.collapseComposer': '收起编辑器',
     'chat.shortcutHint': 'Enter 发送，Ctrl+Enter 换行',

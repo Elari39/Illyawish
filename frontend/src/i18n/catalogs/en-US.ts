@@ -73,6 +73,7 @@ export const enUSMessages = {
   'chat.attachFile': 'Attach file',
   'chat.removeAttachment': 'Remove attachment {{name}}',
   'chat.sendMessage': 'Send message',
+  'chat.toolsTrigger': 'Tools',
   'chat.expandComposer': 'Expand editor',
   'chat.collapseComposer': 'Collapse editor',
   'chat.shortcutHint': 'Enter to send, Ctrl+Enter for a new line',

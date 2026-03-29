@@ -75,6 +75,7 @@ export const jaJPMessages = {
     'chat.attachFile': '添付ファイルを追加',
     'chat.removeAttachment': '添付ファイル {{name}} を削除',
     'chat.sendMessage': 'メッセージを送信',
+    'chat.toolsTrigger': 'ツール',
     'chat.expandComposer': 'エディタを拡大',
     'chat.collapseComposer': 'エディタを縮小',
     'chat.shortcutHint': 'Enter で送信、Ctrl+Enter で改行',

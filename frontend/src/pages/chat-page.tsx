@@ -21,6 +21,7 @@ import { buildExecutionPanelModel } from './chat-page/components/execution-panel
 import { MessageList } from './chat-page/components/message-list'
 import { MobileSidebar } from './chat-page/components/mobile-sidebar'
 import { SidebarContent } from './chat-page/components/sidebar-content'
+import { ChatToolMenuTrigger } from './chat-page/components/chat-tool-menu-trigger'
 import { useChatSession } from './chat-page/hooks/use-chat-session'
 import { useConversationList } from './chat-page/hooks/use-conversation-list'
 import { useAgentWorkspace } from './chat-page/hooks/use-agent-workspace'
@@ -123,6 +124,18 @@ export function ChatPage() {
       setIsComposerExpanded(false)
     }
   }, [chatSession.composerValue])
+
+  const composerToolTrigger = (
+    <ChatToolMenuTrigger
+      knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+      workflowPresetId={contextBarWorkflowPresetId}
+      workflowPresets={agentWorkspace.workflowPresets}
+      knowledgeSpaces={agentWorkspace.knowledgeSpaces}
+      isDisabled={interactionDisabled}
+      onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
+      onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
+    />
+  )
 
   function handleOpenSettings(tab: Parameters<typeof uiState.setActiveSettingsTab>[0] = 'chat') {
     uiState.setActiveSettingsTab(tab)
@@ -789,6 +802,7 @@ export function ChatPage() {
                 composerIsComposingRef={chatSession.composerIsComposingRef}
                 layoutMode="hero"
                 isExpanded={isComposerExpanded}
+                leftContextBar={composerToolTrigger}
                 modelControl={
                   <ChatContextBar
                     compact
@@ -854,22 +868,7 @@ export function ChatPage() {
               layoutMode="docked"
               isExpanded={isComposerExpanded}
               leftContextBar={
-                <ChatContextBar
-                  compact
-                  compactVariant="secondary"
-                  chatSettings={chatSession.chatSettingsDraft}
-                  settings={contextBarSettings}
-                  providerState={providerSettings.providerState}
-                  knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
-                  workflowPresetId={contextBarWorkflowPresetId}
-                  workflowPresets={agentWorkspace.workflowPresets}
-                  knowledgeSpaces={agentWorkspace.knowledgeSpaces}
-                  isDisabled={interactionDisabled}
-                  onOpenKnowledgeSettings={() => handleOpenSettings('knowledge')}
-                  onOpenWorkflowSettings={() => handleOpenSettings('workflow')}
-                  onProviderModelChange={(value) => void handleProviderModelChange(value)}
-                  onSetAsDefault={() => void handleSetDefaultProviderModel()}
-                />
+                composerToolTrigger
               }
               modelControl={
                 <ChatContextBar

@@ -41,7 +41,7 @@ export function ChatContextBar({
   workflowPresets,
   knowledgeSpaces,
   compact = false,
-  compactVariant = 'all',
+  compactVariant = 'model',
   isDisabled = false,
   onOpenKnowledgeSettings,
   onOpenWorkflowSettings,
@@ -76,19 +76,9 @@ export function ChatContextBar({
 
   if (compact) {
     const showModelControl = compactVariant === 'all' || compactVariant === 'model'
-    const showSecondaryControls =
-      compactVariant === 'all' || compactVariant === 'secondary'
-    const knowledgeEnabled = selectedKnowledgeSpaces.length > 0
-    const workflowEnabled = selectedWorkflowPreset != null
     const modelLabel = currentSelection.preset && currentSelection.model
       ? `${currentSelection.preset.name} · ${currentSelection.model}`
       : t('chatContext.noProviderOptions')
-    const knowledgeLabel = knowledgeEnabled
-      ? t('chatContext.knowledgeEnabled', { count: selectedKnowledgeSpaces.length })
-      : t('chatContext.knowledgeDisabled')
-    const workflowLabel = workflowEnabled
-      ? t('chatContext.workflowEnabled', { name: selectedWorkflowPreset.name })
-      : t('chatContext.workflowDisabled')
 
     return (
       <div className="flex items-center gap-0.5">
@@ -112,45 +102,6 @@ export function ChatContextBar({
               ))}
             </Select>
           </label>
-        ) : null}
-
-        {showSecondaryControls ? (
-          <>
-            <button
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${knowledgeEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-              disabled={isDisabled}
-              onClick={onOpenKnowledgeSettings}
-              title={knowledgeLabel}
-              type="button"
-              aria-label={knowledgeLabel}
-            >
-              <Database className="h-4 w-4" />
-            </button>
-
-            <button
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-[var(--hover-bg)] ${workflowEnabled ? 'text-[var(--brand)]' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'}`}
-              disabled={isDisabled}
-              onClick={onOpenWorkflowSettings}
-              title={workflowLabel}
-              type="button"
-              aria-label={workflowLabel}
-            >
-              <GitBranch className="h-4 w-4" />
-            </button>
-
-            {canSetAsDefault ? (
-              <button
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--brand)] transition hover:bg-[var(--hover-bg)]"
-                disabled={isDisabled}
-                onClick={onSetAsDefault}
-                title={t('chatContext.setAsDefault')}
-                type="button"
-                aria-label={t('chatContext.setAsDefault')}
-              >
-                <Sparkles className="h-4 w-4" />
-              </button>
-            ) : null}
-          </>
         ) : null}
       </div>
     )

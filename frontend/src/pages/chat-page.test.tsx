@@ -258,6 +258,7 @@ describe('ChatPage conversation navigation', () => {
 
     expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-layout', 'hero')
     expect(screen.getByTestId('chat-header-site-name')).toHaveTextContent('Illyawish')
+    expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument()
     expect(screen.queryByTestId('chat-header-title')).not.toBeInTheDocument()
     expect(
       screen.queryByText('Select a conversation from the sidebar, or start a new chat below.'),
@@ -288,6 +289,7 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.getByTestId('chat-composer')).toHaveAttribute('data-layout', 'docked')
     expect(screen.getByTestId('chat-header-site-name')).toHaveTextContent('Illyawish')
     expect(screen.getByTestId('chat-header-title')).toHaveTextContent('Centered title chat')
+    expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument()
   })
 
   it('opens a clicked history conversation exactly once', async () => {
@@ -1517,14 +1519,7 @@ describe('ChatPage conversation navigation', () => {
     })
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: 'Knowledge enabled · 2 spaces' }),
-      ).toBeInTheDocument()
-    })
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: 'Workflow enabled · Knowledge Q&A' }),
-      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument()
     })
 
     fireEvent.change(screen.getByLabelText('Provider and model'), {
@@ -1542,6 +1537,11 @@ describe('ChatPage conversation navigation', () => {
         }),
       )
     })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
+
+    expect(screen.getByRole('menuitem', { name: 'KnowledgeKnowledge enabled · 2 spaces' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'WorkflowWorkflow enabled · Knowledge Q&A' })).toBeInTheDocument()
   })
 
   it('preserves the current conversation provider-model when saving session settings', async () => {
