@@ -126,10 +126,18 @@ func (s *Service) DeletePreset(userID uint, presetID uint) error {
 	if err != nil {
 		return err
 	}
-	if err := s.db.Delete(preset).Error; err != nil {
-		return fmt.Errorf("delete workflow preset: %w", err)
-	}
-	return nil
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Conversation{}).
+			Where("user_id = ? AND workflow_preset_id = ?", userID, presetID).
+			Update("workflow_preset_id", nil).Error; err != nil {
+			return fmt.Errorf("clear conversation workflow preset: %w", err)
+		}
+		if err := tx.Delete(preset).Error; err != nil {
+			return fmt.Errorf("delete workflow preset: %w", err)
+		}
+		return nil
+	})
 }
 
 func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, error) {

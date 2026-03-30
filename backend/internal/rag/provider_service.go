@@ -53,6 +53,13 @@ func NewProviderService(db *gorm.DB, cfg *config.Config) (*ProviderService, erro
 	}, nil
 }
 
+func isCompleteFallbackProviderConfig(provider ProviderConfig) bool {
+	return strings.TrimSpace(provider.BaseURL) != "" &&
+		strings.TrimSpace(provider.APIKey) != "" &&
+		strings.TrimSpace(provider.EmbeddingModel) != "" &&
+		strings.TrimSpace(provider.RerankerModel) != ""
+}
+
 func (s *ProviderService) CreateProviderPreset(userID uint, input CreateProviderPresetInput) (*models.RAGProviderPreset, error) {
 	normalized, err := sanitizeCreateProviderInput(input)
 	if err != nil {
@@ -186,10 +193,7 @@ func (s *ProviderService) ResolveProviderForUser(userID uint) (*ResolvedProvider
 		return nil, fmt.Errorf("load active rag provider preset: %w", err)
 	}
 
-	if s.fallback.Config.BaseURL != "" &&
-		s.fallback.Config.APIKey != "" &&
-		s.fallback.Config.EmbeddingModel != "" &&
-		s.fallback.Config.RerankerModel != "" {
+	if isCompleteFallbackProviderConfig(s.fallback.Config) {
 		fallback := s.fallback
 		return &fallback, nil
 	}
@@ -209,7 +213,7 @@ func (s *ProviderService) ListProviderState(userID uint) (*ProviderState, error)
 		Presets:       make([]ProviderPresetDTO, 0, len(presets)),
 		CurrentSource: ProviderSourceNone,
 		Fallback: ProviderFallbackState{
-			Available:      s.fallback.Config.BaseURL != "" && s.fallback.Config.APIKey != "",
+			Available:      isCompleteFallbackProviderConfig(s.fallback.Config),
 			Name:           s.fallback.Name,
 			BaseURL:        s.fallback.Config.BaseURL,
 			EmbeddingModel: s.fallback.Config.EmbeddingModel,

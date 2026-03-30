@@ -183,6 +183,60 @@ func TestDeletePresetRemovesPreset(t *testing.T) {
 	}
 }
 
+func TestDeletePresetClearsConversationReferencesForSameUser(t *testing.T) {
+	service := newTestService(t)
+
+	created, err := service.CreatePreset(1, CreatePresetInput{
+		Name:        "Delete me",
+		TemplateKey: TemplateKnowledgeQA,
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	sameUserConversation := models.Conversation{
+		UserID:           1,
+		Title:            "Same user",
+		WorkflowPresetID: &created.ID,
+	}
+	if err := service.db.Create(&sameUserConversation).Error; err != nil {
+		t.Fatalf("create same-user conversation: %v", err)
+	}
+
+	otherUserConversation := models.Conversation{
+		UserID:           2,
+		Title:            "Other user",
+		WorkflowPresetID: &created.ID,
+	}
+	if err := service.db.Create(&otherUserConversation).Error; err != nil {
+		t.Fatalf("create other-user conversation: %v", err)
+	}
+
+	if err := service.DeletePreset(1, created.ID); err != nil {
+		t.Fatalf("DeletePreset() error = %v", err)
+	}
+
+	if _, err := service.GetPreset(1, created.ID); err == nil {
+		t.Fatal("expected deleted preset lookup to fail")
+	}
+
+	var reloadedSameUser models.Conversation
+	if err := service.db.First(&reloadedSameUser, sameUserConversation.ID).Error; err != nil {
+		t.Fatalf("reload same-user conversation: %v", err)
+	}
+	if reloadedSameUser.WorkflowPresetID != nil {
+		t.Fatalf("expected same-user workflow preset reference to be cleared, got %v", *reloadedSameUser.WorkflowPresetID)
+	}
+
+	var reloadedOtherUser models.Conversation
+	if err := service.db.First(&reloadedOtherUser, otherUserConversation.ID).Error; err != nil {
+		t.Fatalf("reload other-user conversation: %v", err)
+	}
+	if reloadedOtherUser.WorkflowPresetID == nil || *reloadedOtherUser.WorkflowPresetID != created.ID {
+		t.Fatalf("expected other-user workflow preset reference to remain, got %v", reloadedOtherUser.WorkflowPresetID)
+	}
+}
+
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 
@@ -193,6 +247,9 @@ func newTestService(t *testing.T) *Service {
 	}
 	if err := db.AutoMigrate(&models.WorkflowPreset{}); err != nil {
 		t.Fatalf("migrate workflow preset: %v", err)
+	}
+	if err := db.AutoMigrate(&models.Conversation{}); err != nil {
+		t.Fatalf("migrate conversation: %v", err)
 	}
 
 	return NewService(db)

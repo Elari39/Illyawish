@@ -50,11 +50,11 @@ func TestCreateProviderPresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 
 func TestResolveProviderFallsBackToWorkspaceConfig(t *testing.T) {
 	service := newTestProviderService(t, &config.Config{
-		SessionSecret:      "session-secret",
-		RAGBaseURL:         "https://api.siliconflow.cn/v1",
-		RAGAPIKey:          "workspace-key",
-		RAGEmbeddingModel:  "embed-default",
-		RAGRerankerModel:   "rerank-default",
+		SessionSecret:     "session-secret",
+		RAGBaseURL:        "https://api.siliconflow.cn/v1",
+		RAGAPIKey:         "workspace-key",
+		RAGEmbeddingModel: "embed-default",
+		RAGRerankerModel:  "rerank-default",
 	})
 
 	resolved, err := service.ResolveProviderForUser(7)
@@ -66,6 +66,49 @@ func TestResolveProviderFallsBackToWorkspaceConfig(t *testing.T) {
 	}
 	if resolved.Config.EmbeddingModel != "embed-default" {
 		t.Fatalf("expected embedding model from fallback, got %q", resolved.Config.EmbeddingModel)
+	}
+}
+
+func TestListProviderStateDoesNotAdvertiseIncompleteFallback(t *testing.T) {
+	service := newTestProviderService(t, &config.Config{
+		SessionSecret:     "session-secret",
+		RAGBaseURL:        "https://api.siliconflow.cn/v1",
+		RAGAPIKey:         "workspace-key",
+		RAGEmbeddingModel: "embed-default",
+	})
+
+	state, err := service.ListProviderState(7)
+	if err != nil {
+		t.Fatalf("ListProviderState() error = %v", err)
+	}
+
+	if state.Fallback.Available {
+		t.Fatal("expected incomplete fallback to be unavailable")
+	}
+	if state.CurrentSource != ProviderSourceNone {
+		t.Fatalf("expected current source %q, got %q", ProviderSourceNone, state.CurrentSource)
+	}
+}
+
+func TestListProviderStateMarksCompleteFallbackAsAvailable(t *testing.T) {
+	service := newTestProviderService(t, &config.Config{
+		SessionSecret:     "session-secret",
+		RAGBaseURL:        "https://api.siliconflow.cn/v1",
+		RAGAPIKey:         "workspace-key",
+		RAGEmbeddingModel: "embed-default",
+		RAGRerankerModel:  "rerank-default",
+	})
+
+	state, err := service.ListProviderState(7)
+	if err != nil {
+		t.Fatalf("ListProviderState() error = %v", err)
+	}
+
+	if !state.Fallback.Available {
+		t.Fatal("expected complete fallback to be available")
+	}
+	if state.CurrentSource != ProviderSourceFallback {
+		t.Fatalf("expected current source %q, got %q", ProviderSourceFallback, state.CurrentSource)
 	}
 }
 
