@@ -66,6 +66,14 @@ func (s *Service) streamAgentIntoAssistantMessage(
 		WorkflowInputs:      runConfig.workflowInputs,
 		Provider:            providerConfig,
 	}, func(event agent.Event) error {
+		if event.StepName == "" {
+			switch event.Type {
+			case agent.EventTypeMessageDelta:
+				assistantMessage.Content += event.Content
+			case agent.EventTypeReasoningDelta:
+				assistantMessage.ReasoningContent += event.Content
+			}
+		}
 		return emit(StreamEvent{
 			Type:           event.Type,
 			Content:        event.Content,

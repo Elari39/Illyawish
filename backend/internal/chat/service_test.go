@@ -279,6 +279,61 @@ func TestStreamAssistantReplyUsesAgentRuntimeWhenKnowledgeSpacesSelected(t *test
 	}
 }
 
+func TestStreamAssistantReplyPersistsOnlyFinalAgentDeltasOnFailure(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	conversation.KnowledgeSpaceIDs = []uint{9}
+	if err := db.Save(&conversation).Error; err != nil {
+		t.Fatalf("save conversation defaults: %v", err)
+	}
+
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{}).WithAgentRuntime(&fakeAgentRunner{
+		events: []agent.Event{
+			{Type: agent.EventTypeRunStarted},
+			{Type: agent.EventTypeMessageDelta, StepName: "compose_answer", Content: "draft step output"},
+			{Type: agent.EventTypeReasoningDelta, StepName: "compose_answer", Content: "draft step reasoning"},
+			{Type: agent.EventTypeReasoningDelta, Content: "final think"},
+			{Type: agent.EventTypeReasoningDelta, Content: "ing"},
+			{Type: agent.EventTypeMessageDelta, Content: "partial "},
+			{Type: agent.EventTypeMessageDelta, Content: "answer"},
+		},
+		err: errors.New("agent exploded"),
+	})
+
+	err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "what is stored",
+	}, func(StreamEvent) error {
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected agent runtime failure")
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[1].Status != models.MessageStatusFailed {
+		t.Fatalf("expected failed assistant message, got %q", messages[1].Status)
+	}
+	if messages[1].Content != "partial answer" {
+		t.Fatalf("expected only final partial content to persist, got %q", messages[1].Content)
+	}
+	if messages[1].ReasoningContent != "final thinking" {
+		t.Fatalf("expected only final partial reasoning to persist, got %q", messages[1].ReasoningContent)
+	}
+}
+
 func TestStreamAssistantReplyResolvesWorkflowPresetDefaultsForAgentRuntime(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	presetID := uint(11)

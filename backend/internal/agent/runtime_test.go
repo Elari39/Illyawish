@@ -13,7 +13,15 @@ import (
 )
 
 type fakeChatModel struct {
-	content string
+	content   string
+	responses []fakeStreamResponse
+	callCount int
+}
+
+type fakeStreamResponse struct {
+	deltas []llm.StreamDelta
+	result llm.StreamResult
+	err    error
 }
 
 func (f *fakeChatModel) Stream(
@@ -23,10 +31,30 @@ func (f *fakeChatModel) Stream(
 	_ llm.RequestOptions,
 	onDelta func(llm.StreamDelta),
 ) (llm.StreamResult, error) {
-	if onDelta != nil {
-		onDelta(llm.StreamDelta{Content: f.content})
+	response := fakeStreamResponse{
+		deltas: []llm.StreamDelta{{Content: f.content}},
+		result: llm.StreamResult{Content: f.content, FinishReason: "stop"},
 	}
-	return llm.StreamResult{Content: f.content, FinishReason: "stop"}, nil
+	if f.callCount < len(f.responses) {
+		response = f.responses[f.callCount]
+	}
+	f.callCount++
+
+	if onDelta != nil {
+		for _, delta := range response.deltas {
+			onDelta(delta)
+		}
+	}
+	if response.result.Content == "" && response.result.ReasoningContent == "" {
+		for _, delta := range response.deltas {
+			response.result.Content += delta.Content
+			response.result.ReasoningContent += delta.Reasoning
+		}
+	}
+	if response.result.FinishReason == "" {
+		response.result.FinishReason = "stop"
+	}
+	return response.result, response.err
 }
 
 type fakeKnowledgeSearcher struct {
@@ -155,6 +183,76 @@ func TestRuntimeEmitsExecutionPanelMetadata(t *testing.T) {
 	}
 }
 
+func TestRuntimeEmitsFinalReasoningLifecycleOnce(t *testing.T) {
+	manager := NewConfirmationManager()
+	runtime := NewRuntime(&fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Content: "draft step output"},
+				},
+			},
+			{
+				deltas: []llm.StreamDelta{
+					{Reasoning: "step 1"},
+					{Reasoning: " -> step 2"},
+					{Content: "final answer"},
+				},
+				result: llm.StreamResult{
+					Content:          "final answer",
+					ReasoningContent: "step 1 -> step 2",
+					FinishReason:     "stop",
+				},
+			},
+		},
+	}, &fakeKnowledgeSearcher{
+		result: &rag.SearchResult{
+			Citations: []models.AgentCitation{
+				{DocumentID: 1, DocumentName: "Spec", ChunkID: 7, Snippet: "Embedding details"},
+			},
+			ContextBlocks: []string{"Embedding details"},
+		},
+	}, &fakeToolExecutor{}, manager)
+
+	var events []Event
+	result, err := runtime.Execute(context.Background(), RunInput{
+		UserID:              1,
+		ConversationID:      12,
+		UserMessage:         "Explain embeddings",
+		WorkflowTemplateKey: workflow.TemplateKnowledgeQA,
+		KnowledgeSpaceIDs:   []uint{3},
+		Provider: llm.ProviderConfig{
+			BaseURL:      "https://example.com/v1",
+			APIKey:       "key",
+			DefaultModel: "gpt-4.1-mini",
+		},
+	}, func(event Event) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ReasoningContent != "step 1 -> step 2" {
+		t.Fatalf("expected final reasoning content, got %q", result.ReasoningContent)
+	}
+	if countEvents(events, EventTypeReasoningStart) != 1 {
+		t.Fatalf("expected exactly one reasoning_start event, got %#v", events)
+	}
+	if countEvents(events, EventTypeReasoningDelta) != 2 {
+		t.Fatalf("expected two reasoning_delta events, got %#v", events)
+	}
+
+	reasoningDone := findEventByType(events, EventTypeReasoningDone)
+	if reasoningDone == nil {
+		t.Fatalf("expected reasoning_done event, got %#v", events)
+	}
+	if reasoningDone.Content != "step 1 -> step 2" {
+		t.Fatalf("expected aggregated reasoning_done content, got %#v", reasoningDone)
+	}
+}
+
 func TestRuntimeRequiresConfirmationForHTTPRequestTool(t *testing.T) {
 	manager := NewConfirmationManager()
 	runtime := NewRuntime(&fakeChatModel{content: "done"}, &fakeKnowledgeSearcher{}, &fakeToolExecutor{}, manager)
@@ -251,6 +349,16 @@ func containsEvent(events []Event, eventType string) bool {
 		}
 	}
 	return false
+}
+
+func countEvents(events []Event, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
 }
 
 func findEventByType(events []Event, eventType string) *Event {
