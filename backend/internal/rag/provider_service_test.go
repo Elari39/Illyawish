@@ -112,6 +112,27 @@ func TestListProviderStateMarksCompleteFallbackAsAvailable(t *testing.T) {
 	}
 }
 
+func TestListProviderStateDoesNotAdvertiseFallbackWhenAPIKeyMissing(t *testing.T) {
+	service := newTestProviderService(t, &config.Config{
+		SessionSecret:     "session-secret",
+		RAGBaseURL:        "https://api.siliconflow.cn/v1",
+		RAGEmbeddingModel: "embed-default",
+		RAGRerankerModel:  "rerank-default",
+	})
+
+	state, err := service.ListProviderState(7)
+	if err != nil {
+		t.Fatalf("ListProviderState() error = %v", err)
+	}
+
+	if state.Fallback.Available {
+		t.Fatal("expected fallback without API key to be unavailable")
+	}
+	if state.CurrentSource != ProviderSourceNone {
+		t.Fatalf("expected current source %q, got %q", ProviderSourceNone, state.CurrentSource)
+	}
+}
+
 func TestActivateProviderPresetLeavesOnlyOneActivePreset(t *testing.T) {
 	service := newTestProviderService(t, &config.Config{
 		SessionSecret: "session-secret",

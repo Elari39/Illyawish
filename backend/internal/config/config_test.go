@@ -39,8 +39,8 @@ func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	if cfg.RAGBaseURL == "" {
 		t.Fatal("expected default RAG base URL to be populated")
 	}
-	if cfg.RAGAPIKey != "sk-oaoecvjushohmbfrfxohqctsgzrqggsvisrlzvisfwjhyunh" {
-		t.Fatalf("expected default RAG API key, got %q", cfg.RAGAPIKey)
+	if cfg.RAGAPIKey != "" {
+		t.Fatalf("expected default RAG API key to be empty, got %q", cfg.RAGAPIKey)
 	}
 	if cfg.RAGEmbeddingModel != "Qwen/Qwen3-Embedding-8B" {
 		t.Fatalf("expected default RAG embedding model, got %q", cfg.RAGEmbeddingModel)
@@ -52,6 +52,13 @@ func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	configPath := filepath.Join(dataDir, defaultConfigFileName)
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("expected config file to be created: %v", err)
+	}
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config file: %v", err)
+	}
+	if strings.Contains(string(payload), `"ragApiKey"`) {
+		t.Fatalf("expected config file to omit empty ragApiKey, got %s", string(payload))
 	}
 }
 
@@ -164,6 +171,70 @@ func TestLoadFromDataDirBackfillsMissingEncryptionKey(t *testing.T) {
 	}
 	if !strings.Contains(string(payload), `"trustProxyHeadersForSecureCookies": false`) {
 		t.Fatalf("expected trust proxy headers flag to be persisted, got %s", string(payload))
+	}
+}
+
+func TestLoadFromDataDirMigratesLegacyBundledRAGAPIKey(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "ragBaseURL": "https://api.siliconflow.cn/v1",
+  "ragApiKey": "` + legacyBundledRAGAPIKey + `",
+  "ragEmbeddingModel": "embed-model",
+  "ragRerankerModel": "rerank-model"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
+	if err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	if cfg.RAGAPIKey != "" {
+		t.Fatalf("expected legacy bundled RAG API key to be cleared, got %q", cfg.RAGAPIKey)
+	}
+
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config file: %v", err)
+	}
+	if strings.Contains(string(payload), `"ragApiKey"`) {
+		t.Fatalf("expected migrated config file to omit ragApiKey, got %s", string(payload))
+	}
+}
+
+func TestLoadFromDataDirPreservesCustomRAGAPIKey(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "ragBaseURL": "https://api.siliconflow.cn/v1",
+  "ragApiKey": "custom-rag-key",
+  "ragEmbeddingModel": "embed-model",
+  "ragRerankerModel": "rerank-model"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
+	if err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	if cfg.RAGAPIKey != "custom-rag-key" {
+		t.Fatalf("expected custom RAG API key to be preserved, got %q", cfg.RAGAPIKey)
 	}
 }
 

@@ -14,7 +14,7 @@ interface RAGProviderSettingsTabProps {
 const defaultProviderForm: CreateRAGProviderPayload = {
   name: 'SiliconFlow',
   baseURL: 'https://api.siliconflow.cn/v1',
-  apiKey: 'sk-oaoecvjushohmbfrfxohqctsgzrqggsvisrlzvisfwjhyunh',
+  apiKey: '',
   embeddingModel: 'Qwen/Qwen3-Embedding-8B',
   rerankerModel: 'Qwen/Qwen3-Reranker-8B',
 }
