@@ -360,7 +360,7 @@ describe('useConversationList', () => {
     expect(result.current.hasMoreConversations).toBe(true)
   })
 
-  it('restores the last conversation only once when it is still available', async () => {
+  it('does not restore the last conversation when loading /chat', async () => {
     window.localStorage.setItem(LAST_CONVERSATION_STORAGE_KEY, '7')
     listConversationsPageMock.mockResolvedValue({
       conversations: [
@@ -374,7 +374,7 @@ describe('useConversationList', () => {
     const navigateToConversation = vi.fn()
     const onError = vi.fn()
 
-    const { rerender } = renderHook(
+    const { result, rerender } = renderHook(
       () =>
         useConversationList({
           activeConversationId: null,
@@ -385,14 +385,12 @@ describe('useConversationList', () => {
     )
 
     await waitFor(() => {
-      expect(navigateToConversation).toHaveBeenCalledWith('7', true)
+      expect(result.current.conversations).toHaveLength(1)
     })
 
     rerender()
 
-    await waitFor(() => {
-      expect(navigateToConversation).toHaveBeenCalledTimes(1)
-    })
+    expect(navigateToConversation).not.toHaveBeenCalled()
   })
 
   it('keeps load more available when a local conversation is inserted after the first page', async () => {

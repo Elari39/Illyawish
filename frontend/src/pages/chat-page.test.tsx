@@ -205,12 +205,8 @@ describe('ChatPage conversation navigation', () => {
     vi.unstubAllGlobals()
   })
 
-  it('auto-resumes the last conversation without reloading it in a loop', async () => {
+  it('keeps /chat on the hero state even when a last conversation is stored', async () => {
     const resumedConversation = createConversation(7, 'Resume me')
-    const resumedMessages = [
-      createMessage(11, 7, 'user', 'Hello again'),
-      createMessage(12, 7, 'assistant', 'Welcome back'),
-    ]
 
     window.localStorage.setItem(LAST_CONVERSATION_STORAGE_KEY, '7')
 
@@ -218,26 +214,16 @@ describe('ChatPage conversation navigation', () => {
       conversations: [resumedConversation],
       total: 1,
     })
-    const getConversationMessagesMock = vi
-      .spyOn(chatApi, 'getConversationMessages')
-      .mockResolvedValue({
-        conversation: resumedConversation,
-        messages: resumedMessages,
-      })
+    const getConversationMessagesMock = vi.spyOn(chatApi, 'getConversationMessages')
 
     renderChatPage(['/chat'])
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(7))
+      expect(screen.getByRole('heading', { level: 2, name: 'How can I help you today?' })).toBeInTheDocument()
     })
 
-    await waitFor(() => {
-      expect(screen.getByText('Welcome back')).toBeInTheDocument()
-    })
-
-    expect(getConversationMessagesMock).toHaveBeenCalledTimes(1)
-    expect(getConversationMessagesMock).toHaveBeenCalledWith('7')
-    expect(screen.queryByText('Loading conversation...')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat')
+    expect(getConversationMessagesMock).not.toHaveBeenCalled()
   })
 
   it('renders a centered hero state on a fresh chat route', async () => {

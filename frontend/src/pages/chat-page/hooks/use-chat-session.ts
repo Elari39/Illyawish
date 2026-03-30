@@ -80,7 +80,6 @@ export function useChatSession({
     isSending,
     latestUserMessage,
     latestAssistantMessage,
-    skipNextMessageAutoScroll,
     setMessages,
     setIsLoadingMessages,
     setIsSending,
@@ -136,7 +135,6 @@ export function useChatSession({
     setMessages,
     setIsLoadingMessages,
     setIsSending,
-    skipNextMessageAutoScroll,
   })
 
   const transfer = useChatTransfer({

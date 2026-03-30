@@ -38,7 +38,6 @@ const messagesState = {
   isSending: false,
   latestUserMessage: null,
   latestAssistantMessage: null,
-  skipNextMessageAutoScroll: vi.fn(),
   setMessages: vi.fn(),
   setIsLoadingMessages: vi.fn(),
   setIsSending: vi.fn(),

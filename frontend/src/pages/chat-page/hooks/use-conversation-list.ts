@@ -17,8 +17,6 @@ import {
   getAvailableConversationFolders,
   getAvailableConversationTags,
   matchesConversationFilters,
-  readLastConversationId,
-  resolveRestorableConversationId,
   sortConversations,
   writeLastConversationId,
 } from '../utils'
@@ -35,15 +33,13 @@ interface UseConversationListOptions {
   navigateToConversation: (conversationId: Conversation['id'], replace?: boolean) => void
 }
 
-export function useConversationList({
-  activeConversationId,
-  onError,
-  navigateToConversation,
-}: UseConversationListOptions) {
+export function useConversationList(options: UseConversationListOptions) {
   interface SyncConversationOptions {
     updateCountsForVisibilityChange?: boolean
     invalidateRequests?: boolean
   }
+
+  const { activeConversationId, onError } = options
 
   const { t } = useI18n()
   const [state, dispatch] = useReducer(
@@ -66,12 +62,6 @@ export function useConversationList({
   ].join(':')
   const hasMoreConversations =
     state.loadedConversationCount < state.conversationTotal
-  const restorableConversationId = resolveRestorableConversationId(
-    state.conversations,
-    readLastConversationId(),
-    state.showArchived,
-    deferredConversationSearch,
-  )
 
   useEffect(() => {
     stateRef.current = state
@@ -240,24 +230,6 @@ export function useConversationList({
     skipAutoResumeRef.current = false
     writeLastConversationId(activeConversationId)
   }, [activeConversationId])
-
-  useEffect(() => {
-    if (
-      activeConversationId ||
-      state.isLoadingConversations ||
-      skipAutoResumeRef.current ||
-      restorableConversationId == null
-    ) {
-      return
-    }
-
-    navigateToConversation(restorableConversationId, true)
-  }, [
-    activeConversationId,
-    navigateToConversation,
-    restorableConversationId,
-    state.isLoadingConversations,
-  ])
 
   const loadConversations = useCallback(
     async ({ append = false }: { append?: boolean } = {}) => {
@@ -466,7 +438,6 @@ export function useConversationList({
     selectedConversationIds: state.selectedConversationIds,
     isLoadingConversations: state.isLoadingConversations,
     isLoadingMoreConversations: state.isLoadingMoreConversations,
-    restorableConversationId,
     setConversationSearch: (value: string) =>
       dispatchWithStateRef({ type: 'set_search', value }),
     setShowArchived: (value: boolean) =>

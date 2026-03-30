@@ -130,7 +130,7 @@ describe('ChatPage UUID conversation routes', () => {
     vi.restoreAllMocks()
   })
 
-  it('auto-resumes the last conversation using the UUID route', async () => {
+  it('keeps /chat on the hero state even when a last conversation UUID is stored', async () => {
     const conversationID = '8e84849b-6ead-49c1-b240-4442f603b5df'
     const conversation = createConversation(conversationID, 'Resume me')
 
@@ -140,21 +140,16 @@ describe('ChatPage UUID conversation routes', () => {
       conversations: [conversation],
       total: 1,
     })
-    const getConversationMessagesMock = vi
-      .spyOn(chatApi, 'getConversationMessages')
-      .mockResolvedValue({
-        conversation,
-        messages: [createMessage(12, conversationID, 'assistant', 'Welcome back')],
-      })
+    const getConversationMessagesMock = vi.spyOn(chatApi, 'getConversationMessages')
 
     renderChatPage(['/chat'])
 
     await waitFor(() => {
-      expect(screen.getByTestId('location')).toHaveTextContent(`/chat/s/${conversationID}`)
+      expect(screen.getByRole('heading', { level: 2, name: 'How can I help you today?' })).toBeInTheDocument()
     })
-    await waitFor(() => {
-      expect(getConversationMessagesMock).toHaveBeenCalledWith(conversationID)
-    })
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/chat')
+    expect(getConversationMessagesMock).not.toHaveBeenCalled()
   })
 
   it('loads a UUID conversation directly from /chat/s/:conversationId', async () => {

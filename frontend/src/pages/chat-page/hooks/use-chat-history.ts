@@ -42,7 +42,6 @@ interface UseChatHistoryOptions {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   setIsLoadingMessages: (value: boolean) => void
   setIsSending: (value: boolean) => void
-  skipNextMessageAutoScroll: () => void
 }
 
 export function useChatHistory({
@@ -66,7 +65,6 @@ export function useChatHistory({
   setMessages,
   setIsLoadingMessages,
   setIsSending,
-  skipNextMessageAutoScroll,
 }: UseChatHistoryOptions) {
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [nextBeforeMessageId, setNextBeforeMessageId] = useState<number | null>(
@@ -247,7 +245,6 @@ export function useChatHistory({
         limit: MESSAGE_PAGE_SIZE,
       })
 
-      skipNextMessageAutoScroll()
       setMessages((previous) => dedupeMessages([
         ...response.messages,
         ...previous,
