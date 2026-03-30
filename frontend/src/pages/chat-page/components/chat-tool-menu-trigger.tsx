@@ -101,22 +101,24 @@ export function ChatToolMenuTrigger({
       <button
         aria-controls={isOpen ? menuId : undefined}
         aria-expanded={isOpen}
+        aria-label={t('chat.toolsTrigger')}
         aria-haspopup="menu"
         className={cn(
-          'relative inline-flex h-9 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--brand)]/25 hover:bg-[var(--surface-strong)] disabled:cursor-not-allowed disabled:opacity-60',
+          'relative inline-flex h-9 w-9 items-center justify-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-0 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--brand)]/25 hover:bg-[var(--surface-strong)] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:px-3',
           hasActiveTools && 'border-[var(--brand)]/20 bg-[var(--brand)]/[0.06]',
         )}
         disabled={isDisabled}
         onClick={() => setIsOpen((current) => !current)}
         ref={triggerRef}
+        title={t('chat.toolsTrigger')}
         type="button"
       >
         <SlidersHorizontal className="h-4 w-4 text-[var(--muted-foreground)]" />
-        <span>{t('chat.toolsTrigger')}</span>
+        <span className="max-sm:hidden">{t('chat.toolsTrigger')}</span>
         {hasActiveTools ? (
           <span
             aria-hidden="true"
-            className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-[var(--brand)] ring-2 ring-[var(--surface)]"
+            className="absolute right-2 top-1.5 h-2 w-2 rounded-full bg-[var(--brand)] ring-2 ring-[var(--surface)] sm:right-2.5"
             data-testid="chat-tools-active-indicator"
           />
         ) : null}

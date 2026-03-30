@@ -54,7 +54,12 @@ describe('ChatToolMenuTrigger', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: 'Tools' })
+
+    expect(trigger).toBeInTheDocument()
+    expect(trigger.className).toContain('w-9')
+    expect(trigger.className).toContain('sm:w-auto')
+    expect(screen.getByText('Tools').className).toContain('max-sm:hidden')
     expect(screen.queryByTestId('chat-tools-active-indicator')).not.toBeInTheDocument()
   })
 

@@ -27,12 +27,12 @@ export function SettingsPanelTabNav({
   const { t } = useI18n()
 
   return (
-    <div className="mt-6 inline-flex flex-wrap rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
+    <div className="mt-6 flex overflow-x-auto whitespace-nowrap rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
       {SETTINGS_TABS.map((tab) => (
         <button
           key={tab.key}
           className={cn(
-            'rounded-xl px-4 py-2 text-sm font-medium transition',
+            'shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition sm:px-4',
             activeTab === tab.key
               ? 'bg-[var(--surface-strong)] text-[var(--foreground)] shadow-sm'
               : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]',

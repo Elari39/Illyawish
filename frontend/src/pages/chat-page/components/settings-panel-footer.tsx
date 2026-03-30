@@ -35,27 +35,28 @@ export function SettingsPanelFooter({
   const { t } = useI18n()
 
   return (
-    <div className="mt-6 flex flex-wrap justify-end gap-3">
+    <div className="mt-6 flex flex-wrap justify-end gap-3 max-sm:flex-col">
       {activeTab === 'chat' ? (
         <>
-          <Button onClick={onReset} variant="ghost">
+          <Button className="max-sm:w-full" onClick={onReset} variant="ghost">
             {t('common.reset')}
           </Button>
-          <Button onClick={onClose} variant="secondary">
+          <Button className="max-sm:w-full" onClick={onClose} variant="secondary">
             {t('common.close')}
           </Button>
-          <Button disabled={isSaving} onClick={onSave}>
+          <Button className="max-sm:w-full" disabled={isSaving} onClick={onSave}>
             {isSaving ? t('common.saving') : t('settings.saveSettings')}
           </Button>
         </>
       ) : activeTab === 'provider' ? (
         <>
-          <Button onClick={onResetProvider} variant="ghost">
+          <Button className="max-sm:w-full" onClick={onResetProvider} variant="ghost">
             {editingProviderId
               ? t('settings.newPreset')
               : t('settings.resetForm')}
           </Button>
           <Button
+            className="max-sm:w-full"
             disabled={isLoadingProviders || isSavingProvider || isTestingProvider}
             onClick={onTestProvider}
             variant="secondary"
@@ -64,10 +65,11 @@ export function SettingsPanelFooter({
               ? t('settings.testingConnection')
               : t('settings.testConnection')}
           </Button>
-          <Button onClick={onClose} variant="secondary">
+          <Button className="max-sm:w-full" onClick={onClose} variant="secondary">
             {t('common.close')}
           </Button>
           <Button
+            className="max-sm:w-full"
             disabled={isLoadingProviders || isSavingProvider}
             onClick={onSaveProvider}
           >
@@ -79,7 +81,7 @@ export function SettingsPanelFooter({
           </Button>
         </>
       ) : (
-        <Button onClick={onClose} variant="secondary">
+        <Button className="max-sm:w-full" onClick={onClose} variant="secondary">
           {t('common.close')}
         </Button>
       )}

@@ -116,6 +116,15 @@ describe('AdminPage', () => {
 
     expect(await screen.findByRole('heading', { name: '管理控制台' })).toBeInTheDocument()
     expect(screen.getByText('管理用户、查看审计活动并设置工作区默认值。')).toBeInTheDocument()
+    const backToChatButton = screen.getByRole('button', { name: '返回聊天' })
+    expect(backToChatButton.className).toContain('min-w-9')
+    expect(backToChatButton.className).toContain('sm:px-4')
+    expect(screen.getByText('返回聊天').className).toContain('max-sm:sr-only')
+
+    const signOutButton = screen.getByRole('button', { name: '退出登录' })
+    expect(signOutButton.className).toContain('min-w-9')
+    expect(signOutButton.className).toContain('sm:px-4')
+    expect(screen.getByText('退出登录').className).toContain('max-sm:sr-only')
     expect(await screen.findByText(/从未登录/)).toBeInTheDocument()
     expect(screen.getAllByDisplayValue('管理员').length).toBeGreaterThan(0)
     expect(screen.getAllByDisplayValue('启用').length).toBeGreaterThan(0)

@@ -78,7 +78,7 @@ export function SettingsPanel({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--overlay-scrim)] px-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--overlay-scrim)] px-0 sm:px-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           onClose()
@@ -89,7 +89,7 @@ export function SettingsPanel({
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-lg)]"
+        className="flex h-[100dvh] w-full flex-col overflow-y-auto border border-[var(--line)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-lg)] sm:max-h-[88vh] sm:h-auto sm:max-w-5xl sm:rounded-[2rem] sm:p-6"
         role="dialog"
       >
         <div className="flex items-start justify-between gap-4">
@@ -122,20 +122,22 @@ export function SettingsPanel({
           {...props}
         />
 
-        <SettingsPanelFooter
-          activeTab={activeTab}
-          editingProviderId={props.editingProviderId}
-          isLoadingProviders={props.isLoadingProviders}
-          isSaving={props.isSaving}
-          isSavingProvider={props.isSavingProvider}
-          isTestingProvider={props.isTestingProvider}
-          onClose={onClose}
-          onReset={props.onReset}
-          onResetProvider={props.onResetProvider}
-          onSave={props.onSave}
-          onSaveProvider={props.onSaveProvider}
-          onTestProvider={props.onTestProvider}
-        />
+        <div className="mt-auto">
+          <SettingsPanelFooter
+            activeTab={activeTab}
+            editingProviderId={props.editingProviderId}
+            isLoadingProviders={props.isLoadingProviders}
+            isSaving={props.isSaving}
+            isSavingProvider={props.isSavingProvider}
+            isTestingProvider={props.isTestingProvider}
+            onClose={onClose}
+            onReset={props.onReset}
+            onResetProvider={props.onResetProvider}
+            onSave={props.onSave}
+            onSaveProvider={props.onSaveProvider}
+            onTestProvider={props.onTestProvider}
+          />
+        </div>
       </div>
     </div>
   )

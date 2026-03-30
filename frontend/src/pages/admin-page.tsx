@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Shield } from 'lucide-react'
+import { ArrowLeft, LogOut, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../components/auth/use-auth'
@@ -28,9 +28,10 @@ function AdminTabButton({
 }) {
   return (
     <button
+      aria-pressed={active}
       className={active
-        ? 'rounded-xl bg-[var(--app-bg)] px-4 py-2 text-sm font-medium text-[var(--foreground)]'
-        : 'rounded-xl px-4 py-2 text-sm font-medium text-[var(--muted-foreground)]'}
+        ? 'shrink-0 whitespace-nowrap rounded-xl bg-[var(--app-bg)] px-3 py-2 text-sm font-medium text-[var(--foreground)] sm:px-4'
+        : 'shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium text-[var(--muted-foreground)] sm:px-4'}
       onClick={onClick}
       type="button"
     >
@@ -112,7 +113,7 @@ export function AdminPage() {
     <>
       <main className="min-h-screen bg-[var(--app-bg)] px-4 py-6 text-[var(--foreground)] md:px-8">
         <div className="mx-auto max-w-7xl space-y-6">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] px-5 py-5 shadow-[var(--shadow-md)]">
+          <header className="flex flex-wrap items-start justify-between gap-3 rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] px-5 py-5 shadow-[var(--shadow-md)] sm:items-center">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--brand-soft)] text-[var(--brand)]">
                 <Shield className="h-5 w-5" />
@@ -128,17 +129,30 @@ export function AdminPage() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => navigate('/chat')} variant="secondary">
+              <Button
+                aria-label={t('admin.backToChat')}
+                className="h-9 min-w-9 px-2.5 py-2 sm:h-auto sm:min-w-0 sm:px-4"
+                onClick={() => navigate('/chat')}
+                title={t('admin.backToChat')}
+                variant="secondary"
+              >
                 <ArrowLeft className="h-4 w-4" />
-                {t('admin.backToChat')}
+                <span className="max-sm:sr-only">{t('admin.backToChat')}</span>
               </Button>
-              <Button onClick={() => void handleLogout()} variant="ghost">
-                {t('sidebar.signOut')}
+              <Button
+                aria-label={t('sidebar.signOut')}
+                className="h-9 min-w-9 px-2.5 py-2 sm:h-auto sm:min-w-0 sm:px-4"
+                onClick={() => void handleLogout()}
+                title={t('sidebar.signOut')}
+                variant="ghost"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="max-sm:sr-only">{t('sidebar.signOut')}</span>
               </Button>
             </div>
           </header>
 
-          <div className="inline-flex rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-1 shadow-sm">
+          <div className="flex overflow-x-auto rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] p-1 shadow-sm">
             <AdminTabButton
               active={activeTab === 'users'}
               label={t('admin.tabs.users')}

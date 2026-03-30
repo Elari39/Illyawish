@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { Menu } from 'lucide-react'
+import { Menu, Settings2, Shield } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { cn } from '../../../lib/utils'
@@ -93,19 +93,25 @@ export function ChatWorkspace({
 
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
-            className="px-3 py-2"
+            aria-label={settingsLabel}
+            className="h-9 min-w-9 px-2.5 py-2 sm:h-auto sm:min-w-0 sm:px-3"
             onClick={onOpenSettings}
+            title={settingsLabel}
             variant="secondary"
           >
-            {settingsLabel}
+            <Settings2 className="h-4 w-4 shrink-0" />
+            <span className="max-sm:sr-only">{settingsLabel}</span>
           </Button>
           {showAdminEntry ? (
             <Button
-              className="px-3 py-2"
+              aria-label={adminLabel}
+              className="h-9 min-w-9 px-2.5 py-2 sm:h-auto sm:min-w-0 sm:px-3"
               onClick={onOpenAdmin}
+              title={adminLabel}
               variant="secondary"
             >
-              {adminLabel}
+              <Shield className="h-4 w-4 shrink-0" />
+              <span className="max-sm:sr-only">{adminLabel}</span>
             </Button>
           ) : null}
         </div>
