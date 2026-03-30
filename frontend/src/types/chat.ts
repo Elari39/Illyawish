@@ -105,6 +105,7 @@ export interface Message {
   conversationId: string
   role: MessageRole
   content: string
+  reasoningContent?: string
   attachments: Attachment[]
   status: MessageStatus
   runSummary?: AgentRunSummary
@@ -230,6 +231,11 @@ export interface MessageDeltaStreamEvent extends BaseStreamEvent {
   content: string
 }
 
+export interface ReasoningStreamEvent extends BaseStreamEvent {
+  type: 'reasoning_start' | 'reasoning_delta' | 'reasoning_done'
+  content?: string
+}
+
 export interface CompletedStreamEvent extends BaseStreamEvent {
   type: 'done' | 'cancelled'
   message?: Message
@@ -265,6 +271,7 @@ export interface ToolCallConfirmationStreamEvent extends BaseStreamEvent {
 export type StreamEvent =
   | MessageStartStreamEvent
   | MessageDeltaStreamEvent
+  | ReasoningStreamEvent
   | CompletedStreamEvent
   | ErrorStreamEvent
   | RunStartedStreamEvent

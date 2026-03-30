@@ -43,14 +43,15 @@ type AttachmentDTO struct {
 }
 
 type MessageDTO struct {
-	ID             uint                   `json:"id"`
-	ConversationID string                 `json:"conversationId"`
-	Role           string                 `json:"role"`
-	Content        string                 `json:"content"`
-	Attachments    []AttachmentDTO        `json:"attachments"`
-	Status         string                 `json:"status"`
-	RunSummary     models.AgentRunSummary `json:"runSummary"`
-	CreatedAt      string                 `json:"createdAt"`
+	ID               uint                   `json:"id"`
+	ConversationID   string                 `json:"conversationId"`
+	Role             string                 `json:"role"`
+	Content          string                 `json:"content"`
+	ReasoningContent string                 `json:"reasoningContent"`
+	Attachments      []AttachmentDTO        `json:"attachments"`
+	Status           string                 `json:"status"`
+	RunSummary       models.AgentRunSummary `json:"runSummary"`
+	CreatedAt        string                 `json:"createdAt"`
 }
 
 type MessagePaginationDTO struct {
@@ -113,14 +114,15 @@ func ToMessageDTO(message *models.Message, conversationPublicID string) *Message
 	}
 
 	return &MessageDTO{
-		ID:             message.ID,
-		ConversationID: conversationPublicID,
-		Role:           message.Role,
-		Content:        message.Content,
-		Attachments:    attachments,
-		Status:         message.Status,
-		RunSummary:     message.RunSummary,
-		CreatedAt:      message.CreatedAt.Format(timeFormat),
+		ID:               message.ID,
+		ConversationID:   conversationPublicID,
+		Role:             message.Role,
+		Content:          message.Content,
+		ReasoningContent: message.ReasoningContent,
+		Attachments:      attachments,
+		Status:           message.Status,
+		RunSummary:       message.RunSummary,
+		CreatedAt:        message.CreatedAt.Format(timeFormat),
 	}
 }
 

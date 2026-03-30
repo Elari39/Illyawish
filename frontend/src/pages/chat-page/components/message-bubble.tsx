@@ -12,6 +12,7 @@ import {
 } from '../utils'
 import type { ExecutionPanelModel } from './execution-panel-model'
 import { ExecutionPanel } from './execution-panel'
+import { MessageReasoning } from './message-reasoning'
 
 interface MessageBubbleProps {
   message: Message
@@ -160,6 +161,11 @@ function MessageBubbleComponent({
           />
         </div>
       ) : null}
+      <MessageReasoning
+        key={`${message.id}:${message.status === 'streaming' ? 'streaming' : 'settled'}`}
+        isStreaming={message.status === 'streaming'}
+        reasoningContent={message.reasoningContent ?? ''}
+      />
       <MarkdownContent content={message.content} />
 
       {canRetry || canRegenerate ? (

@@ -94,6 +94,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'user',
             content: 'Please review the file.',
+            reasoningContent: '',
             attachments: [
               {
                 id: 'image-1',
@@ -144,6 +145,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'user',
             content: 'Please review the file.',
+            reasoningContent: '',
             attachments: [
               {
                 id: 'image-1',
@@ -198,6 +200,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'assistant',
             content: 'Completed answer',
+            reasoningContent: '',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -228,6 +231,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'assistant',
             content: 'Stopped answer',
+            reasoningContent: '',
             attachments: [],
             status: 'cancelled',
             createdAt: '2026-03-26T00:00:00Z',
@@ -260,6 +264,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'assistant',
             content: 'This is the final answer.',
+            reasoningContent: 'Reasoning completed',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -276,8 +281,12 @@ describe('MessageBubble', () => {
     expect(screen.getByText('4/4 steps')).toBeInTheDocument()
     const answerText = screen.getByText('This is the final answer.')
     const summaryButton = screen.getByRole('button', { name: 'Show details' })
+    const reasoningToggle = screen.getByRole('button', { name: 'Expand reasoning' })
     expect(
       summaryButton.compareDocumentPosition(answerText) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(
+      reasoningToggle.compareDocumentPosition(answerText) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
 
     rerender(
@@ -293,6 +302,7 @@ describe('MessageBubble', () => {
             conversationId: '1',
             role: 'user',
             content: 'User message',
+            reasoningContent: '',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -307,5 +317,65 @@ describe('MessageBubble', () => {
 
     expect(screen.queryByText('Knowledge Q&A')).not.toBeInTheDocument()
     expect(screen.getByText('User message')).toBeInTheDocument()
+  })
+
+  it('keeps reasoning expanded while streaming and auto-collapses after completion', () => {
+    const { rerender } = render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry={false}
+          executionPanelModel={executionModel}
+          isEditing={false}
+          message={{
+            id: 31,
+            conversationId: '1',
+            role: 'assistant',
+            content: 'Working on it',
+            reasoningContent: 'first thought',
+            attachments: [],
+            status: 'streaming',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByText('first thought')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse reasoning' })).toBeInTheDocument()
+
+    rerender(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate
+          canRetry={false}
+          executionPanelModel={executionModel}
+          isEditing={false}
+          message={{
+            id: 31,
+            conversationId: '1',
+            role: 'assistant',
+            content: 'Working on it',
+            reasoningContent: 'first thought',
+            attachments: [],
+            status: 'completed',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.queryByText('first thought')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand reasoning' })).toBeInTheDocument()
   })
 })

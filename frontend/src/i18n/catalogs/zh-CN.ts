@@ -498,6 +498,10 @@ export const zhCNMessages = {
     'message.thinking': '思考中...',
     'message.retry': '重试',
     'message.copy': '复制',
+    'message.reasoning': '思维链',
+    'message.expandReasoning': '展开思维链',
+    'message.collapseReasoning': '收起思维链',
+    'message.reasoningCollapsedHint': '点击展开查看思维链。',
     'message.copied': '已复制',
     'message.code': '代码',
 

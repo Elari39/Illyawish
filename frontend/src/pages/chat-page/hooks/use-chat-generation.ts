@@ -201,6 +201,7 @@ export function useChatGeneration({
         conversationId,
         role: 'user',
         content,
+        reasoningContent: '',
         attachments,
         status: 'completed',
         runSummary: defaultAgentRunSummary,
@@ -211,6 +212,7 @@ export function useChatGeneration({
         conversationId,
         role: 'assistant',
         content: '',
+        reasoningContent: '',
         attachments: [],
         status: 'streaming',
         runSummary: defaultAgentRunSummary,
@@ -266,6 +268,7 @@ export function useChatGeneration({
             ...message,
             status: 'failed',
             content: message.content || t('error.completeReply'),
+            reasoningContent: message.reasoningContent ?? '',
           }
         }),
       )
@@ -315,13 +318,14 @@ export function useChatGeneration({
           .filter((message) => message.id <= messageId)
           .map((message) =>
             message.id === messageId
-              ? {
-                  ...message,
-                  content,
-                  attachments,
-                  status: 'completed' as const,
-                  runSummary: defaultAgentRunSummary,
-                }
+                ? {
+                    ...message,
+                    content,
+                    attachments,
+                    reasoningContent: '',
+                    status: 'completed' as const,
+                    runSummary: defaultAgentRunSummary,
+                  }
               : message,
           )
 
@@ -330,6 +334,7 @@ export function useChatGeneration({
           conversationId,
           role: 'assistant',
           content: '',
+          reasoningContent: '',
           attachments: [],
           status: 'streaming',
           runSummary: defaultAgentRunSummary,
@@ -378,6 +383,7 @@ export function useChatGeneration({
                 ...message,
                 status: 'failed',
                 content: message.content || t('error.completeReply'),
+                reasoningContent: message.reasoningContent ?? '',
               }
             : message,
         ),
@@ -429,6 +435,7 @@ export function useChatGeneration({
               ? {
                   ...item,
                   content: '',
+                  reasoningContent: '',
                   attachments: [],
                   status: 'streaming',
                 }
@@ -469,6 +476,7 @@ export function useChatGeneration({
                 ...item,
                 status: 'failed',
                 content: item.content || t('error.completeReply'),
+                reasoningContent: item.reasoningContent ?? '',
               }
             : item,
         ),
@@ -520,6 +528,7 @@ export function useChatGeneration({
               ? {
                   ...item,
                   content: '',
+                  reasoningContent: '',
                   attachments: [],
                   status: 'streaming',
                 }
@@ -560,6 +569,7 @@ export function useChatGeneration({
                 ...item,
                 status: 'failed',
                 content: item.content || t('error.completeReply'),
+                reasoningContent: item.reasoningContent ?? '',
               }
             : item,
         ),

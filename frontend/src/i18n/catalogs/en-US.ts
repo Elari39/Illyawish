@@ -543,6 +543,10 @@ export const enUSMessages = {
   'message.thinking': 'Thinking...',
   'message.retry': 'Retry',
   'message.copy': 'Copy',
+  'message.reasoning': 'Reasoning',
+  'message.expandReasoning': 'Expand reasoning',
+  'message.collapseReasoning': 'Collapse reasoning',
+  'message.reasoningCollapsedHint': 'Click to expand and view the reasoning chain.',
   'message.copied': 'Copied',
   'message.code': 'code',
 

@@ -18,7 +18,7 @@ type chatModel interface {
 		provider llm.ProviderConfig,
 		messages []llm.ChatMessage,
 		options llm.RequestOptions,
-		onDelta func(string),
+		onDelta func(llm.StreamDelta),
 	) (llm.StreamResult, error)
 }
 
@@ -122,9 +122,11 @@ func (r *Runtime) Execute(ctx context.Context, input RunInput, emit func(Event) 
 			fullPrompt := strings.Join(collectedContext, "\n\n")
 			_, err := r.model.Stream(ctx, input.Provider, []llm.ChatMessage{
 				{Role: models.RoleUser, Content: fullPrompt},
-			}, llm.RequestOptions{}, func(delta string) {
+			}, llm.RequestOptions{}, func(delta llm.StreamDelta) {
 				if emit != nil {
-					_ = emit(Event{Type: EventTypeMessageDelta, StepName: node.Name, Content: delta})
+					if delta.Content != "" {
+						_ = emit(Event{Type: EventTypeMessageDelta, StepName: node.Name, Content: delta.Content})
+					}
 				}
 			})
 			if err != nil {
@@ -144,23 +146,40 @@ func (r *Runtime) Execute(ctx context.Context, input RunInput, emit func(Event) 
 	}
 
 	finalContent := ""
+	finalReasoning := ""
 	_, err := r.model.Stream(ctx, input.Provider, []llm.ChatMessage{
 		{Role: models.RoleUser, Content: strings.Join(collectedContext, "\n\n")},
-	}, llm.RequestOptions{}, func(delta string) {
-		finalContent += delta
+	}, llm.RequestOptions{}, func(delta llm.StreamDelta) {
+		finalContent += delta.Content
+		finalReasoning += delta.Reasoning
+		if emit != nil {
+			if delta.Reasoning != "" {
+				_ = emit(Event{Type: EventTypeReasoningStart})
+				_ = emit(Event{Type: EventTypeReasoningDelta, Content: delta.Reasoning})
+			}
+			if delta.Content != "" {
+				_ = emit(Event{Type: EventTypeMessageDelta, Content: delta.Content})
+			}
+		}
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	if emit != nil {
+		if finalReasoning != "" {
+			if err := emit(Event{Type: EventTypeReasoningDone, Content: finalReasoning}); err != nil {
+				return nil, err
+			}
+		}
 		if err := emit(Event{Type: EventTypeRunCompleted, Content: finalContent, Citations: summary.Citations}); err != nil {
 			return nil, err
 		}
 	}
 	return &RunResult{
-		Content:    finalContent,
-		RunSummary: summary,
+		Content:          finalContent,
+		ReasoningContent: finalReasoning,
+		RunSummary:       summary,
 	}, nil
 }
 

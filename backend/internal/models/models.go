@@ -106,6 +106,7 @@ type Message struct {
 	ConversationID    uint                `gorm:"index;not null"`
 	Role              string              `gorm:"size:32;not null"`
 	Content           string              `gorm:"type:text;not null"`
+	ReasoningContent  string              `gorm:"column:reasoning_content;type:text;not null;default:''"`
 	LegacyAttachments []Attachment        `gorm:"serializer:json;column:attachments" json:"-"`
 	Attachments       []Attachment        `gorm:"-" json:"attachments"`
 	AttachmentLinks   []MessageAttachment `gorm:"foreignKey:MessageID;constraint:OnDelete:CASCADE" json:"-"`

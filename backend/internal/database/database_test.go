@@ -84,6 +84,9 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasColumn(&models.Message{}, "run_summary") {
 		t.Fatal("expected messages.run_summary column to exist")
 	}
+	if !db.Migrator().HasColumn(&models.Message{}, "reasoning_content") {
+		t.Fatal("expected messages.reasoning_content column to exist")
+	}
 	if !db.Migrator().HasTable(&models.RAGProviderPreset{}) {
 		t.Fatal("expected rag_provider_presets table to exist")
 	}

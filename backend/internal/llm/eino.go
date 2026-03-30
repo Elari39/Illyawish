@@ -43,9 +43,15 @@ type RequestOptions struct {
 	MaxTokens   *int
 }
 
+type StreamDelta struct {
+	Content   string
+	Reasoning string
+}
+
 type StreamResult struct {
-	Content      string
-	FinishReason string
+	Content          string
+	ReasoningContent string
+	FinishReason     string
 }
 
 type ChatModel interface {
@@ -54,7 +60,7 @@ type ChatModel interface {
 		provider ProviderConfig,
 		messages []ChatMessage,
 		options RequestOptions,
-		onDelta func(string),
+		onDelta func(StreamDelta),
 	) (StreamResult, error)
 }
 
@@ -75,7 +81,7 @@ func (m *EinoChatModel) Stream(
 	provider ProviderConfig,
 	messages []ChatMessage,
 	options RequestOptions,
-	onDelta func(string),
+	onDelta func(StreamDelta),
 ) (StreamResult, error) {
 	modelCfg, err := buildChatModelConfig(provider, options)
 	if err != nil {
@@ -114,14 +120,18 @@ func (m *EinoChatModel) Stream(
 			result.FinishReason = msg.ResponseMeta.FinishReason
 		}
 
-		chunk := msg.Content
-		if chunk == "" {
+		delta := StreamDelta{
+			Content:   extractAssistantText(msg),
+			Reasoning: extractAssistantReasoning(msg),
+		}
+		if delta.Content == "" && delta.Reasoning == "" {
 			continue
 		}
 
-		result.Content += chunk
+		result.Content += delta.Content
+		result.ReasoningContent += delta.Reasoning
 		if onDelta != nil {
-			onDelta(chunk)
+			onDelta(delta)
 		}
 	}
 
@@ -133,7 +143,7 @@ func (m *EinoChatModel) generateOnce(
 	chatModel componentmodel.BaseChatModel,
 	messages []ChatMessage,
 	options RequestOptions,
-	onDelta func(string),
+	onDelta func(StreamDelta),
 ) (StreamResult, error) {
 	msg, err := chatModel.Generate(ctx, toSchemaMessages(messages), toModelOptions(options)...)
 	if err != nil {
@@ -141,13 +151,18 @@ func (m *EinoChatModel) generateOnce(
 	}
 
 	fullText := extractAssistantText(msg)
-	if fullText != "" && onDelta != nil {
-		onDelta(fullText)
+	reasoning := extractAssistantReasoning(msg)
+	if (fullText != "" || reasoning != "") && onDelta != nil {
+		onDelta(StreamDelta{
+			Content:   fullText,
+			Reasoning: reasoning,
+		})
 	}
 
 	return StreamResult{
-		Content:      fullText,
-		FinishReason: extractFinishReason(msg),
+		Content:          fullText,
+		ReasoningContent: reasoning,
+		FinishReason:     extractFinishReason(msg),
 	}, nil
 }
 
@@ -196,6 +211,24 @@ func extractAssistantText(message *schema.Message) string {
 		builder.WriteString(part.Text)
 	}
 
+	return builder.String()
+}
+
+func extractAssistantReasoning(message *schema.Message) string {
+	if message == nil {
+		return ""
+	}
+	if message.ReasoningContent != "" {
+		return message.ReasoningContent
+	}
+
+	var builder strings.Builder
+	for _, part := range message.AssistantGenMultiContent {
+		if part.Type != schema.ChatMessagePartTypeReasoning || part.Reasoning == nil || part.Reasoning.Text == "" {
+			continue
+		}
+		builder.WriteString(part.Reasoning.Text)
+	}
 	return builder.String()
 }
 

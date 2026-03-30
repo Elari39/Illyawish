@@ -533,6 +533,10 @@ export const jaJPMessages = {
     'message.thinking': '考え中...',
     'message.retry': '再試行',
     'message.copy': 'コピー',
+    'message.reasoning': '思考チェーン',
+    'message.expandReasoning': '思考チェーンを展開',
+    'message.collapseReasoning': '思考チェーンを折りたたむ',
+    'message.reasoningCollapsedHint': 'クリックして思考チェーンを表示します。',
     'message.copied': 'コピー済み',
     'message.code': 'コード',
 

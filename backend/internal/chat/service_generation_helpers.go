@@ -73,6 +73,7 @@ func (s *Service) prepareAssistantReplay(
 
 		assistantMessage = *message
 		assistantMessage.Content = ""
+		assistantMessage.ReasoningContent = ""
 		assistantMessage.LegacyAttachments = nil
 		assistantMessage.Attachments = nil
 		assistantMessage.Status = models.MessageStatusStreaming
@@ -107,17 +108,53 @@ func (s *Service) streamIntoAssistantMessage(
 	}
 
 	accumulatedContent := ""
-	streamResult, streamErr := s.model.Stream(ctx, providerConfig, history, streamOptions, func(delta string) {
-		accumulatedContent += delta
+	accumulatedReasoning := ""
+	reasoningStarted := false
+	emitReasoningDelta := func(reasoning string) {
+		if strings.TrimSpace(reasoning) == "" {
+			return
+		}
+		if !reasoningStarted {
+			reasoningStarted = true
+			_ = emit(StreamEvent{Type: "reasoning_start"})
+		}
+		accumulatedReasoning += reasoning
+		_ = emit(StreamEvent{
+			Type:    "reasoning_delta",
+			Content: reasoning,
+		})
+	}
+	emitReasoningDone := func() {
+		if !reasoningStarted {
+			return
+		}
+		_ = emit(StreamEvent{
+			Type:    "reasoning_done",
+			Content: accumulatedReasoning,
+		})
+	}
+
+	streamResult, streamErr := s.model.Stream(ctx, providerConfig, history, streamOptions, func(delta llm.StreamDelta) {
+		if delta.Reasoning != "" {
+			emitReasoningDelta(delta.Reasoning)
+		}
+		if delta.Content == "" {
+			return
+		}
+		accumulatedContent += delta.Content
 		_ = emit(StreamEvent{
 			Type:    "delta",
-			Content: delta,
+			Content: delta.Content,
 		})
 	})
 
 	finalContent := streamResult.Content
 	if finalContent == "" {
 		finalContent = accumulatedContent
+	}
+	finalReasoning := streamResult.ReasoningContent
+	if finalReasoning == "" {
+		finalReasoning = accumulatedReasoning
 	}
 
 	if shouldAutoContinue(streamResult, streamErr) {
@@ -129,18 +166,28 @@ func (s *Service) streamIntoAssistantMessage(
 			Content: continueAssistantPrompt,
 		})
 
-		continueResult, continueErr := s.model.Stream(ctx, providerConfig, continueHistory, streamOptions, func(delta string) {
-			finalContent += delta
+		continueResult, continueErr := s.model.Stream(ctx, providerConfig, continueHistory, streamOptions, func(delta llm.StreamDelta) {
+			if delta.Reasoning != "" {
+				emitReasoningDelta(delta.Reasoning)
+			}
+			if delta.Content == "" {
+				return
+			}
+			finalContent += delta.Content
 			_ = emit(StreamEvent{
 				Type:    "delta",
-				Content: delta,
+				Content: delta.Content,
 			})
 		})
 		if continueResult.Content != "" && !strings.HasSuffix(finalContent, continueResult.Content) {
 			finalContent += continueResult.Content
 		}
+		if continueResult.ReasoningContent != "" && !strings.HasSuffix(accumulatedReasoning, continueResult.ReasoningContent) {
+			accumulatedReasoning += continueResult.ReasoningContent
+		}
 		streamResult = continueResult
 		streamErr = continueErr
+		finalReasoning = accumulatedReasoning
 	}
 
 	if streamErr != nil {
@@ -152,14 +199,17 @@ func (s *Service) streamIntoAssistantMessage(
 		}
 
 		if err := s.db.Model(assistantMessage).Updates(map[string]any{
-			"content": finalContent,
-			"status":  status,
+			"content":           finalContent,
+			"reasoning_content": finalReasoning,
+			"status":            status,
 		}).Error; err != nil {
 			return fmt.Errorf("finalize assistant message: %w", err)
 		}
 
 		assistantMessage.Content = finalContent
+		assistantMessage.ReasoningContent = finalReasoning
 		assistantMessage.Status = status
+		emitReasoningDone()
 		_ = emit(StreamEvent{
 			Type:    eventType,
 			Error:   streamErr.Error(),
@@ -169,14 +219,17 @@ func (s *Service) streamIntoAssistantMessage(
 	}
 
 	if err := s.db.Model(assistantMessage).Updates(map[string]any{
-		"content": finalContent,
-		"status":  models.MessageStatusCompleted,
+		"content":           finalContent,
+		"reasoning_content": finalReasoning,
+		"status":            models.MessageStatusCompleted,
 	}).Error; err != nil {
 		return fmt.Errorf("complete assistant message: %w", err)
 	}
 
 	assistantMessage.Content = finalContent
+	assistantMessage.ReasoningContent = finalReasoning
 	assistantMessage.Status = models.MessageStatusCompleted
+	emitReasoningDone()
 	return emit(StreamEvent{
 		Type:    "done",
 		Message: ToMessageDTO(assistantMessage, conversationPublicID),

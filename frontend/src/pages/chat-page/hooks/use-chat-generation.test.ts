@@ -65,6 +65,7 @@ function createMessage(
     conversationId: '7',
     role,
     content: `${role}-${status}`,
+    reasoningContent: '',
     attachments: [],
     status,
     createdAt: '2026-03-26T09:08:00Z',
@@ -282,6 +283,50 @@ describe('useChatGeneration saved settings behavior', () => {
     expect(setMessages).not.toHaveBeenCalled()
   })
 
+  it('applies reasoning deltas only to the targeted streaming assistant message', async () => {
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: ' -> step 2',
+      })
+    })
+
+    expect(setMessages).toHaveBeenCalled()
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(updated[1]?.reasoningContent).toBe('step 1 -> step 2')
+    expect(updated[1]?.content).toBe('')
+  })
+
   it('persists execution events into sessionStorage as stream events arrive', async () => {
     chatApiMock.streamMessage.mockImplementation(
       async (
@@ -475,6 +520,9 @@ type MessageStreamEvent = {
   type:
     | 'message_start'
     | 'delta'
+    | 'reasoning_start'
+    | 'reasoning_delta'
+    | 'reasoning_done'
     | 'done'
     | 'cancelled'
     | 'error'

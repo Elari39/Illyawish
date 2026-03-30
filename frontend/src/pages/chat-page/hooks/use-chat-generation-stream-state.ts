@@ -15,6 +15,7 @@ import type {
   StreamEvent,
 } from '../../../types/chat'
 import {
+  appendReasoningToStreamingMessage,
   appendToStreamingMessage,
   isSameMessage,
   upsertMessage,
@@ -252,6 +253,14 @@ export function useChatGenerationStreamState({
       return
     }
 
+    if (event.type === 'reasoning_delta' && typeof event.content === 'string') {
+      const reasoningContent = event.content
+      setMessages((previous) =>
+        appendReasoningToStreamingMessage(previous, target, reasoningContent),
+      )
+      return
+    }
+
     if (event.type === 'done' || event.type === 'cancelled') {
       flushActiveMessageDelta()
       if (
@@ -285,6 +294,10 @@ export function useChatGenerationStreamState({
             eventMessage?.content ||
             currentMessage?.content ||
             t('error.assistantEndedUnexpectedly'),
+          reasoningContent:
+            eventMessage?.reasoningContent ??
+            currentMessage?.reasoningContent ??
+            '',
           status: 'failed',
         }
 

@@ -15,6 +15,9 @@ const (
 	EventTypeToolCallStarted              = "tool_call_started"
 	EventTypeToolCallConfirmationRequired = "tool_call_confirmation_required"
 	EventTypeToolCallCompleted            = "tool_call_completed"
+	EventTypeReasoningStart               = "reasoning_start"
+	EventTypeReasoningDelta               = "reasoning_delta"
+	EventTypeReasoningDone                = "reasoning_done"
 	EventTypeMessageDelta                 = "message_delta"
 	EventTypeRunCompleted                 = "run_completed"
 )
@@ -43,6 +46,7 @@ type RunInput struct {
 }
 
 type RunResult struct {
-	Content    string
-	RunSummary models.AgentRunSummary
+	Content          string
+	ReasoningContent string
+	RunSummary       models.AgentRunSummary
 }

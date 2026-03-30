@@ -20,21 +20,24 @@ import (
 )
 
 type fakeChatModel struct {
-	chunks        []string
-	finishReason  string
-	err           error
-	responses     []fakeStreamResponse
-	callHistories [][]llm.ChatMessage
-	lastHistory   []llm.ChatMessage
-	lastProvider  llm.ProviderConfig
-	lastOptions   llm.RequestOptions
-	callCount     int
+	chunks          []string
+	reasoningChunks []string
+	finishReason    string
+	err             error
+	responses       []fakeStreamResponse
+	callHistories   [][]llm.ChatMessage
+	lastHistory     []llm.ChatMessage
+	lastProvider    llm.ProviderConfig
+	lastOptions     llm.RequestOptions
+	callCount       int
 }
 
 type fakeStreamResponse struct {
-	chunks       []string
-	finishReason string
-	err          error
+	chunks          []string
+	reasoningChunks []string
+	deltas          []llm.StreamDelta
+	finishReason    string
+	err             error
 }
 
 func (f *fakeChatModel) Stream(
@@ -42,7 +45,7 @@ func (f *fakeChatModel) Stream(
 	providerConfig llm.ProviderConfig,
 	history []llm.ChatMessage,
 	options llm.RequestOptions,
-	onDelta func(string),
+	onDelta func(llm.StreamDelta),
 ) (llm.StreamResult, error) {
 	f.lastProvider = providerConfig
 	f.lastOptions = options
@@ -50,9 +53,10 @@ func (f *fakeChatModel) Stream(
 	f.callHistories = append(f.callHistories, append([]llm.ChatMessage(nil), history...))
 
 	response := fakeStreamResponse{
-		chunks:       f.chunks,
-		finishReason: f.finishReason,
-		err:          f.err,
+		chunks:          f.chunks,
+		reasoningChunks: f.reasoningChunks,
+		finishReason:    f.finishReason,
+		err:             f.err,
 	}
 	if f.callCount < len(f.responses) {
 		response = f.responses[f.callCount]
@@ -60,15 +64,33 @@ func (f *fakeChatModel) Stream(
 	f.callCount++
 
 	full := ""
-	for _, chunk := range response.chunks {
-		full += chunk
-		if onDelta != nil {
-			onDelta(chunk)
+	reasoning := ""
+	if len(response.deltas) > 0 {
+		for _, delta := range response.deltas {
+			full += delta.Content
+			reasoning += delta.Reasoning
+			if onDelta != nil {
+				onDelta(delta)
+			}
+		}
+	} else {
+		for _, chunk := range response.reasoningChunks {
+			reasoning += chunk
+			if onDelta != nil {
+				onDelta(llm.StreamDelta{Reasoning: chunk})
+			}
+		}
+		for _, chunk := range response.chunks {
+			full += chunk
+			if onDelta != nil {
+				onDelta(llm.StreamDelta{Content: chunk})
+			}
 		}
 	}
 	return llm.StreamResult{
-		Content:      full,
-		FinishReason: response.finishReason,
+		Content:          full,
+		ReasoningContent: reasoning,
+		FinishReason:     response.finishReason,
 	}, response.err
 }
 
@@ -423,6 +445,138 @@ func TestStreamAssistantReplyAutoContinuesRecoverablePartialError(t *testing.T) 
 	if model.callCount != 2 {
 		t.Fatalf("expected two stream attempts, got %d", model.callCount)
 	}
+}
+
+func TestStreamAssistantReplyPersistsReasoningContentAndEmitsReasoningEvents(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Reasoning: "step 1"},
+					{Reasoning: " -> step 2"},
+					{Content: "final answer"},
+				},
+				finishReason: "stop",
+			},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	var events []StreamEvent
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if messages[1].ReasoningContent != "step 1 -> step 2" {
+		t.Fatalf("expected reasoning content to persist, got %q", messages[1].ReasoningContent)
+	}
+	if !containsStreamEventType(events, "reasoning_start") {
+		t.Fatalf("expected reasoning_start event, got %#v", events)
+	}
+	if countStreamEventType(events, "reasoning_delta") != 2 {
+		t.Fatalf("expected 2 reasoning_delta events, got %#v", events)
+	}
+	doneEvent := findStreamEventByType(events, "done")
+	if doneEvent == nil || doneEvent.Message == nil {
+		t.Fatalf("expected done event with message, got %#v", events)
+	}
+	if doneEvent.Message.ReasoningContent != "step 1 -> step 2" {
+		t.Fatalf("expected done event message reasoning content, got %#v", doneEvent.Message)
+	}
+}
+
+func TestStreamAssistantReplyPersistsReasoningContentWhenStreamingFails(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Reasoning: "partial thinking"},
+					{Content: "partial answer"},
+				},
+				err: errors.New("stream exploded"),
+			},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	var events []StreamEvent
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if messages[1].ReasoningContent != "partial thinking" {
+		t.Fatalf("expected reasoning content to persist on failure, got %q", messages[1].ReasoningContent)
+	}
+	errorEvent := findStreamEventByType(events, "error")
+	if errorEvent == nil || errorEvent.Message == nil {
+		t.Fatalf("expected error event with message, got %#v", events)
+	}
+	if errorEvent.Message.ReasoningContent != "partial thinking" {
+		t.Fatalf("expected error event message reasoning content, got %#v", errorEvent.Message)
+	}
+}
+
+func containsStreamEventType(events []StreamEvent, eventType string) bool {
+	return findStreamEventByType(events, eventType) != nil
+}
+
+func countStreamEventType(events []StreamEvent, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
+}
+
+func findStreamEventByType(events []StreamEvent, eventType string) *StreamEvent {
+	for index := range events {
+		if events[index].Type == eventType {
+			return &events[index]
+		}
+	}
+	return nil
 }
 
 func TestStreamAssistantReplyKeepsAccumulatedContentWhenContinuationFails(t *testing.T) {

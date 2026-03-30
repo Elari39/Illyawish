@@ -47,8 +47,9 @@ func (s *Service) streamAgentIntoAssistantMessage(
 	runConfig, err := s.resolveAgentRunConfiguration(conversation.UserID, conversation, input)
 	if err != nil {
 		if updateErr := s.db.Model(assistantMessage).Updates(map[string]any{
-			"status":  models.MessageStatusFailed,
-			"content": assistantMessage.Content,
+			"status":            models.MessageStatusFailed,
+			"content":           assistantMessage.Content,
+			"reasoning_content": assistantMessage.ReasoningContent,
 		}).Error; updateErr != nil {
 			return fmt.Errorf("fail assistant message after agent config error: %w", updateErr)
 		}
@@ -77,8 +78,9 @@ func (s *Service) streamAgentIntoAssistantMessage(
 	})
 	if err != nil {
 		if updateErr := s.db.Model(assistantMessage).Updates(map[string]any{
-			"status":  models.MessageStatusFailed,
-			"content": assistantMessage.Content,
+			"status":            models.MessageStatusFailed,
+			"content":           assistantMessage.Content,
+			"reasoning_content": assistantMessage.ReasoningContent,
 		}).Error; updateErr != nil {
 			return fmt.Errorf("fail assistant message after agent error: %w", updateErr)
 		}
@@ -86,10 +88,11 @@ func (s *Service) streamAgentIntoAssistantMessage(
 	}
 
 	assistantMessage.Content = result.Content
+	assistantMessage.ReasoningContent = result.ReasoningContent
 	assistantMessage.Status = models.MessageStatusCompleted
 	assistantMessage.RunSummary = result.RunSummary
 	if err := s.db.Model(assistantMessage).
-		Select("content", "status", "run_summary").
+		Select("content", "reasoning_content", "status", "run_summary").
 		Updates(assistantMessage).Error; err != nil {
 		return fmt.Errorf("complete agent assistant message: %w", err)
 	}

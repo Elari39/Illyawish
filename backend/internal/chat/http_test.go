@@ -249,15 +249,22 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 		if err := writeEvent(StreamEvent{
 			Type: "message_start",
 			Message: &MessageDTO{
-				ID:             1,
-				ConversationID: uuid.NewString(),
-				Role:           models.RoleAssistant,
-				Status:         models.MessageStatusStreaming,
+				ID:               1,
+				ConversationID:   uuid.NewString(),
+				Role:             models.RoleAssistant,
+				Status:           models.MessageStatusStreaming,
+				ReasoningContent: "saved reasoning",
 			},
 			Metadata: map[string]any{
 				"templateKey": "knowledge_qa",
 				"stepIndex":   1,
 			},
+		}); err != nil {
+			return err
+		}
+		if err := writeEvent(StreamEvent{
+			Type:    "reasoning_delta",
+			Content: "thinking",
 		}); err != nil {
 			return err
 		}
@@ -284,6 +291,12 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 	}
 	if !strings.Contains(body, `"metadata":{"stepIndex":1,"templateKey":"knowledge_qa"}`) {
 		t.Fatalf("expected metadata in SSE event payload, got %s", body)
+	}
+	if !strings.Contains(body, "event: reasoning_delta") {
+		t.Fatalf("expected reasoning_delta event, got %s", body)
+	}
+	if !strings.Contains(body, `"reasoningContent":"saved reasoning"`) {
+		t.Fatalf("expected reasoningContent in SSE payload, got %s", body)
 	}
 	if !strings.Contains(body, "event: error") {
 		t.Fatalf("expected error event, got %s", body)

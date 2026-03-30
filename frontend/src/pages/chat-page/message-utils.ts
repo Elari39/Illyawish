@@ -29,6 +29,29 @@ export function appendToStreamingMessage(
   return messages
 }
 
+export function appendReasoningToStreamingMessage(
+  messages: Message[],
+  target: StreamingMessageTarget,
+  reasoningContent: string,
+) {
+  const nextMessages = [...messages]
+  for (let index = nextMessages.length - 1; index >= 0; index -= 1) {
+    const candidate = nextMessages[index]
+    if (
+      candidate.role === 'assistant' &&
+      candidate.status === 'streaming' &&
+      isSameMessage(candidate, target)
+    ) {
+      nextMessages[index] = {
+        ...candidate,
+        reasoningContent: (candidate.reasoningContent ?? '') + reasoningContent,
+      }
+      return nextMessages
+    }
+  }
+  return messages
+}
+
 export function upsertMessage(
   messages: Message[],
   message: Message,

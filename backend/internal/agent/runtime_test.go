@@ -21,10 +21,10 @@ func (f *fakeChatModel) Stream(
 	_ llm.ProviderConfig,
 	_ []llm.ChatMessage,
 	_ llm.RequestOptions,
-	onDelta func(string),
+	onDelta func(llm.StreamDelta),
 ) (llm.StreamResult, error) {
 	if onDelta != nil {
-		onDelta(f.content)
+		onDelta(llm.StreamDelta{Content: f.content})
 	}
 	return llm.StreamResult{Content: f.content, FinishReason: "stop"}, nil
 }

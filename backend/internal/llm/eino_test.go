@@ -55,15 +55,30 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
 			return &fakeBaseChatModel{
 				stream: schema.StreamReaderFromArray([]*schema.Message{
-					schema.AssistantMessage("Hello ", nil),
-					schema.AssistantMessage("World", nil),
+					{
+						Role:             schema.Assistant,
+						Content:          "Hello ",
+						ReasoningContent: "think-1",
+					},
+					{
+						Role:    schema.Assistant,
+						Content: "World",
+						AssistantGenMultiContent: []schema.MessageOutputPart{
+							{
+								Type: schema.ChatMessagePartTypeReasoning,
+								Reasoning: &schema.MessageOutputReasoning{
+									Text: "think-2",
+								},
+							},
+						},
+					},
 					schema.AssistantMessage("", nil),
 				}),
 			}, nil
 		},
 	}
 
-	var chunks []string
+	var deltas []StreamDelta
 	result, err := model.Stream(
 		context.Background(),
 		ProviderConfig{
@@ -73,8 +88,8 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 		},
 		[]ChatMessage{{Role: "user", Content: "hi"}},
 		RequestOptions{},
-		func(delta string) {
-			chunks = append(chunks, delta)
+		func(delta StreamDelta) {
+			deltas = append(deltas, delta)
 		},
 	)
 	if err != nil {
@@ -84,8 +99,17 @@ func TestEinoChatModelStreamAggregatesChunks(t *testing.T) {
 	if result.Content != "Hello World" {
 		t.Fatalf("expected full text to be %q, got %q", "Hello World", result.Content)
 	}
-	if len(chunks) != 2 {
-		t.Fatalf("expected 2 emitted chunks, got %d", len(chunks))
+	if result.ReasoningContent != "think-1think-2" {
+		t.Fatalf("expected reasoning content to be aggregated, got %q", result.ReasoningContent)
+	}
+	if len(deltas) != 2 {
+		t.Fatalf("expected 2 emitted deltas, got %d", len(deltas))
+	}
+	if deltas[0].Content != "Hello " || deltas[0].Reasoning != "think-1" {
+		t.Fatalf("unexpected first delta: %#v", deltas[0])
+	}
+	if deltas[1].Content != "World" || deltas[1].Reasoning != "think-2" {
+		t.Fatalf("unexpected second delta: %#v", deltas[1])
 	}
 }
 
@@ -102,7 +126,7 @@ func TestEinoChatModelStreamReturnsStartErrors(t *testing.T) {
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
-	}, nil, RequestOptions{}, func(string) {})
+	}, nil, RequestOptions{}, func(StreamDelta) {})
 	if err == nil {
 		t.Fatal("expected start error, got nil")
 	}
@@ -121,13 +145,13 @@ func TestEinoChatModelFallsBackToGenerateOnEOFStartError(t *testing.T) {
 		},
 	}
 
-	var chunks []string
+	var deltas []StreamDelta
 	result, err := model.Stream(context.Background(), ProviderConfig{
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
-	}, nil, RequestOptions{}, func(delta string) {
-		chunks = append(chunks, delta)
+	}, nil, RequestOptions{}, func(delta StreamDelta) {
+		deltas = append(deltas, delta)
 	})
 	if err != nil {
 		t.Fatalf("expected fallback generate to succeed, got error %v", err)
@@ -136,8 +160,8 @@ func TestEinoChatModelFallsBackToGenerateOnEOFStartError(t *testing.T) {
 	if result.Content != "Fallback response" {
 		t.Fatalf("expected fallback response, got %q", result.Content)
 	}
-	if len(chunks) != 1 || chunks[0] != "Fallback response" {
-		t.Fatalf("expected a single fallback chunk, got %#v", chunks)
+	if len(deltas) != 1 || deltas[0].Content != "Fallback response" {
+		t.Fatalf("expected a single fallback delta, got %#v", deltas)
 	}
 }
 
@@ -152,7 +176,7 @@ func TestEinoChatModelStreamReturnsReadErrors(t *testing.T) {
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
-	}, nil, RequestOptions{}, func(string) {})
+	}, nil, RequestOptions{}, func(StreamDelta) {})
 	if err == nil {
 		t.Fatal("expected read error, got nil")
 	}
@@ -185,12 +209,39 @@ func TestEinoChatModelStreamStopsOnEOF(t *testing.T) {
 		BaseURL:      "https://example.com/v1",
 		APIKey:       "test-key",
 		DefaultModel: "default-model",
-	}, nil, RequestOptions{}, func(string) {})
+	}, nil, RequestOptions{}, func(StreamDelta) {})
 	if err != nil {
 		t.Fatalf("expected EOF to end cleanly, got error %v", err)
 	}
 	if result.Content != "done" {
 		t.Fatalf("expected full text to be %q, got %q", "done", result.Content)
+	}
+}
+
+func TestEinoChatModelGenerateFallbackReturnsReasoningContent(t *testing.T) {
+	model := &EinoChatModel{
+		newChatModel: func(context.Context, *openai.ChatModelConfig) (einomodel.BaseChatModel, error) {
+			return &fakeBaseChatModel{
+				err: errors.New("Post https://example.com/v1/chat/completions: EOF"),
+				generated: &schema.Message{
+					Role:             schema.Assistant,
+					Content:          "Visible answer",
+					ReasoningContent: "Model reasoning",
+				},
+			}, nil
+		},
+	}
+
+	result, err := model.Stream(context.Background(), ProviderConfig{
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		DefaultModel: "default-model",
+	}, nil, RequestOptions{}, func(StreamDelta) {})
+	if err != nil {
+		t.Fatalf("expected fallback generate to succeed, got error %v", err)
+	}
+	if result.ReasoningContent != "Model reasoning" {
+		t.Fatalf("expected reasoning content from fallback generate, got %q", result.ReasoningContent)
 	}
 }
 
