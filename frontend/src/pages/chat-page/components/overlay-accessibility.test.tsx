@@ -141,6 +141,93 @@ describe('overlay accessibility', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the tab bar and footer visible when switching to the provider tab', () => {
+    render(
+      <TestProviders>
+        <SettingsPanel
+          activeTab="provider"
+          chatSettings={chatSettings}
+          conversationFolder=""
+          conversationTags=""
+          showArchived={false}
+          availableFolders={['Work']}
+          availableTags={['planning']}
+          selectedFolder={null}
+          selectedTags={[]}
+          editingProviderId={null}
+          isLoadingProviders={false}
+          isImporting={false}
+          isOpen
+          messageCount={2}
+          selectedConversationIds={[]}
+          selectionMode={false}
+          isSaving={false}
+          isSavingProvider={false}
+          isTestingProvider={false}
+          onActivateProvider={vi.fn()}
+          onClose={vi.fn()}
+          onDeleteProvider={vi.fn()}
+          onEditProvider={vi.fn()}
+          onExport={vi.fn()}
+          onImport={vi.fn()}
+          onProviderFieldChange={vi.fn()}
+          onProviderModelsChange={vi.fn()}
+          onProviderTabChange={vi.fn()}
+          onReset={vi.fn()}
+          onResetProvider={vi.fn()}
+          onSave={vi.fn()}
+          onSaveProvider={vi.fn()}
+          onStartNewProvider={vi.fn()}
+          onTestProvider={vi.fn()}
+          providerForm={{
+            name: '',
+            baseURL: '',
+            apiKey: '',
+            models: [''],
+            defaultModel: '',
+            errors: createProviderFormErrors(),
+          }}
+          providerState={{
+            ...providerState,
+            presets: Array.from({ length: 12 }, (_, index) => ({
+              id: index + 1,
+              name: `Provider ${index + 1}`,
+              baseURL: `https://provider-${index + 1}.example.com/v1`,
+              hasApiKey: true,
+              apiKeyHint: `sk-${index + 1}`,
+              models: [`model-${index + 1}`],
+              defaultModel: `model-${index + 1}`,
+              isActive: index === 0,
+              createdAt: '2026-03-26T00:00:00Z',
+              updatedAt: '2026-03-26T00:00:00Z',
+            })),
+          }}
+          settings={settings}
+          setChatSettings={vi.fn()}
+          setConversationFolder={vi.fn()}
+          setConversationTags={vi.fn()}
+          onToggleArchived={vi.fn()}
+          onSelectFolder={vi.fn()}
+          onToggleTag={vi.fn()}
+          onSetSelectionMode={vi.fn()}
+          onBulkMoveToFolder={vi.fn()}
+          onBulkAddTags={vi.fn()}
+          onBulkRemoveTags={vi.fn()}
+          setSettings={vi.fn()}
+          transferConversation={conversation}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByTestId('settings-panel')).toHaveClass('overflow-hidden')
+    expect(screen.getByTestId('settings-panel-tab-nav')).toHaveClass('shrink-0')
+    expect(screen.getByTestId('settings-panel-body')).toHaveClass('min-h-0')
+    expect(screen.getByTestId('settings-panel-footer')).toHaveClass('shrink-0')
+    expect(screen.getByRole('button', { name: 'AI Provider' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Create preset' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Create preset' })).toBeEnabled()
+  })
+
   it('supports dismissing the confirmation and prompt dialogs via Escape or backdrop', () => {
     const onCloseConfirmation = vi.fn()
     const onClosePrompt = vi.fn()

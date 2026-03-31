@@ -89,27 +89,30 @@ export function SettingsPanel({
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex h-[100dvh] w-full flex-col overflow-y-auto border border-[var(--line)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-lg)] sm:max-h-[88vh] sm:h-auto sm:max-w-5xl sm:rounded-[2rem] sm:p-6"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden border border-[var(--line)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow-lg)] sm:max-h-[88vh] sm:h-auto sm:max-w-5xl sm:rounded-[2rem] sm:p-6"
+        data-testid="settings-panel"
         role="dialog"
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-['Lora',serif] text-2xl font-bold tracking-tight" id={titleId}>
-              {t('settings.title')}
-            </h2>
-            <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]" id={descriptionId}>
-              {descriptionText}
-            </p>
+        <div className="shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-['Lora',serif] text-2xl font-bold tracking-tight" id={titleId}>
+                {t('settings.title')}
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]" id={descriptionId}>
+                {descriptionText}
+              </p>
+            </div>
+            <button
+              aria-label={t('common.close')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)]"
+              onClick={onClose}
+              ref={closeButtonRef}
+              type="button"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            aria-label={t('common.close')}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--muted-foreground)] hover:bg-[var(--hover-bg)]"
-            onClick={onClose}
-            ref={closeButtonRef}
-            type="button"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
         <SettingsPanelTabNav
@@ -122,7 +125,7 @@ export function SettingsPanel({
           {...props}
         />
 
-        <div className="mt-auto">
+        <div className="mt-6 shrink-0">
           <SettingsPanelFooter
             activeTab={activeTab}
             editingProviderId={props.editingProviderId}

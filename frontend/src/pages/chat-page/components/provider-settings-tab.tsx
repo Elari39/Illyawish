@@ -84,8 +84,8 @@ export function ProviderSettingsTab({
   ])
 
   return (
-    <div className="mt-6 space-y-6">
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-5 py-4">
+    <div className="flex h-full min-h-0 flex-col gap-6">
+      <div className="shrink-0 rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] px-5 py-4">
         <p className="text-sm font-medium text-[var(--foreground)]">
           {t('settings.currentSource')}
         </p>
@@ -94,8 +94,14 @@ export function ProviderSettingsTab({
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,300px)_1fr]">
-        <div className="space-y-4">
+      <div
+        className="grid min-h-0 gap-6 lg:grid-cols-[minmax(16rem,18.75rem)_minmax(0,1fr)]"
+        data-testid="provider-settings-layout"
+      >
+        <div
+          className="flex min-h-0 flex-col gap-4"
+          data-testid="provider-presets-column"
+        >
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-[var(--foreground)]">
@@ -122,7 +128,10 @@ export function ProviderSettingsTab({
               {t('settings.loadingPresets')}
             </div>
           ) : providerState && providerState.presets.length > 0 ? (
-            <div className="space-y-3">
+            <div
+              className="min-h-0 space-y-3 overflow-y-auto pr-1 lg:max-h-[min(52vh,36rem)]"
+              data-testid="provider-presets-list"
+            >
               {providerState.presets.map((preset) => (
                 <div
                   className={cn(
@@ -216,7 +225,10 @@ export function ProviderSettingsTab({
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-5">
+        <div
+          className="min-h-0 overflow-y-auto rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-5 lg:max-h-[min(52vh,36rem)]"
+          data-testid="provider-editor-column"
+        >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="text-base font-semibold text-[var(--foreground)]">

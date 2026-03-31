@@ -148,116 +148,136 @@ export function SettingsPanelBody({
   const { t } = useI18n()
   const canReuseActiveAPIKey =
     editingProviderId == null && canReuseActivePresetAPIKey(providerState)
+  const bodyClassName =
+    activeTab === 'provider'
+      ? 'mt-6 min-h-0 flex-1 overflow-hidden'
+      : 'mt-6 min-h-0 flex-1 overflow-y-auto pr-1'
 
   if (activeTab === 'chat') {
     return (
-      <ChatSettingsTab
-        chatSettings={chatSettings}
-        conversationFolder={conversationFolder}
-        conversationTags={conversationTags}
-        providerState={providerState}
-        settings={settings}
-        setConversationFolder={setConversationFolder}
-        setConversationTags={setConversationTags}
-        setChatSettings={setChatSettings}
-        setSettings={setSettings}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <ChatSettingsTab
+          chatSettings={chatSettings}
+          conversationFolder={conversationFolder}
+          conversationTags={conversationTags}
+          providerState={providerState}
+          settings={settings}
+          setConversationFolder={setConversationFolder}
+          setConversationTags={setConversationTags}
+          setChatSettings={setChatSettings}
+          setSettings={setSettings}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'history') {
     return (
-      <HistorySettingsTab
-        availableFolders={availableFolders}
-        availableTags={availableTags}
-        selectedConversationIds={selectedConversationIds}
-        selectedFolder={selectedFolder}
-        selectedTags={selectedTags}
-        selectionMode={selectionMode}
-        showArchived={showArchived}
-        onBulkAddTags={onBulkAddTags}
-        onBulkMoveToFolder={onBulkMoveToFolder}
-        onBulkRemoveTags={onBulkRemoveTags}
-        onSelectFolder={onSelectFolder}
-        onSetSelectionMode={onSetSelectionMode}
-        onToggleArchived={onToggleArchived}
-        onToggleTag={onToggleTag}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <HistorySettingsTab
+          availableFolders={availableFolders}
+          availableTags={availableTags}
+          selectedConversationIds={selectedConversationIds}
+          selectedFolder={selectedFolder}
+          selectedTags={selectedTags}
+          selectionMode={selectionMode}
+          showArchived={showArchived}
+          onBulkAddTags={onBulkAddTags}
+          onBulkMoveToFolder={onBulkMoveToFolder}
+          onBulkRemoveTags={onBulkRemoveTags}
+          onSelectFolder={onSelectFolder}
+          onSetSelectionMode={onSetSelectionMode}
+          onToggleArchived={onToggleArchived}
+          onToggleTag={onToggleTag}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'rag') {
     return (
-      <RAGProviderSettingsTab
-        activateProvider={onActivateRAGProvider}
-        createProvider={onCreateRAGProvider}
-        providerState={ragProviderState}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <RAGProviderSettingsTab
+          activateProvider={onActivateRAGProvider}
+          createProvider={onCreateRAGProvider}
+          providerState={ragProviderState}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'knowledge') {
     return (
-      <KnowledgeSettingsTab
-        createKnowledgeDocument={onCreateKnowledgeDocument}
-        createKnowledgeSpace={onCreateKnowledgeSpace}
-        deleteKnowledgeDocument={onDeleteKnowledgeDocument}
-        deleteKnowledgeSpace={onDeleteKnowledgeSpace}
-        knowledgeDocuments={knowledgeDocuments}
-        knowledgeSpaces={knowledgeSpaces}
-        loadKnowledgeDocuments={onLoadKnowledgeDocuments}
-        onToggleKnowledgeSpace={onToggleKnowledgeSpace}
-        pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
-        replaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
-        selectedKnowledgeSpaceIds={knowledgeSpaceIds}
-        uploadKnowledgeDocuments={onUploadKnowledgeDocuments}
-        updateKnowledgeDocument={onUpdateKnowledgeDocument}
-        updateKnowledgeSpace={onUpdateKnowledgeSpace}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <KnowledgeSettingsTab
+          createKnowledgeDocument={onCreateKnowledgeDocument}
+          createKnowledgeSpace={onCreateKnowledgeSpace}
+          deleteKnowledgeDocument={onDeleteKnowledgeDocument}
+          deleteKnowledgeSpace={onDeleteKnowledgeSpace}
+          knowledgeDocuments={knowledgeDocuments}
+          knowledgeSpaces={knowledgeSpaces}
+          loadKnowledgeDocuments={onLoadKnowledgeDocuments}
+          onToggleKnowledgeSpace={onToggleKnowledgeSpace}
+          pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
+          replaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
+          selectedKnowledgeSpaceIds={knowledgeSpaceIds}
+          uploadKnowledgeDocuments={onUploadKnowledgeDocuments}
+          updateKnowledgeDocument={onUpdateKnowledgeDocument}
+          updateKnowledgeSpace={onUpdateKnowledgeSpace}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'workflow') {
     return (
-      <WorkflowSettingsTab
-        createWorkflowPreset={onCreateWorkflowPreset}
-        deleteWorkflowPreset={onDeleteWorkflowPreset}
-        selectedWorkflowPresetId={workflowPresetId}
-        setSelectedWorkflowPresetId={setWorkflowPresetId}
-        updateWorkflowPreset={onUpdateWorkflowPreset}
-        workflowPresets={workflowPresets}
-        workflowTemplates={workflowTemplates}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <WorkflowSettingsTab
+          createWorkflowPreset={onCreateWorkflowPreset}
+          deleteWorkflowPreset={onDeleteWorkflowPreset}
+          selectedWorkflowPresetId={workflowPresetId}
+          setSelectedWorkflowPresetId={setWorkflowPresetId}
+          updateWorkflowPreset={onUpdateWorkflowPreset}
+          workflowPresets={workflowPresets}
+          workflowTemplates={workflowTemplates}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'provider') {
     return (
-      <ProviderSettingsTab
-        canReuseActiveAPIKey={canReuseActiveAPIKey}
-        editingProviderId={editingProviderId}
-        isLoadingProviders={isLoadingProviders}
-        isSavingProvider={isSavingProvider}
-        onActivateProvider={onActivateProvider}
-        onDeleteProvider={onDeleteProvider}
-        onEditProvider={onEditProvider}
-        onProviderFieldChange={onProviderFieldChange}
-        onProviderModelsChange={onProviderModelsChange}
-        onResetProvider={onResetProvider}
-        onStartNewProvider={onStartNewProvider}
-        providerForm={providerForm}
-        providerState={providerState}
-      />
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <ProviderSettingsTab
+          canReuseActiveAPIKey={canReuseActiveAPIKey}
+          editingProviderId={editingProviderId}
+          isLoadingProviders={isLoadingProviders}
+          isSavingProvider={isSavingProvider}
+          onActivateProvider={onActivateProvider}
+          onDeleteProvider={onDeleteProvider}
+          onEditProvider={onEditProvider}
+          onProviderFieldChange={onProviderFieldChange}
+          onProviderModelsChange={onProviderModelsChange}
+          onResetProvider={onResetProvider}
+          onStartNewProvider={onStartNewProvider}
+          providerForm={providerForm}
+          providerState={providerState}
+        />
+      </div>
     )
   }
 
   if (activeTab === 'security') {
-    return <SecuritySettingsTab />
+    return (
+      <div className={bodyClassName} data-testid="settings-panel-body">
+        <SecuritySettingsTab />
+      </div>
+    )
   }
 
   if (activeTab === 'language') {
     return (
-      <div className="mt-6">
+      <div className={bodyClassName} data-testid="settings-panel-body">
         <div className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--app-bg)] p-5">
           <p className="text-sm leading-7 text-[var(--muted-foreground)]">
             {t('settings.languageHelp')}
@@ -269,12 +289,14 @@ export function SettingsPanelBody({
   }
 
   return (
-    <TransferSettingsTab
-      conversation={transferConversation}
-      isImporting={isImporting}
-      messageCount={messageCount}
-      onExport={onExport}
-      onImport={onImport}
-    />
+    <div className={bodyClassName} data-testid="settings-panel-body">
+      <TransferSettingsTab
+        conversation={transferConversation}
+        isImporting={isImporting}
+        messageCount={messageCount}
+        onExport={onExport}
+        onImport={onImport}
+      />
+    </div>
   )
 }

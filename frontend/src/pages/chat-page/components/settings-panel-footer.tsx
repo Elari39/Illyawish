@@ -35,7 +35,10 @@ export function SettingsPanelFooter({
   const { t } = useI18n()
 
   return (
-    <div className="mt-6 flex flex-wrap justify-end gap-3 max-sm:flex-col">
+    <div
+      className="flex shrink-0 flex-wrap justify-end gap-3 max-sm:flex-col"
+      data-testid="settings-panel-footer"
+    >
       {activeTab === 'chat' ? (
         <>
           <Button className="max-sm:w-full" onClick={onReset} variant="ghost">

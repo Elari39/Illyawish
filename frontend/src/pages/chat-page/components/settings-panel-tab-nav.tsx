@@ -27,7 +27,10 @@ export function SettingsPanelTabNav({
   const { t } = useI18n()
 
   return (
-    <div className="mt-6 flex overflow-x-auto whitespace-nowrap rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1">
+    <div
+      className="mt-6 flex min-h-12 shrink-0 overflow-x-auto whitespace-nowrap rounded-2xl border border-[var(--line)] bg-[var(--app-bg)] p-1"
+      data-testid="settings-panel-tab-nav"
+    >
       {SETTINGS_TABS.map((tab) => (
         <button
           key={tab.key}

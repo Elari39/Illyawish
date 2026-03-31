@@ -242,4 +242,59 @@ describe('ProviderSettingsTab', () => {
       screen.getByText('Stored encrypted by the backend after saving.'),
     ).toBeInTheDocument()
   })
+
+  it('uses isolated scroll regions for the preset list and editor layout', () => {
+    render(
+      <TestProviders>
+        <ProviderSettingsTab
+          canReuseActiveAPIKey={false}
+          editingProviderId={null}
+          isLoadingProviders={false}
+          isSavingProvider={false}
+          onActivateProvider={vi.fn()}
+          onDeleteProvider={vi.fn()}
+          onEditProvider={vi.fn()}
+          onProviderFieldChange={vi.fn()}
+          onProviderModelsChange={vi.fn()}
+          onResetProvider={vi.fn()}
+          onStartNewProvider={vi.fn()}
+          providerForm={{
+            name: '',
+            baseURL: '',
+            apiKey: '',
+            models: [''],
+            defaultModel: '',
+            errors: createProviderFormErrors(),
+          }}
+          providerState={{
+            presets: Array.from({ length: 15 }, (_, index) => ({
+              id: index + 1,
+              name: `Preset ${index + 1}`,
+              baseURL: `https://provider-${index + 1}.example.com/v1`,
+              hasApiKey: true,
+              apiKeyHint: `sk-${index + 1}`,
+              models: [`model-${index + 1}`],
+              defaultModel: `model-${index + 1}`,
+              isActive: index === 0,
+              createdAt: '2026-03-26T00:00:00Z',
+              updatedAt: '2026-03-26T00:00:00Z',
+            })),
+            activePresetId: 1,
+            currentSource: 'preset',
+            fallback: {
+              available: false,
+              baseURL: '',
+              models: [],
+              defaultModel: '',
+            },
+          }}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByTestId('provider-settings-layout')).toHaveClass('min-h-0')
+    expect(screen.getByTestId('provider-presets-column')).toHaveClass('min-h-0')
+    expect(screen.getByTestId('provider-presets-list')).toHaveClass('overflow-y-auto')
+    expect(screen.getByTestId('provider-editor-column')).toHaveClass('overflow-y-auto')
+  })
 })
