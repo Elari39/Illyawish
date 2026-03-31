@@ -362,7 +362,7 @@ describe('ChatPage conversation navigation', () => {
     })
 
     let resolveStream: (() => void) | null = null
-    let onStreamEvent: ((event: Parameters<Parameters<typeof chatApi.streamMessage>[2]>[0]) => Promise<void>) | null = null
+    let onStreamEvent: Parameters<typeof chatApi.streamMessage>[2] | null = null
 
     vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
       conversations: [secondConversation, firstConversation],
