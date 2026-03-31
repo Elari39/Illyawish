@@ -6,7 +6,8 @@ import { cn } from '../../../lib/utils'
 interface SidebarHeaderProps {
   collapsed: boolean
   desktopSidebarExpanded?: boolean
-  interactionDisabled: boolean
+  actionDisabled: boolean
+  desktopSidebarToggleDisabled: boolean
   searchValue: string
   appName: string
   expandSidebarLabel?: string
@@ -21,7 +22,8 @@ interface SidebarHeaderProps {
 export function SidebarHeader({
   collapsed,
   desktopSidebarExpanded = !collapsed,
-  interactionDisabled,
+  actionDisabled,
+  desktopSidebarToggleDisabled,
   searchValue,
   appName,
   expandSidebarLabel,
@@ -49,7 +51,7 @@ export function SidebarHeader({
               aria-expanded={desktopSidebarExpanded}
               aria-label={desktopToggleLabel}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-              disabled={interactionDisabled}
+              disabled={desktopSidebarToggleDisabled}
               onClick={onToggleDesktopSidebar}
               title={desktopToggleLabel}
               type="button"
@@ -59,7 +61,7 @@ export function SidebarHeader({
           ) : null}
           <button
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-            disabled={interactionDisabled}
+            disabled={actionDisabled}
             onClick={onCreateChat}
             title={newChatLabel}
             type="button"
@@ -79,7 +81,7 @@ export function SidebarHeader({
                 aria-expanded={desktopSidebarExpanded}
                 aria-label={desktopToggleLabel}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-                disabled={interactionDisabled}
+                disabled={desktopSidebarToggleDisabled}
                 onClick={onToggleDesktopSidebar}
                 title={desktopToggleLabel}
                 type="button"
@@ -91,7 +93,7 @@ export function SidebarHeader({
 
           <button
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] px-3 py-2 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--hover-bg)]"
-            disabled={interactionDisabled}
+            disabled={actionDisabled}
             onClick={onCreateChat}
             title={newChatLabel}
             type="button"

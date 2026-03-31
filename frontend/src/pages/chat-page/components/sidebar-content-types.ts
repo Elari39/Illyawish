@@ -5,6 +5,9 @@ export interface SidebarContentProps {
   variant: 'desktop' | 'mobile'
   desktopSidebarExpanded?: boolean
   interactionDisabled?: boolean
+  actionDisabled?: boolean
+  conversationNavigationDisabled?: boolean
+  desktopSidebarToggleDisabled?: boolean
   currentConversationId: Conversation['id'] | null
   conversations: Conversation[]
   hasMoreConversations: boolean

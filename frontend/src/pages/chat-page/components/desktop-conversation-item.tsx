@@ -12,7 +12,8 @@ const menuItemClassName =
 interface DesktopConversationItemProps {
   conversation: Conversation
   collapsed: boolean
-  interactionDisabled: boolean
+  actionDisabled: boolean
+  navigationDisabled: boolean
   isActive: boolean
   isMenuOpen: boolean
   isSelected: boolean
@@ -50,7 +51,8 @@ interface DesktopConversationItemProps {
 export function DesktopConversationItem({
   conversation,
   collapsed,
-  interactionDisabled,
+  actionDisabled,
+  navigationDisabled,
   isActive,
   isMenuOpen,
   isSelected,
@@ -110,7 +112,7 @@ export function DesktopConversationItem({
         <button
           aria-label={conversation.title}
           className="flex w-full justify-center rounded-lg px-0 py-1.5 text-center"
-          disabled={interactionDisabled}
+          disabled={navigationDisabled}
           onClick={() => onSelectConversation(conversation.id)}
           title={conversation.title}
           type="button"
@@ -134,7 +136,7 @@ export function DesktopConversationItem({
           <button
             aria-label={conversation.title}
             className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left transition-colors"
-            disabled={interactionDisabled}
+            disabled={navigationDisabled}
             onClick={() => {
               if (selectionMode) {
                 onToggleConversationSelection(conversation.id)
@@ -214,7 +216,7 @@ export function DesktopConversationItem({
                   ? 'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--foreground)] opacity-100 shadow-[var(--shadow-md)]'
                   : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100',
               )}
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={(event) => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -243,7 +245,7 @@ export function DesktopConversationItem({
             >
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onMoveConversationToFolder(conversation))
                 }
@@ -253,7 +255,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onAddConversationTags(conversation))
                 }
@@ -263,7 +265,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onRemoveConversationTags(conversation))
                 }
@@ -273,7 +275,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onTogglePinned(conversation))
                 }
@@ -283,7 +285,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onRenameConversation(conversation))
                 }
@@ -293,7 +295,7 @@ export function DesktopConversationItem({
               </button>
               <button
                 className={menuItemClassName}
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onToggleArchivedConversation(conversation))
                 }
@@ -308,7 +310,7 @@ export function DesktopConversationItem({
               />
               <button
                 className="flex w-full items-center justify-start gap-2 rounded-xl px-3 py-2 text-xs font-medium text-[var(--danger)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)]/20"
-                disabled={interactionDisabled}
+                disabled={actionDisabled}
                 onClick={() =>
                   handleConversationAction(() => onDeleteConversation(conversation.id))
                 }

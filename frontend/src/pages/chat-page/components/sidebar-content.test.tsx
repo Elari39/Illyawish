@@ -299,7 +299,7 @@ describe('SidebarContent mobile actions', () => {
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
-  it('disables mobile conversation interactions while a reply is streaming', () => {
+  it('keeps mobile navigation available while a reply is streaming', () => {
     const conversations = [
       createConversation(1, 'First mobile chat'),
       createConversation(2, 'Second mobile chat'),
@@ -312,6 +312,9 @@ describe('SidebarContent mobile actions', () => {
           collapsed={false}
           variant="mobile"
           interactionDisabled
+          actionDisabled
+          conversationNavigationDisabled={false}
+          desktopSidebarToggleDisabled={false}
           currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
@@ -336,7 +339,7 @@ describe('SidebarContent mobile actions', () => {
       screen.getByRole('button', {
         name: conversations[0]!.title,
       }),
-    ).toBeDisabled()
+    ).not.toBeDisabled()
     expect(
       screen.getByRole('button', {
         name: `More actions for ${conversations[0]!.title}`,
@@ -351,7 +354,7 @@ describe('SidebarContent mobile actions', () => {
     )
 
     expect(handlers.onCreateChat).not.toHaveBeenCalled()
-    expect(handlers.onSelectConversation).not.toHaveBeenCalled()
+    expect(handlers.onSelectConversation).toHaveBeenCalledWith(conversations[0]!.id)
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 })
@@ -846,7 +849,7 @@ describe('SidebarContent desktop actions', () => {
     expect(screen.getByRole('menu').className).not.toContain('top-full')
   })
 
-  it('disables desktop conversation interactions while a reply is streaming', () => {
+  it('keeps desktop navigation available while a reply is streaming', () => {
     const conversations = [
       createConversation(1, 'First desktop chat'),
       createConversation(2, 'Second desktop chat'),
@@ -859,6 +862,9 @@ describe('SidebarContent desktop actions', () => {
           collapsed={false}
           variant="desktop"
           interactionDisabled
+          actionDisabled
+          conversationNavigationDisabled={false}
+          desktopSidebarToggleDisabled={false}
           currentConversationId="1"
           conversations={conversations}
           hasMoreConversations={false}
@@ -877,20 +883,27 @@ describe('SidebarContent desktop actions', () => {
       screen.getByRole('button', {
         name: conversations[0]!.title,
       }),
-    ).toBeDisabled()
+    ).not.toBeDisabled()
     expect(
       screen.getByRole('button', {
         name: `More actions for ${conversations[0]!.title}`,
       }),
     ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Collapse conversation sidebar' }),
+    ).not.toBeDisabled()
 
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Collapse conversation sidebar' }),
+    )
     fireEvent.click(
       screen.getByRole('button', {
         name: conversations[1]!.title,
       }),
     )
 
-    expect(handlers.onSelectConversation).not.toHaveBeenCalled()
+    expect(handlers.onToggleDesktopSidebar).toHaveBeenCalledTimes(1)
+    expect(handlers.onSelectConversation).toHaveBeenCalledWith(conversations[1]!.id)
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

@@ -355,13 +355,14 @@ describe('ChatPage conversation navigation', () => {
     expect(screen.queryByRole('button', { name: 'First chat' })).not.toBeInTheDocument()
   })
 
-  it('does not switch conversations while a reply is streaming', async () => {
+  it('switches conversations while a reply is streaming without applying background stream chunks to the active view', async () => {
     const firstConversation = createConversation(1, 'First chat')
     const secondConversation = createConversation(2, 'Second chat', {
       updatedAt: '2026-03-26T10:08:00Z',
     })
 
     let resolveStream: (() => void) | null = null
+    let onStreamEvent: ((event: Parameters<Parameters<typeof chatApi.streamMessage>[2]>[0]) => Promise<void>) | null = null
 
     vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
       conversations: [secondConversation, firstConversation],
@@ -381,10 +382,13 @@ describe('ChatPage conversation navigation', () => {
         ],
       }))
     vi.spyOn(chatApi, 'streamMessage').mockImplementation(
-      () =>
+      async (_conversationId, _payload, onEvent) => {
+        onStreamEvent = onEvent
+        return await
         new Promise<void>((resolve) => {
           resolveStream = resolve
-        }),
+        })
+      },
     )
 
     renderChatPage([chatPath(1)])
@@ -408,12 +412,30 @@ describe('ChatPage conversation navigation', () => {
     })
 
     const historyButtons = await screen.findAllByRole('button', { name: 'Second chat' })
-    fireEvent.click(historyButtons[historyButtons.length - 1]!)
+    await act(async () => {
+      fireEvent.click(historyButtons[historyButtons.length - 1]!)
+    })
 
-    expect(screen.getByTestId('location')).toHaveTextContent(chatPath(1))
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(2))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Loaded second conversation')).toBeInTheDocument()
+    })
     expect(
       getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '2'),
-    ).toHaveLength(0)
+    ).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+
+    await act(async () => {
+      await onStreamEvent?.({
+        type: 'message_delta',
+        content: 'background chunk',
+      })
+    })
+
+    expect(screen.queryByText('background chunk')).not.toBeInTheDocument()
+    expect(screen.getByText('Loaded second conversation')).toBeInTheDocument()
 
     await act(async () => {
       resolveStream?.()
@@ -890,7 +912,7 @@ describe('ChatPage conversation navigation', () => {
     expect(mobileSidebar?.className).not.toContain('max-w-[320px]')
   })
 
-  it('stops the active conversation and restores the composer without switching away', async () => {
+  it('stops the original active conversation after switching away and restores the composer', async () => {
     const firstConversation = createConversation(1, 'First chat')
     const secondConversation = createConversation(2, 'Second chat', {
       updatedAt: '2026-03-26T10:08:00Z',
@@ -970,12 +992,18 @@ describe('ChatPage conversation navigation', () => {
       throw new Error('Second conversation button not found')
     }
 
-    expect(secondConversationButton).toBeDisabled()
+    expect(secondConversationButton).not.toBeDisabled()
 
-    fireEvent.click(secondConversationButton)
+    await act(async () => {
+      fireEvent.click(secondConversationButton)
+    })
 
-    expect(screen.getByTestId('location')).toHaveTextContent(chatPath(1))
-    expect(screen.queryByText('Second conversation')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(2))
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Second conversation')).toBeInTheDocument()
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
 
@@ -986,7 +1014,21 @@ describe('ChatPage conversation navigation', () => {
       expect(screen.queryByRole('button', { name: 'Stop' })).not.toBeInTheDocument()
     })
     expect(screen.getByRole('button', { name: 'Send message' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent(chatPath(2))
+    expect(screen.getByText('Second conversation')).toBeInTheDocument()
 
+    const firstConversationButton = (await screen.findAllByRole('button', { name: 'First chat' })).at(-1)
+    if (!firstConversationButton) {
+      throw new Error('First conversation button not found')
+    }
+
+    await act(async () => {
+      fireEvent.click(firstConversationButton)
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location')).toHaveTextContent(chatPath(1))
+    })
     await waitFor(() => {
       expect(screen.getByText('Stopped on server')).toBeInTheDocument()
     })

@@ -327,6 +327,189 @@ describe('useChatGeneration saved settings behavior', () => {
     expect(updated[1]?.content).toBe('')
   })
 
+  it('buffers assistant content after reasoning starts until reasoning completes', async () => {
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+    })
+
+    const callCountAfterReasoning = setMessages.mock.calls.length
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'message_delta',
+        content: 'buffered answer',
+      })
+    })
+
+    expect(setMessages).toHaveBeenCalledTimes(callCountAfterReasoning)
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_done',
+        content: 'step 1',
+      })
+    })
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(updated[1]?.reasoningContent).toBe('step 1')
+    expect(updated[1]?.content).toBe('buffered answer')
+    rafSpy.mockRestore()
+  })
+
+  it('preserves assistant content order when reasoning starts after a pending content delta', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'message_delta',
+        content: 'A',
+      })
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+      await onEvent?.({
+        type: 'message_delta',
+        content: 'B',
+      })
+      await onEvent?.({
+        type: 'reasoning_done',
+      })
+    })
+
+    const pendingFlush = rafCallbacks.shift()
+    expect(pendingFlush).toBeTypeOf('function')
+
+    await act(async () => {
+      pendingFlush?.(0)
+    })
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(updated[1]?.reasoningContent).toBe('step 1')
+    expect(updated[1]?.content).toBe('AB')
+    rafSpy.mockRestore()
+  })
+
+  it('flushes buffered assistant content on done even without reasoning_done', async () => {
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+      await onEvent?.({
+        type: 'message_delta',
+        content: 'buffered answer',
+      })
+    })
+
+    const callCountBeforeDone = setMessages.mock.calls.length
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'done',
+      })
+    })
+
+    expect(setMessages.mock.calls.length).toBeGreaterThan(callCountBeforeDone)
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(updated[1]?.reasoningContent).toBe('step 1')
+    expect(updated[1]?.content).toBe('buffered answer')
+    rafSpy.mockRestore()
+  })
+
   it('persists execution events into sessionStorage as stream events arrive', async () => {
     chatApiMock.streamMessage.mockImplementation(
       async (
@@ -520,6 +703,7 @@ type MessageStreamEvent = {
   type:
     | 'message_start'
     | 'delta'
+    | 'message_delta'
     | 'reasoning_start'
     | 'reasoning_delta'
     | 'reasoning_done'

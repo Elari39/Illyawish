@@ -6,7 +6,8 @@ import type { Conversation } from '../../../types/chat'
 
 interface MobileConversationItemProps {
   conversation: Conversation
-  interactionDisabled: boolean
+  actionDisabled: boolean
+  navigationDisabled: boolean
   isActive: boolean
   isActionsOpen: boolean
   isSelected: boolean
@@ -39,7 +40,8 @@ interface MobileConversationItemProps {
 
 export function MobileConversationItem({
   conversation,
-  interactionDisabled,
+  actionDisabled,
+  navigationDisabled,
   isActive,
   isActionsOpen,
   isSelected,
@@ -92,7 +94,7 @@ export function MobileConversationItem({
         <button
           aria-label={conversation.title}
           className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left"
-          disabled={interactionDisabled}
+          disabled={navigationDisabled}
           onClick={() => {
             if (selectionMode) {
               onToggleConversationSelection(conversation.id)
@@ -157,7 +159,7 @@ export function MobileConversationItem({
               'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]',
               isActionsOpen && 'bg-[var(--hover-bg)] text-[var(--foreground)]',
             )}
-            disabled={interactionDisabled}
+            disabled={actionDisabled}
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -176,7 +178,7 @@ export function MobileConversationItem({
           <div className="grid grid-cols-2 gap-2">
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() => handleConversationAction(() => onMoveConversationToFolder(conversation))}
               variant="secondary"
             >
@@ -184,7 +186,7 @@ export function MobileConversationItem({
             </Button>
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() => handleConversationAction(() => onAddConversationTags(conversation))}
               variant="secondary"
             >
@@ -192,7 +194,7 @@ export function MobileConversationItem({
             </Button>
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() => handleConversationAction(() => onRemoveConversationTags(conversation))}
               variant="secondary"
             >
@@ -200,7 +202,7 @@ export function MobileConversationItem({
             </Button>
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() => handleConversationAction(() => onTogglePinned(conversation))}
               variant="secondary"
             >
@@ -208,7 +210,7 @@ export function MobileConversationItem({
             </Button>
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() => handleConversationAction(() => onRenameConversation(conversation))}
               variant="secondary"
             >
@@ -216,7 +218,7 @@ export function MobileConversationItem({
             </Button>
             <Button
               className="px-2 py-2 text-xs"
-              disabled={interactionDisabled}
+              disabled={actionDisabled}
               onClick={() =>
                 handleConversationAction(() => onToggleArchivedConversation(conversation))
               }
@@ -227,7 +229,7 @@ export function MobileConversationItem({
           </div>
           <Button
             className="mt-2 w-full px-3 py-2 text-xs"
-            disabled={interactionDisabled}
+            disabled={actionDisabled}
             onClick={() =>
               handleConversationAction(() => onDeleteConversation(conversation.id))
             }

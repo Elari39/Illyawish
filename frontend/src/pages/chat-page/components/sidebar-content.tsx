@@ -12,6 +12,9 @@ export function SidebarContent({
   variant,
   desktopSidebarExpanded = !collapsed,
   interactionDisabled = false,
+  actionDisabled,
+  conversationNavigationDisabled,
+  desktopSidebarToggleDisabled,
   currentConversationId,
   conversations,
   hasMoreConversations,
@@ -38,6 +41,11 @@ export function SidebarContent({
   onLogout,
 }: SidebarContentProps) {
   const { locale, t } = useI18n()
+  const resolvedActionDisabled = actionDisabled ?? interactionDisabled
+  const resolvedConversationNavigationDisabled =
+    conversationNavigationDisabled ?? interactionDisabled
+  const resolvedDesktopSidebarToggleDisabled =
+    desktopSidebarToggleDisabled ?? interactionDisabled
   const {
     scrollContainerRef,
     desktopMenuRef,
@@ -51,7 +59,7 @@ export function SidebarContent({
   } = useSidebarActionMenu({
     collapsed,
     variant,
-    interactionDisabled: interactionDisabled || selectionMode,
+    actionDisabled: resolvedActionDisabled || selectionMode,
     conversations,
   })
 
@@ -60,7 +68,8 @@ export function SidebarContent({
       <SidebarHeader
         collapsed={collapsed}
         desktopSidebarExpanded={desktopSidebarExpanded}
-        interactionDisabled={interactionDisabled}
+        actionDisabled={resolvedActionDisabled}
+        desktopSidebarToggleDisabled={resolvedDesktopSidebarToggleDisabled}
         searchValue={searchValue}
         appName={t('app.name')}
         expandSidebarLabel={t('chat.expandSidebar')}
@@ -75,7 +84,8 @@ export function SidebarContent({
       {!(variant === 'desktop' && collapsed) ? (
         <SidebarConversationList
           collapsed={collapsed}
-          interactionDisabled={interactionDisabled}
+          actionDisabled={resolvedActionDisabled}
+          conversationNavigationDisabled={resolvedConversationNavigationDisabled}
           currentConversationId={currentConversationId}
           conversations={conversations}
           hasMoreConversations={hasMoreConversations}

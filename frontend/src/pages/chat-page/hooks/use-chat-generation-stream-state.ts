@@ -57,6 +57,15 @@ export function useChatGenerationStreamState({
     placeholderId: number
     content: string
   } | null>(null)
+  const bufferedReasoningPriorityDeltaRef = useRef<{
+    conversationId: Conversation['id']
+    placeholderId: number
+    content: string
+  } | null>(null)
+  const reasoningPriorityTargetRef = useRef<{
+    conversationId: Conversation['id']
+    placeholderId: number
+  } | null>(null)
   const bufferedDeltaFrameRef = useRef<number | null>(null)
   const activeExecutionState = useMemo(
     () => {
@@ -138,6 +147,66 @@ export function useChatGenerationStreamState({
     )
   }
 
+  function isReasoningPriorityTarget(
+    conversationId: Conversation['id'],
+    placeholderId: number,
+  ) {
+    const target = reasoningPriorityTargetRef.current
+    return target?.conversationId === conversationId &&
+      target.placeholderId === placeholderId
+  }
+
+  function clearReasoningPriorityTarget(
+    conversationId: Conversation['id'],
+    placeholderId: number,
+  ) {
+    if (isReasoningPriorityTarget(conversationId, placeholderId)) {
+      reasoningPriorityTargetRef.current = null
+    }
+  }
+
+  function flushBufferedReasoningPriorityDelta() {
+    const bufferedDelta = bufferedReasoningPriorityDeltaRef.current
+    if (!bufferedDelta) {
+      return
+    }
+
+    bufferedReasoningPriorityDeltaRef.current = null
+    setMessages((previous) =>
+      appendToStreamingMessage(
+        previous,
+        buildMessageTarget(
+          bufferedDelta.conversationId,
+          bufferedDelta.placeholderId,
+        ),
+        bufferedDelta.content,
+      ),
+    )
+  }
+
+  function queueBufferedReasoningPriorityDelta(
+    conversationId: Conversation['id'],
+    placeholderId: number,
+    content: string,
+  ) {
+    const bufferedDelta = bufferedReasoningPriorityDeltaRef.current
+    if (
+      bufferedDelta &&
+      bufferedDelta.conversationId === conversationId &&
+      bufferedDelta.placeholderId === placeholderId
+    ) {
+      bufferedDelta.content += content
+      return
+    }
+
+    flushBufferedReasoningPriorityDelta()
+    bufferedReasoningPriorityDeltaRef.current = {
+      conversationId,
+      placeholderId,
+      content,
+    }
+  }
+
   function cancelBufferedMessageDeltaFrame() {
     if (bufferedDeltaFrameRef.current != null) {
       window.cancelAnimationFrame(bufferedDeltaFrameRef.current)
@@ -148,6 +217,7 @@ export function useChatGenerationStreamState({
   function flushActiveMessageDelta() {
     cancelBufferedMessageDeltaFrame()
     flushBufferedMessageDelta()
+    flushBufferedReasoningPriorityDelta()
   }
 
   function scheduleBufferedMessageDeltaFlush() {
@@ -185,6 +255,18 @@ export function useChatGenerationStreamState({
     scheduleBufferedMessageDeltaFlush()
   }
 
+  function enterReasoningPriorityMode(
+    conversationId: Conversation['id'],
+    placeholderId: number,
+  ) {
+    cancelBufferedMessageDeltaFrame()
+    flushBufferedMessageDelta()
+    reasoningPriorityTargetRef.current = {
+      conversationId,
+      placeholderId,
+    }
+  }
+
   function resetExecutionState(conversationId: Conversation['id']) {
     persistExecutionState(conversationId, {
       events: [],
@@ -196,12 +278,16 @@ export function useChatGenerationStreamState({
     return () => {
       cancelBufferedMessageDeltaFrame()
       bufferedDeltaRef.current = null
+      bufferedReasoningPriorityDeltaRef.current = null
+      reasoningPriorityTargetRef.current = null
     }
   }, [])
 
   useEffect(() => {
     cancelBufferedMessageDeltaFrame()
     bufferedDeltaRef.current = null
+    bufferedReasoningPriorityDeltaRef.current = null
+    reasoningPriorityTargetRef.current = null
   }, [activeConversationId])
 
   function handleStreamEventForConversation(
@@ -239,6 +325,8 @@ export function useChatGenerationStreamState({
     const target = buildMessageTarget(conversationId, placeholderId)
 
     if (event.type === 'message_start' && eventMessage) {
+      clearReasoningPriorityTarget(conversationId, placeholderId)
+      bufferedReasoningPriorityDeltaRef.current = null
       setMessages((previous) =>
         upsertMessage(previous, eventMessage, target),
       )
@@ -249,11 +337,25 @@ export function useChatGenerationStreamState({
       (event.type === 'delta' || event.type === 'message_delta') &&
       typeof event.content === 'string'
     ) {
+      if (isReasoningPriorityTarget(conversationId, placeholderId)) {
+        queueBufferedReasoningPriorityDelta(
+          conversationId,
+          placeholderId,
+          event.content,
+        )
+        return
+      }
       queueBufferedMessageDelta(conversationId, placeholderId, event.content)
       return
     }
 
+    if (event.type === 'reasoning_start') {
+      enterReasoningPriorityMode(conversationId, placeholderId)
+      return
+    }
+
     if (event.type === 'reasoning_delta' && typeof event.content === 'string') {
+      enterReasoningPriorityMode(conversationId, placeholderId)
       const reasoningContent = event.content
       setMessages((previous) =>
         appendReasoningToStreamingMessage(previous, target, reasoningContent),
@@ -261,8 +363,15 @@ export function useChatGenerationStreamState({
       return
     }
 
+    if (event.type === 'reasoning_done') {
+      flushBufferedReasoningPriorityDelta()
+      clearReasoningPriorityTarget(conversationId, placeholderId)
+      return
+    }
+
     if (event.type === 'done' || event.type === 'cancelled') {
       flushActiveMessageDelta()
+      clearReasoningPriorityTarget(conversationId, placeholderId)
       if (
         event.type === 'cancelled' &&
         !activeGenerationRef.current?.stopRequested
@@ -279,6 +388,7 @@ export function useChatGenerationStreamState({
 
     if (event.type === 'error') {
       flushActiveMessageDelta()
+      clearReasoningPriorityTarget(conversationId, placeholderId)
       setChatError(event.error ?? t('error.streamingFailed'))
       setMessages((previous) => {
         const currentMessage =

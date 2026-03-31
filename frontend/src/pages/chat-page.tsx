@@ -157,7 +157,9 @@ export function ChatPage() {
   )
 
   const sidebarProps = {
-    interactionDisabled,
+    actionDisabled: interactionDisabled,
+    conversationNavigationDisabled: false,
+    desktopSidebarToggleDisabled: false,
     currentConversationId: activeConversationId,
     conversations: conversationList.conversations,
     hasMoreConversations: conversationList.hasMoreConversations,
@@ -185,9 +187,6 @@ export function ChatPage() {
     onBulkRemoveTags: actions.handleBulkRemoveTags,
     onLoadMore: () => void conversationList.loadConversations({ append: true }),
     onSelectConversation: (conversationId: Conversation['id']) => {
-      if (interactionDisabled) {
-        return
-      }
       navigateToConversation(conversationId)
       uiState.setSidebarOpen(false)
     },
