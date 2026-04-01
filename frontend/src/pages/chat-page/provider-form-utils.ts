@@ -101,7 +101,12 @@ export function resolveProviderEditorState(
 
   return {
     editingProviderId: nextPreset?.id ?? null,
-    providerEditorMode: { type: 'auto' } as const,
+    providerEditorMode: nextPreset
+      ? ({
+          type: 'edit',
+          providerId: nextPreset.id,
+        } as const)
+      : ({ type: 'auto' } as const),
     providerForm: createProviderForm(providerState.fallback, nextPreset),
   }
 }

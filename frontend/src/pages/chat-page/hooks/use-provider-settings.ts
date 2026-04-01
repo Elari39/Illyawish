@@ -229,12 +229,13 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
+      const currentProviderEditorMode = providerEditorModeRef.current
       const canReuseActiveAPIKey =
-        providerEditorMode.type !== 'edit' &&
+        currentProviderEditorMode.type !== 'edit' &&
         canReuseActiveAPIKeyForNewPreset()
       const validation = validateProviderForm(providerForm, {
         requireAPIKey:
-          providerEditorMode.type !== 'edit' &&
+          currentProviderEditorMode.type !== 'edit' &&
           !canReuseActiveAPIKey,
         t,
       })
@@ -250,8 +251,8 @@ export function useProviderSettings({
       const nextAPIKey = resolveSubmittedAPIKey()
       const shouldReuseActiveAPIKey =
         canReuseActiveAPIKey && !nextAPIKey
-      const nextState = providerEditorMode.type === 'edit'
-        ? await providerApi.update(providerEditorMode.providerId, {
+      const nextState = currentProviderEditorMode.type === 'edit'
+        ? await providerApi.update(currentProviderEditorMode.providerId, {
             format: providerForm.format,
             name: providerForm.name,
             baseURL: providerForm.baseURL,
@@ -270,8 +271,8 @@ export function useProviderSettings({
           })
 
       const nextProviderEditorMode =
-        providerEditorMode.type === 'edit'
-          ? providerEditorMode
+        currentProviderEditorMode.type === 'edit'
+          ? currentProviderEditorMode
           : nextState.activePresetId != null
             ? {
                 type: 'edit' as const,
@@ -281,7 +282,7 @@ export function useProviderSettings({
 
       applyProviderState(nextState, nextProviderEditorMode)
       showToast(
-        providerEditorMode.type === 'edit'
+        currentProviderEditorMode.type === 'edit'
           ? t('settings.savePreset')
           : t('settings.createPreset'),
         'success',
@@ -302,12 +303,13 @@ export function useProviderSettings({
     setChatError(null)
 
     try {
+      const currentProviderEditorMode = providerEditorModeRef.current
       const canReuseActiveAPIKey =
-        providerEditorMode.type !== 'edit' &&
+        currentProviderEditorMode.type !== 'edit' &&
         canReuseActiveAPIKeyForNewPreset()
       const validation = validateProviderForm(providerForm, {
         requireAPIKey:
-          providerEditorMode.type !== 'edit' &&
+          currentProviderEditorMode.type !== 'edit' &&
           !canReuseActiveAPIKey,
         t,
       })
@@ -323,8 +325,8 @@ export function useProviderSettings({
       const shouldReuseActiveAPIKey =
         canReuseActiveAPIKey && !nextAPIKey
       const result = await providerApi.test({
-        ...(providerEditorMode.type === 'edit'
-          ? { providerId: providerEditorMode.providerId }
+        ...(currentProviderEditorMode.type === 'edit'
+          ? { providerId: currentProviderEditorMode.providerId }
           : {}),
         format: providerForm.format,
         baseURL: providerForm.baseURL,
