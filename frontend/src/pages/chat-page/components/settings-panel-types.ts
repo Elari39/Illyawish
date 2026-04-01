@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 
+import type { ChatNumericInputDrafts } from '../../../lib/numeric-input'
 import type {
   ChatSettings,
   Conversation,
@@ -15,6 +16,7 @@ import type { ProviderFormState, SettingsTab } from '../types'
 export interface SettingsPanelProps {
   activeTab: SettingsTab
   editingProviderId: number | null
+  chatNumericInputDrafts: ChatNumericInputDrafts
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
@@ -43,6 +45,10 @@ export interface SettingsPanelProps {
   knowledgeSpaces?: KnowledgeSpace[]
   knowledgeDocuments?: Record<number, KnowledgeDocument[]>
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
+  onChatNumericInputChange: (
+    field: keyof ChatNumericInputDrafts,
+    value: string,
+  ) => void
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
   onToggleArchived: (value: boolean) => void

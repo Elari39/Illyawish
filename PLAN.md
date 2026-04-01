@@ -1,73 +1,83 @@
-# PLAN.md
+# Confirmed Bug Fixes Plan
 
 ## Summary
-修复并验证 5 个按优先级排序的问题，执行顺序固定为：
-1. RAG 多文件上传原子性
-2. URL 知识文档内容与来源失配
-3. URL 抓取 SSRF 防护
-4. 聊天页知识库切换竞态
-5. 管理页数值输入语义错误
+将仓库根目录的 `PLAN.md` 整文件替换为本计划，然后按单批次执行 3 个已确认缺陷的修复与验证，不再混入旧的 5 项历史内容。
 
-实现策略是先补失败测试，再做最小修复，再跑对应模块测试，最后跑受影响的全量校验。优先修后端数据一致性与安全边界，再修前端状态和表单问题，避免前端改完后又被后端行为变化打回。
+旧的 5 项计划已作废，不再作为本轮执行依据。
 
-## Key Changes
-### 1. RAG 上传接口改为批量原子提交
-- 修改 [`backend/internal/rag/upload_http.go`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/backend/internal/rag/upload_http.go) 和相关 service 流程，先校验并准备整批文件，再统一落库；任一文件失败时整批不创建任何 `KnowledgeDocument`。
-- 如果现有 `KnowledgeDocumentService.CreateDocument` 无法直接支持批量事务，就新增一个仅供上传接口使用的批量创建入口；不要在 handler 里手工做半事务逻辑。
-- 保持接口路径不变，但 `/api/knowledge/spaces/:spaceId/documents/upload` 的语义变为“all-or-nothing”。
+本轮范围固定为：
+1. URL 抓取/工具请求的 SSRF 重定向绕过
+2. 管理页 workspace policy 跨 tab 提交串值
+3. 前端数字输入在编辑中间态产生 `NaN` / `null` 的错误语义
 
-### 2. URL 文档在仅修改 `sourceUri` 时自动重抓内容
-- 修改 [`backend/internal/rag/knowledge_http.go`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/backend/internal/rag/knowledge_http.go) 和 [`backend/internal/rag/knowledge_document_service.go`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/backend/internal/rag/knowledge_document_service.go)，当 URL 类型文档更新时：
-  - 如果 `sourceUri` 变化且请求未显式提供新内容，则后端自动抓取新 URL 内容。
-  - 如果前端发送的是旧内容，不允许无条件覆盖；优先以后端判断“URI 是否变化”为准，避免保存“新 URL + 旧内容”。
-- 修改前端知识文档编辑提交流程，URL 模式下当用户只改 `sourceUri` 时，不再盲目回传旧 `content`；让请求表达“请以后端抓取为准”。
+默认策略采用“安全优先扩展修复”：对 URL 请求增加逐跳安全校验；前端以字符串编辑、提交时解析为准；管理页拆分保存链路，避免隐藏状态互相污染。
 
-### 3. URL 抓取加 SSRF 防护
-- 在后端新增 URL 校验层，供创建/更新 URL 文档共用。
-- 默认允许 `http` 和 `https`，拒绝：
-  - 空 host
-  - localhost / loopback
-  - 私网、链路本地、保留地址
-  - 非法或不可解析 URL
-- 校验发生在真正发请求前；不安全 URL 返回 400。
-- 对外接口不变，但 `/api/knowledge/spaces/:spaceId/documents` 的 URL 文档创建/更新会新增“unsafe URL”类校验失败。
+## Implementation Changes
+### 1. 先更新计划文件
+- 用新的 3 项修复计划完整替换根目录 `PLAN.md`。
+- 明确标注旧 5 项计划作废，不再作为本轮执行依据。
 
-### 4. 修复聊天页知识库切换竞态
-- 修改 [`frontend/src/pages/chat-page/hooks/use-chat-settings-state.ts`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/chat-page/hooks/use-chat-settings-state.ts)，切换逻辑必须以最新 draft 状态为基准，而不是优先读取 `currentConversation` 的旧快照。
-- 为并发点击建立明确规则：
-  - 本地 UI 立即基于当前 draft 更新。
-  - 每次请求只回滚自己引入的变更，不能把后续成功切换一起回滚掉。
-  - 服务端返回后仅在响应仍匹配当前预期时同步 `pendingConversation` / draft。
-- 不改接口协议，只修前端状态管理。
+### 2. 后端 URL 安全修复
+- 修改 [`backend/internal/network/public_url.go`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/backend/internal/network/public_url.go) 保留现有公网校验规则，继续作为所有外部 URL 的统一入口。
+- 修改 [`backend/internal/agent/tools.go`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/backend/internal/agent/tools.go) 的请求逻辑，不再信任默认自动重定向。
+- 采用“逐跳校验 + 限制最大跳数”的实现：
+  - 首次请求前校验原始 URL。
+  - 每次 30x 跳转都解析 `Location`，按相对 URL 解析为绝对地址，再次调用 `ValidatePublicHTTPURL`。
+  - 任一跳转落到 localhost、私网、保留地址、不可解析地址时立即终止。
+  - 最大跳数固定为 5，超过返回错误。
+- `rag` 文档 URL 抓取继续复用同一执行器，不新增第二套 HTTP 安全逻辑。
+- 对外接口不变；行为变化是“公网 URL 但重定向到内网/保留地址”将被拒绝。
 
-### 5. 管理页数值输入改为“字符串编辑，提交时解析”
-- 修改 [`frontend/src/pages/admin-page/components/admin-users-tab.tsx`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/admin-page/components/admin-users-tab.tsx) 和 [`frontend/src/pages/admin-page/components/admin-policy-tab.tsx`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/admin-page/components/admin-policy-tab.tsx) 和 [`frontend/src/pages/admin-page/admin-page-helpers.ts`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/admin-page/admin-page-helpers.ts)。
-- 统一规则：
-  - 输入框 state 全程保存字符串，不在 `onChange` 时做 `Number(value)`。
-  - 只有提交时才解析。
-  - 非法值保持原样显示，并阻止提交或给出一致错误，不再静默变成 `null`、`0` 或 `"NaN"`。
-- 创建用户、编辑用户、保存默认策略三条链路都使用同一套解析/校验辅助函数。
+### 3. 管理页 workspace policy 状态隔离
+- 修改 [`frontend/src/pages/admin-page/hooks/use-admin-page-data.ts`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/admin-page/hooks/use-admin-page-data.ts)。
+- 保留“默认用户策略”和“附件保留策略”两条独立保存链路：
+  - `handleSavePolicy` 只提交默认角色/默认配额字段。
+  - 新增独立的 `handleSaveAttachmentPolicy`，只提交 retention days。
+- 新增独立的附件页 draft，避免附件 tab 直接写 `workspacePolicy` 已保存态。
+- 两个保存入口都以“最后一次成功加载/保存的 `workspacePolicy`”为基底组装完整 payload，未编辑字段取已保存值，绝不读取另一个 tab 的未保存草稿。
+- 更新 admin attachments / admin policy 组件 props，使它们只消费各自对应的 draft 和保存函数。
 
-## Public APIs / Interfaces
-- 保持现有前端路由、主要 TS 类型和后端路径不变。
-- 行为变化：
-  - `POST /api/knowledge/spaces/:spaceId/documents/upload`：批量上传改为原子提交。
-  - URL 文档创建/更新：新增 unsafe URL 校验错误。
-  - URL 文档更新：当 `sourceUri` 改变且未显式提供新内容时，后端自动重抓内容。
-- 如需新增后端内部 helper 或 service 方法，优先做内部接口，不新增无必要的公开 DTO 字段。
+### 4. 数字输入改为“字符串编辑，提交时解析”
+- 管理页：
+  - 继续沿用用户/策略页现有字符串 draft。
+  - 将附件 retention days 也改为字符串 draft。
+  - 所有管理页数值字段统一通过 helper 解析，非法中间态保持原样显示，不在 `onChange` 时做 `Number(...)`。
+- 聊天设置页：
+  - 修改 [`frontend/src/pages/chat-page/components/chat-settings-tab.tsx`](/home/elaina/workspace/AICoding/ReactGo/Illyawish/frontend/src/pages/chat-page/components/chat-settings-tab.tsx)。
+  - 温度、`maxTokens`、`contextWindowTurns` 改为局部字符串输入状态，和外层数值 draft 分离。
+  - 只有输入为空或解析为有效值时，才同步到上层 `chatSettings` 数值状态。
+  - 输入为 `-`、`1e`、`1.` 这类中间态时，界面保留原字符串，但不把 `NaN` 写入父状态。
+  - 设置面板保存时若存在未解析成功的数字输入，则阻止提交并显示统一错误，而不是把 `NaN` 经过 JSON 变成 `null`。
+- 抽公共解析 helper：
+  - 可空正整数：给 admin 配额和 retention 用。
+  - 可空非负整数 / 可空 0-2 浮点：给 chat settings 用。
+- 不改后端 DTO 和接口字段名，只修前端输入语义和提交前校验。
+
+## Interfaces
+- 公共 HTTP API 路径不变。
+- 外部行为变化：
+  - URL 抓取现在会拒绝“安全首跳 + 不安全重定向目标”。
+  - 管理页两个 tab 的保存互不挟带对方未保存改动。
+  - 聊天设置和管理页数字输入不再把非法中间态静默提交成 `null`。
+- 内部接口变化：
+  - admin page data hook 新增独立 attachment policy draft / save handler。
+  - chat settings tab 需要暴露数字输入有效性到保存流程。
 
 ## Test Plan
-- 后端 RAG：
-  - 新增测试覆盖“批量上传第二个文件失败时，一个文档也不会落库”。
-  - 新增测试覆盖“URL 文档仅修改 `sourceUri` 时会抓取新内容，而不是保留旧内容”。
-  - 新增测试覆盖“不安全 URL 被拒绝，安全公网 URL 允许继续处理”。
-- 前端聊天：
-  - 在 `use-chat-settings-state` 测试中新增“连续快速切换两个 knowledge space，最终 draft 和提交 payload 都保留两次变更”。
-  - 新增“先后两个请求交错返回/其中一个失败时，不会把后一个成功切换回滚掉”。
-- 前端管理页：
-  - 在管理页或 helper 测试中新增非法中间输入场景，如 `-`、`1e`、空串、前导空格。
-  - 验证 UI 不显示 `"NaN"`，提交 payload 不会把非法值静默转成 `null`。
-- 回归验证：
+- 后端：
+  - 新增“公网 URL 302 到 `127.0.0.1` 被拒绝”的测试。
+  - 新增“公网 URL 302 到保留/私网地址被拒绝”的测试。
+  - 新增“公网 URL 逐跳仍为公网时允许成功”的测试。
+  - 保持现有 unsafe URL 直连校验测试通过。
+- 前端 admin：
+  - 新增“在 policy tab 修改默认配额但未保存，再到 attachments tab 保存 retention，不会把默认配额一起提交”的测试。
+  - 新增反向场景测试，确保 policy 保存不会带上附件页未保存字符串。
+  - 新增 retention days 的非法中间输入测试，验证 UI 不出现 `NaN`，payload 不会静默变 `0` 或 `null`。
+- 前端 chat：
+  - 新增温度 / `maxTokens` / `contextWindowTurns` 的中间态输入测试，如 `-`、`1e`、空串。
+  - 验证保存前非法输入会阻止提交并给出错误。
+  - 验证合法输入仍能按原接口提交数值。
+- 全量回归：
   - `cd backend && GOCACHE=/tmp/go-build go test ./...`
   - `cd backend && GOCACHE=/tmp/go-build go test -race ./...`
   - `cd frontend && pnpm test:run`
@@ -75,7 +85,7 @@
   - `cd frontend && pnpm build && pnpm bundle:check`
 
 ## Assumptions
-- 计划文件目标位置是仓库根目录 `PLAN.md`。
-- 第一轮不继续扩展新缺陷，只处理这 5 项。
-- SSRF 防护默认按“拒绝内网/本机，只允许公网 http/https”执行；如果后续产品明确需要抓取内网地址，再单独设计白名单机制。
-- 不引入数据库 schema 变更；所有修复应通过事务、校验和状态管理完成。
+- `PLAN.md` 将被整文件替换，而不是追加。
+- 本轮只修这 3 个已确认问题，不继续扩展新缺陷。
+- URL 安全策略以“允许公网 http/https，逐跳拒绝内网/本机/保留地址，最多 5 次跳转”为默认实现。
+- 管理页保留两个独立保存按钮和 tab，不做额外 UI 重构。

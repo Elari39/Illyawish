@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react'
 
 import type { I18nContextValue } from '../../i18n/context'
 import type { Conversation } from '../../types/chat'
+import type { ChatNumericInputDrafts } from '../../lib/numeric-input'
 import type { useAgentWorkspace } from './hooks/use-agent-workspace'
 import type { useChatErrorState } from './hooks/use-chat-error-state'
 import type { useChatPageActions } from './hooks/use-chat-page-actions'
@@ -305,8 +306,13 @@ export function buildChatOverlaysProps({
     knowledgeSpaces: agentWorkspace.knowledgeSpaces,
     knowledgeDocuments: agentWorkspace.knowledgeDocuments,
     transferConversation: displayConversation,
+    chatNumericInputDrafts: chatSession.chatNumericInputDrafts,
     settings: chatSession.settingsDraft,
     setChatSettings: chatSession.setChatSettingsDraft,
+    onChatNumericInputChange: (
+      field: keyof ChatNumericInputDrafts,
+      value: string,
+    ) => chatSession.setChatNumericInputDraft(field, value),
     setConversationFolder: chatSession.setConversationFolderDraft,
     setConversationTags: chatSession.setConversationTagsDraft,
     onToggleArchived: conversationList.setShowArchived,

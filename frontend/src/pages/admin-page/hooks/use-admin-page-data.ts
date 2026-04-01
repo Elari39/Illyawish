@@ -10,11 +10,14 @@ import type {
   WorkspacePolicy,
 } from '../../../types/chat'
 import {
+  type AttachmentPolicyDraft,
   AUDIT_PAGE_SIZE,
   buildAuditLogListParams,
   defaultAuditFilters,
   emptyCreateUserForm,
   parseOptionalPositiveIntegerFields,
+  parseRequiredPositiveInteger,
+  toAttachmentPolicyDraft,
   toUserDraft,
   toWorkspacePolicyDraft,
   type AuditFilters,
@@ -40,6 +43,7 @@ export function useAdminPageData({
   const [usageStats, setUsageStats] = useState<AdminUsageStats | null>(null)
   const [workspacePolicy, setWorkspacePolicy] = useState<WorkspacePolicy | null>(null)
   const [workspacePolicyDraft, setWorkspacePolicyDraft] = useState<WorkspacePolicyDraft | null>(null)
+  const [attachmentPolicyDraft, setAttachmentPolicyDraft] = useState<AttachmentPolicyDraft | null>(null)
   const [userDrafts, setUserDrafts] = useState<Record<number, UserDraft>>({})
   const [createUserForm, setCreateUserForm] = useState<CreateUserFormState>(emptyCreateUserForm)
   const [isLoading, setIsLoading] = useState(true)
@@ -75,6 +79,7 @@ export function useAdminPageData({
       setUsageStats(nextUsageStats)
       setWorkspacePolicy(nextPolicy)
       setWorkspacePolicyDraft(toWorkspacePolicyDraft(nextPolicy))
+      setAttachmentPolicyDraft(toAttachmentPolicyDraft(nextPolicy))
       setUserDrafts(
         Object.fromEntries(
           nextUsers.map((item) => [item.id, toUserDraft(item)]),
@@ -223,10 +228,49 @@ export function useAdminPageData({
           parsedLimits.values.defaultUserMaxAttachmentsPerMessage,
         defaultUserDailyMessageLimit:
           parsedLimits.values.defaultUserDailyMessageLimit,
-        attachmentRetentionDays: Number(workspacePolicy.attachmentRetentionDays),
+        attachmentRetentionDays: workspacePolicy.attachmentRetentionDays,
       })
       setWorkspacePolicy(nextPolicy)
       setWorkspacePolicyDraft(toWorkspacePolicyDraft(nextPolicy))
+      setAttachmentPolicyDraft(toAttachmentPolicyDraft(nextPolicy))
+      setInfo(t('admin.feedback.policyUpdated'))
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : t('error.updateWorkspacePolicy'))
+    } finally {
+      setIsSavingPolicy(false)
+    }
+  }
+
+  async function handleSaveAttachmentPolicy(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!workspacePolicy || !attachmentPolicyDraft) {
+      return
+    }
+
+    const parsedRetention = parseRequiredPositiveInteger(
+      attachmentPolicyDraft.attachmentRetentionDays,
+    )
+    if (!parsedRetention.isValid || parsedRetention.value == null) {
+      setError(t('admin.validation.optionalPositiveInteger'))
+      setInfo(null)
+      return
+    }
+
+    setIsSavingPolicy(true)
+    setError(null)
+    setInfo(null)
+
+    try {
+      const nextPolicy = await adminApi.updateWorkspacePolicy({
+        defaultUserRole: workspacePolicy.defaultUserRole,
+        defaultUserMaxConversations: workspacePolicy.defaultUserMaxConversations,
+        defaultUserMaxAttachmentsPerMessage: workspacePolicy.defaultUserMaxAttachmentsPerMessage,
+        defaultUserDailyMessageLimit: workspacePolicy.defaultUserDailyMessageLimit,
+        attachmentRetentionDays: parsedRetention.value,
+      })
+      setWorkspacePolicy(nextPolicy)
+      setWorkspacePolicyDraft(toWorkspacePolicyDraft(nextPolicy))
+      setAttachmentPolicyDraft(toAttachmentPolicyDraft(nextPolicy))
       setInfo(t('admin.feedback.policyUpdated'))
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : t('error.updateWorkspacePolicy'))
@@ -296,6 +340,7 @@ export function useAdminPageData({
     usageStats,
     workspacePolicy,
     workspacePolicyDraft,
+    attachmentPolicyDraft,
     userDrafts,
     createUserForm,
     isLoading,
@@ -306,13 +351,14 @@ export function useAdminPageData({
     auditFilters,
     setUserDrafts,
     setCreateUserForm,
-    setWorkspacePolicy,
     setWorkspacePolicyDraft,
+    setAttachmentPolicyDraft,
     setAuditFilters,
     handleCreateUser,
     handleSaveUser,
     handleResetUserPassword,
     handleSavePolicy,
+    handleSaveAttachmentPolicy,
     handlePurgeAttachments,
     handleApplyAuditFilters,
     handleResetAuditFilters,

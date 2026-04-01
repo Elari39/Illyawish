@@ -195,6 +195,8 @@ export const enUSMessages = {
   'settings.contextWindowTurns': 'Context window (recent turns)',
   'settings.contextWindowTurnsHelp':
     'Leave blank to keep the full conversation history. This version trims by recent turns, while the model itself may still enforce a hard limit.',
+  'settings.validation.numericFields':
+    'Fix the invalid numeric settings before saving.',
   'settings.currentSource': 'Current source',
   'settings.savedPresets': 'Saved presets',
   'settings.onePresetActive': 'One preset can be active at a time.',

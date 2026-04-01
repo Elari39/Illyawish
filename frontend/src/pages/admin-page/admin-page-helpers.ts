@@ -5,6 +5,10 @@ import type {
   AuditLogListParams,
   WorkspacePolicy,
 } from '../../types/chat'
+import {
+  parseOptionalPositiveInteger,
+  parseRequiredPositiveInteger,
+} from '../../lib/numeric-input'
 
 export type AdminTab = 'users' | 'audit' | 'policy' | 'attachments'
 
@@ -39,6 +43,10 @@ export interface WorkspacePolicyDraft {
   defaultUserMaxConversations: string
   defaultUserMaxAttachmentsPerMessage: string
   defaultUserDailyMessageLimit: string
+}
+
+export interface AttachmentPolicyDraft {
+  attachmentRetentionDays: string
 }
 
 export const emptyCreateUserForm: CreateUserFormState = {
@@ -91,6 +99,14 @@ export function toWorkspacePolicyDraft(
   }
 }
 
+export function toAttachmentPolicyDraft(
+  policy: WorkspacePolicy,
+): AttachmentPolicyDraft {
+  return {
+    attachmentRetentionDays: String(policy.attachmentRetentionDays),
+  }
+}
+
 export function updateDraft(
   userId: number,
   key: keyof UserDraft,
@@ -104,22 +120,6 @@ export function updateDraft(
       [key]: value,
     },
   }))
-}
-
-export function parseOptionalPositiveInteger(value: string) {
-  if (value === '') {
-    return { isValid: true, value: null as number | null }
-  }
-  if (!/^\d+$/.test(value)) {
-    return { isValid: false, value: null as number | null }
-  }
-
-  const parsed = Number(value)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    return { isValid: false, value: null as number | null }
-  }
-
-  return { isValid: true, value: parsed }
 }
 
 export function parseOptionalPositiveIntegerFields<TField extends string>(
@@ -152,4 +152,9 @@ export function buildAuditLogListParams(filters: AuditFilters): AuditLogListPara
     dateFrom: filters.dateFrom || undefined,
     dateTo: filters.dateTo || undefined,
   }
+}
+
+export {
+  parseOptionalPositiveInteger,
+  parseRequiredPositiveInteger,
 }

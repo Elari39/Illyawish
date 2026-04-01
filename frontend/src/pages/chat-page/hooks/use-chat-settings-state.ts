@@ -8,6 +8,12 @@ import {
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { chatApi } from '../../../lib/api'
+import {
+  parseOptionalNonNegativeInteger,
+  parseOptionalTemperature,
+  toChatNumericInputDrafts,
+  type ChatNumericInputDrafts,
+} from '../../../lib/numeric-input'
 import type {
   ChatSettings,
   Conversation,
@@ -49,8 +55,11 @@ export function useChatSettingsState({
   const [chatSettings, setChatSettings] = useState<ChatSettings>(
     defaultChatSettings,
   )
-  const [chatSettingsDraft, setChatSettingsDraft] = useState<ChatSettings>(
+  const [chatSettingsDraft, setChatSettingsDraftStateInternal] = useState<ChatSettings>(
     defaultChatSettings,
+  )
+  const [chatNumericInputDrafts, setChatNumericInputDrafts] = useState<ChatNumericInputDrafts>(
+    toChatNumericInputDrafts(defaultChatSettings),
   )
   const [newChatSystemPrompt, setNewChatSystemPrompt] = useState('')
   const [newConversationFolder, setNewConversationFolder] = useState('')
@@ -65,6 +74,8 @@ export function useChatSettingsState({
   const [knowledgeSpaceIdsDraft, setKnowledgeSpaceIdsDraft] = useState<number[]>([])
   const [pendingKnowledgeSpaceIds, setPendingKnowledgeSpaceIds] = useState<number[]>([])
   const activeConversationIdRef = useRef(activeConversationId)
+  const setChatErrorRef = useRef(setChatError)
+  const tRef = useRef(t)
   const knowledgeSpaceIdsDraftRef = useRef<number[]>([])
   const knowledgeSpaceRequestVersionsRef = useRef<Record<number, number>>({})
   const pendingKnowledgeSpaceCountsRef = useRef<Record<number, number>>({})
@@ -75,6 +86,35 @@ export function useChatSettingsState({
       knowledgeSpaceIdsDraftRef.current = nextValue
       return nextValue
     })
+  }, [])
+
+  const replaceChatNumericInputDrafts = useCallback((nextChatSettings: ChatSettings) => {
+    setChatNumericInputDrafts(toChatNumericInputDrafts(nextChatSettings))
+  }, [])
+
+  const replaceChatSettingsDraft = useCallback((nextChatSettings: ChatSettings) => {
+    setChatSettingsDraftStateInternal(nextChatSettings)
+    replaceChatNumericInputDrafts(nextChatSettings)
+  }, [replaceChatNumericInputDrafts])
+
+  const setChatSettingsDraft = useCallback((value: SetStateAction<ChatSettings>) => {
+    setChatSettingsDraftStateInternal((previous) => {
+      const nextValue = typeof value === 'function' ? value(previous) : value
+      setChatNumericInputDrafts((currentDrafts) =>
+        syncChatNumericInputDrafts(currentDrafts, previous, nextValue),
+      )
+      return nextValue
+    })
+  }, [])
+
+  const setChatNumericInputDraft = useCallback((
+    field: keyof ChatNumericInputDrafts,
+    value: string,
+  ) => {
+    setChatNumericInputDrafts((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
   }, [])
 
   const syncPendingKnowledgeSpaceIds = useCallback(() => {
@@ -111,6 +151,11 @@ export function useChatSettingsState({
   }, [activeConversationId])
 
   useEffect(() => {
+    setChatErrorRef.current = setChatError
+    tRef.current = t
+  }, [setChatError, t])
+
+  useEffect(() => {
     let cancelled = false
 
     async function loadChatSettings() {
@@ -121,13 +166,13 @@ export function useChatSettingsState({
         }
 
         setChatSettings(nextChatSettings)
-        setChatSettingsDraft(nextChatSettings)
+        replaceChatSettingsDraft(nextChatSettings)
       } catch (error) {
         if (cancelled) {
           return
         }
-        setChatError(
-          error instanceof Error ? error.message : t('error.loadChatSettings'),
+        setChatErrorRef.current(
+          error instanceof Error ? error.message : tRef.current('error.loadChatSettings'),
         )
       }
     }
@@ -137,10 +182,19 @@ export function useChatSettingsState({
     return () => {
       cancelled = true
     }
-  }, [setChatError, t])
+  }, [replaceChatSettingsDraft])
 
   const handleSaveSettings = useCallback(async (onSaved: () => void) => {
     setChatError(null)
+    const parsedChatSettingsDraft = parseChatNumericSettingsDraft(
+      chatSettingsDraft,
+      chatNumericInputDrafts,
+    )
+    if (!parsedChatSettingsDraft.isValid) {
+      setChatError(t('settings.validation.numericFields'))
+      return
+    }
+
     const { metadataUpdate, nextFolder, nextTagsInput } =
       buildSaveSettingsPreparation({
         conversationFolderDraft,
@@ -154,10 +208,10 @@ export function useChatSettingsState({
 
     try {
       const updatedChatSettings =
-        await chatApi.updateChatSettings(chatSettingsDraft)
+        await chatApi.updateChatSettings(parsedChatSettingsDraft.value)
       globalSettingsSaved = true
       setChatSettings(updatedChatSettings)
-      setChatSettingsDraft(updatedChatSettings)
+      replaceChatSettingsDraft(updatedChatSettings)
 
       if (!activeConversationId) {
         setNewChatSystemPrompt(settingsDraft.systemPrompt)
@@ -192,10 +246,10 @@ export function useChatSettingsState({
           const rolledBackChatSettings =
             await chatApi.updateChatSettings(previousChatSettings)
           setChatSettings(rolledBackChatSettings)
-          setChatSettingsDraft(rolledBackChatSettings)
+          replaceChatSettingsDraft(rolledBackChatSettings)
         } catch {
           setChatSettings(previousChatSettings)
-          setChatSettingsDraft(previousChatSettings)
+          replaceChatSettingsDraft(previousChatSettings)
         }
 
         if (previousConversation) {
@@ -212,19 +266,21 @@ export function useChatSettingsState({
     activeConversationId,
     chatSettings,
     chatSettingsDraft,
+    chatNumericInputDrafts,
     conversationFolderDraft,
     conversationTagsDraft,
     knowledgeSpaceIdsDraft,
     currentConversation,
     settingsDraft,
     applyDraftSnapshot,
+    replaceChatSettingsDraft,
     setChatError,
     syncConversationIntoList,
     t,
   ])
 
   const syncSettingsDraft = useCallback(() => {
-    setChatSettingsDraft(chatSettings)
+    replaceChatSettingsDraft(chatSettings)
 
     if (currentConversation) {
       applyDraftSnapshot(buildConversationDraftSnapshot(currentConversation))
@@ -246,6 +302,7 @@ export function useChatSettingsState({
     newConversationFolder,
     newConversationTagsInput,
     applyDraftSnapshot,
+    replaceChatSettingsDraft,
   ])
 
   const resetSettingsDraft = useCallback(() => {
@@ -258,7 +315,7 @@ export function useChatSettingsState({
 
   const applyChatSettings = useCallback((nextChatSettings: ChatSettings) => {
     setChatSettings(nextChatSettings)
-    setChatSettingsDraft(nextChatSettings)
+    replaceChatSettingsDraft(nextChatSettings)
 
     if (!currentConversation && !activeConversationId) {
       applyDraftSnapshot(
@@ -277,6 +334,7 @@ export function useChatSettingsState({
     newConversationFolder,
     newConversationTagsInput,
     applyDraftSnapshot,
+    replaceChatSettingsDraft,
   ])
 
   const resetForNewChatSettings = useCallback(() => {
@@ -364,6 +422,7 @@ export function useChatSettingsState({
 
   return {
     chatSettingsDraft,
+    chatNumericInputDrafts,
     conversationFolderDraft,
     conversationTagsDraft,
     knowledgeSpaceIdsDraft,
@@ -371,6 +430,7 @@ export function useChatSettingsState({
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
+    setChatNumericInputDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
     setKnowledgeSpaceIdsDraft: setKnowledgeSpaceIdsDraftState,
@@ -421,4 +481,66 @@ function rollbackKnowledgeSpaceToggle(
     spaceId,
     ...currentIds.slice(insertAt),
   ]
+}
+
+function syncChatNumericInputDrafts(
+  currentDrafts: ChatNumericInputDrafts,
+  previousSettings: ChatSettings,
+  nextSettings: ChatSettings,
+): ChatNumericInputDrafts {
+  return {
+    temperature:
+      previousSettings.temperature === nextSettings.temperature
+        ? currentDrafts.temperature
+        : nextSettings.temperature == null
+          ? ''
+          : String(nextSettings.temperature),
+    maxTokens:
+      previousSettings.maxTokens === nextSettings.maxTokens
+        ? currentDrafts.maxTokens
+        : nextSettings.maxTokens == null
+          ? ''
+          : String(nextSettings.maxTokens),
+    contextWindowTurns:
+      previousSettings.contextWindowTurns === nextSettings.contextWindowTurns
+        ? currentDrafts.contextWindowTurns
+        : nextSettings.contextWindowTurns == null
+          ? ''
+          : String(nextSettings.contextWindowTurns),
+  }
+}
+
+function parseChatNumericSettingsDraft(
+  chatSettingsDraft: ChatSettings,
+  chatNumericInputDrafts: ChatNumericInputDrafts,
+): {
+  isValid: boolean
+  value: ChatSettings
+} {
+  const parsedTemperature = parseOptionalTemperature(chatNumericInputDrafts.temperature)
+  const parsedMaxTokens = parseOptionalNonNegativeInteger(chatNumericInputDrafts.maxTokens)
+  const parsedContextWindowTurns = parseOptionalNonNegativeInteger(
+    chatNumericInputDrafts.contextWindowTurns,
+  )
+
+  if (
+    !parsedTemperature.isValid ||
+    !parsedMaxTokens.isValid ||
+    !parsedContextWindowTurns.isValid
+  ) {
+    return {
+      isValid: false,
+      value: chatSettingsDraft,
+    }
+  }
+
+  return {
+    isValid: true,
+    value: {
+      ...chatSettingsDraft,
+      temperature: parsedTemperature.value,
+      maxTokens: parsedMaxTokens.value,
+      contextWindowTurns: parsedContextWindowTurns.value,
+    },
+  }
 }

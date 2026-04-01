@@ -15,6 +15,7 @@ type SettingsPanelBodyProps = Pick<
   | 'activeTab'
   | 'availableFolders'
   | 'availableTags'
+  | 'chatNumericInputDrafts'
   | 'chatSettings'
   | 'conversationFolder'
   | 'conversationTags'
@@ -31,6 +32,7 @@ type SettingsPanelBodyProps = Pick<
   | 'onBulkAddTags'
   | 'onBulkMoveToFolder'
   | 'onBulkRemoveTags'
+  | 'onChatNumericInputChange'
   | 'onCreateKnowledgeDocument'
   | 'onCreateKnowledgeSpace'
   | 'onCreateRAGProvider'
@@ -75,6 +77,7 @@ export function SettingsPanelBody({
   activeTab,
   availableFolders,
   availableTags,
+  chatNumericInputDrafts,
   chatSettings,
   conversationFolder,
   conversationTags,
@@ -91,6 +94,7 @@ export function SettingsPanelBody({
   onBulkAddTags,
   onBulkMoveToFolder,
   onBulkRemoveTags,
+  onChatNumericInputChange,
   onCreateKnowledgeDocument = async () => null,
   onCreateKnowledgeSpace = async () => null,
   onCreateRAGProvider = async () => undefined,
@@ -142,9 +146,11 @@ export function SettingsPanelBody({
     return (
       <div className={bodyClassName} data-testid="settings-panel-body">
         <ChatSettingsTab
+          chatNumericInputDrafts={chatNumericInputDrafts}
           chatSettings={chatSettings}
           conversationFolder={conversationFolder}
           conversationTags={conversationTags}
+          onChatNumericInputChange={onChatNumericInputChange}
           providerState={providerState}
           settings={settings}
           setConversationFolder={setConversationFolder}

@@ -8,6 +8,7 @@ export function LabeledInput({
   value,
   onChange,
   type = 'text',
+  inputMode,
   placeholder,
   compact = false,
 }: {
@@ -15,6 +16,7 @@ export function LabeledInput({
   value: string
   onChange: (value: string) => void
   type?: string
+  inputMode?: React.InputHTMLAttributes<HTMLInputElement>['inputMode']
   placeholder?: string
   compact?: boolean
 }) {
@@ -25,6 +27,7 @@ export function LabeledInput({
       </span>
       <Input
         className={compact ? 'px-3 py-2.5 text-sm' : undefined}
+        inputMode={inputMode}
         placeholder={placeholder}
         type={type}
         value={value}

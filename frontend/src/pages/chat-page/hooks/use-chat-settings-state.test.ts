@@ -443,4 +443,70 @@ describe('useChatSettingsState', () => {
     expect(result.current.conversationFolderDraft).toBe(createConversation().folder)
     expect(result.current.conversationTagsDraft).toBe(createConversation().tags.join(', '))
   })
+
+  it('blocks saving when numeric drafts contain invalid intermediate values', async () => {
+    const setChatError = vi.fn()
+
+    const { result } = renderHook(() =>
+      useChatSettingsState(createOptions({
+        activeConversationId: null,
+        currentConversation: null,
+        setChatError,
+      })),
+    )
+
+    await waitFor(() => {
+      expect(result.current.chatSettingsDraft.globalPrompt).toBe('Saved global prompt')
+    })
+
+    act(() => {
+      result.current.setChatNumericInputDraft('temperature', '1e')
+    })
+
+    await act(async () => {
+      await result.current.handleSaveSettings(vi.fn())
+    })
+
+    expect(chatApiMock.updateChatSettings).not.toHaveBeenCalled()
+    expect(chatApiMock.updateConversation).not.toHaveBeenCalled()
+    expect(setChatError).toHaveBeenCalledWith('settings.validation.numericFields')
+  })
+
+  it('saves parsed numeric drafts when valid inputs are present', async () => {
+    const nextChatSettings: ChatSettings = {
+      ...persistedChatSettings,
+      temperature: 0.8,
+      maxTokens: 2048,
+      contextWindowTurns: null,
+    }
+    chatApiMock.updateChatSettings.mockResolvedValue(nextChatSettings)
+
+    const { result } = renderHook(() =>
+      useChatSettingsState(createOptions({
+        activeConversationId: null,
+        currentConversation: null,
+      })),
+    )
+
+    await waitFor(() => {
+      expect(result.current.chatSettingsDraft.globalPrompt).toBe('Saved global prompt')
+    })
+
+    act(() => {
+      result.current.setChatNumericInputDraft('temperature', '0.8')
+      result.current.setChatNumericInputDraft('maxTokens', '2048')
+      result.current.setChatNumericInputDraft('contextWindowTurns', '')
+    })
+
+    await act(async () => {
+      await result.current.handleSaveSettings(vi.fn())
+    })
+
+    expect(chatApiMock.updateChatSettings).toHaveBeenCalledWith({
+      ...persistedChatSettings,
+      temperature: 0.8,
+      maxTokens: 2048,
+      contextWindowTurns: null,
+    })
+  })
 })

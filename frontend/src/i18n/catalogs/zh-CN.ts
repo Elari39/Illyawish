@@ -178,6 +178,7 @@ export const zhCNMessages = {
     'settings.contextWindowTurns': '上下文窗口（最近 N 轮）',
     'settings.contextWindowTurnsHelp':
       '留空表示不限制。这一版按最近对话轮次裁剪历史，模型本身仍可能有自己的硬性上下文上限。',
+    'settings.validation.numericFields': '请先修正无效的数字设置，再保存。',
     'settings.currentSource': '当前来源',
     'settings.savedPresets': '已保存预设',
     'settings.onePresetActive': '同一时间只能激活一个预设。',

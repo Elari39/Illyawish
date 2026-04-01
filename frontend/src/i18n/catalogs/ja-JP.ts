@@ -195,6 +195,8 @@ export const jaJPMessages = {
     'settings.contextWindowTurns': 'コンテキストウィンドウ（直近 N ターン）',
     'settings.contextWindowTurnsHelp':
       '空欄なら会話履歴を制限しません。この版では直近ターン数で履歴を絞り込みますが、モデル側の上限は別途適用される場合があります。',
+    'settings.validation.numericFields':
+      '保存する前に無効な数値設定を修正してください。',
     'settings.currentSource': '現在のソース',
     'settings.savedPresets': '保存済みプリセット',
     'settings.onePresetActive': '同時に有効化できるプリセットは 1 つだけです。',

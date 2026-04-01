@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseOptionalPositiveInteger } from './admin-page-helpers'
+import {
+  parseOptionalPositiveInteger,
+  parseRequiredPositiveInteger,
+} from './admin-page-helpers'
 
 describe('parseOptionalPositiveInteger', () => {
   it.each([
@@ -11,5 +14,17 @@ describe('parseOptionalPositiveInteger', () => {
     [' 5', { isValid: false, value: null }],
   ])('parses %p as %o', (value, expected) => {
     expect(parseOptionalPositiveInteger(value)).toEqual(expected)
+  })
+})
+
+describe('parseRequiredPositiveInteger', () => {
+  it.each([
+    ['', { isValid: false, value: null }],
+    ['7', { isValid: true, value: 7 }],
+    ['-', { isValid: false, value: null }],
+    ['1e', { isValid: false, value: null }],
+    [' 5', { isValid: false, value: null }],
+  ])('parses %p as %o', (value, expected) => {
+    expect(parseRequiredPositiveInteger(value)).toEqual(expected)
   })
 })

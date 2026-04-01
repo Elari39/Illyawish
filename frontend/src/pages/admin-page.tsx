@@ -237,15 +237,15 @@ export function AdminPage() {
             />
           ) : null}
 
-          {!data.isLoading && activeTab === 'attachments' && data.workspacePolicy ? (
+          {!data.isLoading && activeTab === 'attachments' && data.attachmentPolicyDraft ? (
             <AdminAttachmentsTab
-              workspacePolicy={data.workspacePolicy}
+              attachmentPolicyDraft={data.attachmentPolicyDraft}
               usageStats={data.usageStats}
               users={data.sortedUsers}
               isSavingPolicy={data.isSavingPolicy}
               t={t}
-              setWorkspacePolicy={data.setWorkspacePolicy}
-              onSavePolicy={data.handleSavePolicy}
+              setAttachmentPolicyDraft={data.setAttachmentPolicyDraft}
+              onSaveAttachmentPolicy={data.handleSaveAttachmentPolicy}
               onPurgeUser={handlePurgeUser}
               onPurgeAll={handlePurgeAll}
             />
