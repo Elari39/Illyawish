@@ -34,6 +34,67 @@ describe('useProviderSettings', () => {
     testProviderMock.mockReset()
   })
 
+  it('keeps a new preset draft when the provider list resolves after editing starts', async () => {
+    let resolveList: ((value: ProviderState) => void) | null = null
+    listProvidersMock.mockReturnValue(new Promise<ProviderState>((resolve) => {
+      resolveList = resolve
+    }))
+
+    const loadedState: ProviderState = {
+      presets: [{
+        id: 7,
+        name: 'OpenAI',
+        format: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        hasApiKey: true,
+        apiKeyHint: 'sk-1...2345',
+        models: ['gpt-4.1-mini'],
+        defaultModel: 'gpt-4.1-mini',
+        isActive: true,
+        createdAt: '2026-03-26T00:00:00Z',
+        updatedAt: '2026-03-26T00:00:00Z',
+      }],
+      activePresetId: 7,
+      currentSource: 'preset',
+      fallback: {
+        available: false,
+        format: 'openai',
+        baseURL: '',
+        models: [],
+        defaultModel: '',
+      },
+    }
+
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: true,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.handleStartNewProvider()
+      result.current.handleProviderFieldChange('name', 'Draft preset')
+      result.current.handleProviderFieldChange('baseURL', 'https://draft.example.com/v1')
+    })
+
+    await act(async () => {
+      resolveList?.(loadedState)
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(result.current.providerState?.activePresetId).toBe(7)
+    })
+
+    expect(result.current.editingProviderId).toBeNull()
+    expect(result.current.providerForm.name).toBe('Draft preset')
+    expect(result.current.providerForm.baseURL).toBe('https://draft.example.com/v1')
+  })
+
   it('blocks save and test when required provider fields are missing', async () => {
     const setChatError = vi.fn()
     const showToast = vi.fn()

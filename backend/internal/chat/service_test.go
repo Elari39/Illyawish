@@ -728,6 +728,63 @@ func TestStreamAssistantReplyContinuesAfterSubscriberDisconnect(t *testing.T) {
 	t.Fatalf("expected assistant message to complete after disconnect, got %#v", emitted)
 }
 
+func TestStreamAssistantReplyPreservesWhitespaceBetweenLeadingThinkBlocks(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Content: "<think>step 1</think>\n"},
+					{Content: "<think>step 2</think>\nFinal answer"},
+				},
+				finishReason: "stop",
+			},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	var events []StreamEvent
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if messages[1].ReasoningContent != "step 1\nstep 2" {
+		t.Fatalf("expected leading think block whitespace to be preserved, got %q", messages[1].ReasoningContent)
+	}
+	if messages[1].Content != "\nFinal answer" {
+		t.Fatalf("expected remaining content to keep its leading newline, got %q", messages[1].Content)
+	}
+	doneEvent := findStreamEventByType(events, "done")
+	if doneEvent == nil || doneEvent.Message == nil {
+		t.Fatalf("expected done event with final message, got %#v", events)
+	}
+	if doneEvent.Message.ReasoningContent != "step 1\nstep 2" {
+		t.Fatalf("expected done event reasoning to preserve think block whitespace, got %#v", doneEvent.Message)
+	}
+	if doneEvent.Message.Content != "\nFinal answer" {
+		t.Fatalf("expected done event content to preserve visible leading newline, got %#v", doneEvent.Message)
+	}
+}
+
 func TestStreamAssistantReplyCancelsAfterDetachTimeout(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 

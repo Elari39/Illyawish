@@ -9,6 +9,7 @@ import {
   createProviderForm,
   defaultBaseURLForProviderFormat,
   hasProviderFormErrors,
+  mergeNewProviderFormWithFallback,
   normalizeProviderFormat,
   normalizeModelEntries,
   resolveProviderEditorState,
@@ -95,15 +96,24 @@ export function useProviderSettings({
     async function fetchProviderState() {
       try {
         setIsLoadingProviders(true)
+        const previousState = providerStateRef.current
         const nextState = await providerApi.list()
         if (cancelled) {
           return
         }
         providerStateRef.current = nextState
         setProviderState(nextState)
-        applyResolvedProviderEditor(
-          resolveProviderEditorState(nextState, providerEditorModeRef.current),
-        )
+        if (providerEditorModeRef.current.type === 'auto') {
+          applyResolvedProviderEditor(
+            resolveProviderEditorState(nextState, providerEditorModeRef.current),
+          )
+        } else if (providerEditorModeRef.current.type === 'new') {
+          setProviderForm((previous) => mergeNewProviderFormWithFallback(
+            previous,
+            previousState?.fallback,
+            nextState.fallback,
+          ))
+        }
       } catch (error) {
         if (cancelled) {
           return

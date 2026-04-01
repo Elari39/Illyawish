@@ -9,6 +9,7 @@ import {
   formatAttachmentSize,
   formatMessageTimestamp,
   getDisplayMessageParts,
+  joinReasoningAndContentForCopy,
   isImageAttachment,
 } from '../utils'
 import { ReasoningPanel } from './reasoning-panel'
@@ -71,15 +72,10 @@ function MessageBubbleComponent({
       return message.content
     }
 
-    if (!displayParts.reasoningContent) {
-      return displayContent
-    }
-
-    if (!displayContent) {
-      return displayParts.reasoningContent
-    }
-
-    return `${displayParts.reasoningContent}\n\n${displayContent}`
+    return joinReasoningAndContentForCopy(
+      displayParts.reasoningContent,
+      displayContent,
+    )
   }, [displayContent, displayParts.reasoningContent, isUser, message.content])
   const imageAttachments = useMemo(() => (
     message.attachments.filter((attachment) => isImageAttachment(attachment))

@@ -109,6 +109,9 @@ func splitLeadingReasoningContent(raw string) splitReasoningContentResult {
 		remaining := raw[index:]
 		switch {
 		case strings.HasPrefix(remaining, thinkTagOpen):
+			if consumedLeadingThink && whitespaceStart < index {
+				reasoning.WriteString(raw[whitespaceStart:index])
+			}
 			consumedLeadingThink = true
 			index += len(thinkTagOpen)
 
@@ -123,6 +126,9 @@ func splitLeadingReasoningContent(raw string) splitReasoningContentResult {
 			reasoning.WriteString(raw[index : index+closeIndex])
 			index += closeIndex + len(thinkTagClose)
 		case isPotentialThinkPrefix(remaining):
+			if consumedLeadingThink && whitespaceStart < index {
+				reasoning.WriteString(raw[whitespaceStart:index])
+			}
 			return splitReasoningContentResult{
 				reasoning: reasoning.String(),
 			}

@@ -130,15 +130,7 @@ export function getMessageCopyText(
   message: Pick<Message, 'role' | 'content' | 'reasoningContent'>,
 ) {
   const parts = getDisplayMessageParts(message)
-  if (!parts.reasoningContent) {
-    return parts.content
-  }
-
-  if (!parts.content) {
-    return parts.reasoningContent
-  }
-
-  return `${parts.reasoningContent}\n\n${parts.content}`
+  return joinReasoningAndContentForCopy(parts.reasoningContent, parts.content)
 }
 
 export function getReasoningPreview(reasoningContent: string, maxLines = 2) {
@@ -206,6 +198,22 @@ export function formatReasoningDuration(durationMs: number) {
   return `${minutes}m ${String(seconds).padStart(2, '0')}s`
 }
 
+export function joinReasoningAndContentForCopy(
+  reasoningContent: string,
+  content: string,
+) {
+  if (!reasoningContent) {
+    return content
+  }
+
+  const normalizedContent = content.replace(/^(?:[ \t]*\r?\n)+/, '')
+  if (!normalizedContent) {
+    return reasoningContent
+  }
+
+  return `${reasoningContent}\n\n${normalizedContent}`
+}
+
 export function findLatestMessageByRole(
   messages: Message[],
   role: Message['role'],
@@ -265,6 +273,9 @@ function splitLeadingThinkBlock(content: string) {
     }
 
     if (content.startsWith('<think>', index)) {
+      if (consumedLeadingThink && whitespaceStart < index) {
+        reasoningContent += content.slice(whitespaceStart, index)
+      }
       consumedLeadingThink = true
       index += '<think>'.length
       const closeIndex = content.indexOf('</think>', index)

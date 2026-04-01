@@ -68,6 +68,41 @@ export function createProviderFormErrors(): ProviderFormErrors {
   }
 }
 
+function areModelListsEqual(left: string[], right: string[]) {
+  return left.length === right.length &&
+    left.every((value, index) => value === right[index])
+}
+
+export function mergeNewProviderFormWithFallback(
+  currentForm: ProviderFormState,
+  previousFallback?: ProviderState['fallback'],
+  nextFallback?: ProviderState['fallback'],
+) {
+  const previousForm = createProviderForm(previousFallback)
+  const nextForm = createProviderForm(nextFallback)
+
+  return {
+    ...currentForm,
+    format:
+      currentForm.format === previousForm.format
+        ? nextForm.format
+        : currentForm.format,
+    baseURL:
+      currentForm.baseURL === previousForm.baseURL
+        ? nextForm.baseURL
+        : currentForm.baseURL,
+    models:
+      areModelListsEqual(currentForm.models, previousForm.models)
+        ? nextForm.models
+        : currentForm.models,
+    defaultModel:
+      currentForm.defaultModel === previousForm.defaultModel
+        ? nextForm.defaultModel
+        : currentForm.defaultModel,
+    errors: currentForm.errors,
+  }
+}
+
 export function resolveProviderEditorState(
   providerState: ProviderState,
   preferredMode: ProviderEditorMode,

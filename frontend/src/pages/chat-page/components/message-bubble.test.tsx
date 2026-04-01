@@ -321,6 +321,42 @@ describe('MessageBubble', () => {
     expect(writeText).toHaveBeenCalledWith('step 1\nstep 2\nstep 3\n\nFinal answer')
   })
 
+  it('normalizes copy output for legacy reasoning blocks separated by blank lines', async () => {
+    writeText.mockResolvedValue(undefined)
+
+    render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 231,
+            conversationId: '1',
+            role: 'assistant',
+            content: '<think>step 1</think>\n<think>step 2</think>\nFinal answer',
+            attachments: [],
+            status: 'completed',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith('step 1\nstep 2\n\nFinal answer')
+  })
+
   it('expands completed reasoning on demand and keeps it expanded across rerenders for the same message', () => {
     const { rerender } = render(
       <TestProviders>

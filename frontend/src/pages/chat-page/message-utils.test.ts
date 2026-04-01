@@ -115,6 +115,15 @@ describe('getDisplayMessageParts', () => {
     })
   })
 
+  it('preserves newlines between leading think blocks for legacy assistant messages', () => {
+    expect(getDisplayMessageParts(createMessage(13, 'assistant', 'completed', {
+      content: '<think>step 1</think>\n<think>step 2</think>\nVisible answer',
+    }))).toEqual({
+      reasoningContent: 'step 1\nstep 2',
+      content: '\nVisible answer',
+    })
+  })
+
   it('does not split think tags for non-assistant messages', () => {
     expect(getDisplayMessageParts(createMessage(12, 'user', 'completed', {
       content: '<think>literal</think>question',
@@ -137,6 +146,12 @@ describe('getMessageCopyText', () => {
     expect(getMessageCopyText(createMessage(21, 'assistant', 'completed', {
       content: '<think>legacy reasoning</think>final answer',
     }))).toBe('legacy reasoning\n\nfinal answer')
+  })
+
+  it('keeps step boundaries when copy output falls back to multiple leading think blocks', () => {
+    expect(getMessageCopyText(createMessage(22, 'assistant', 'completed', {
+      content: '<think>step 1</think>\n<think>step 2</think>\nfinal answer',
+    }))).toBe('step 1\nstep 2\n\nfinal answer')
   })
 })
 
