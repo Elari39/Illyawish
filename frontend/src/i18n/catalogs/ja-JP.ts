@@ -456,6 +456,8 @@ export const jaJPMessages = {
     'message.copy': 'コピー',
     'message.copied': 'コピー済み',
     'message.code': 'コード',
+    'message.wrapCode': '折り返し',
+    'message.unwrapCode': '折り返し解除',
 
     'prompt.renameConversation': '会話名を変更',
     'confirm.deleteConversation': 'この会話を完全に削除しますか？',

@@ -421,6 +421,8 @@ export const zhCNMessages = {
     'message.copy': '复制',
     'message.copied': '已复制',
     'message.code': '代码',
+    'message.wrapCode': '强制换行',
+    'message.unwrapCode': '取消换行',
 
     'prompt.renameConversation': '重命名会话',
     'confirm.deleteConversation': '确定永久删除这个会话吗？',

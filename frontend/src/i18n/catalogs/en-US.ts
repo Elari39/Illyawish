@@ -463,6 +463,8 @@ export const enUSMessages = {
   'message.copy': 'Copy',
   'message.copied': 'Copied',
   'message.code': 'code',
+  'message.wrapCode': 'Wrap lines',
+  'message.unwrapCode': 'Unwrap lines',
 
   'prompt.renameConversation': 'Rename conversation',
   'confirm.deleteConversation': 'Delete this conversation permanently?',

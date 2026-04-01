@@ -403,6 +403,12 @@ button {
   padding: 0.65rem 0.85rem 0.65rem 1rem;
 }
 
+.markdown-code__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .markdown-code__label {
   overflow: hidden;
   color: rgba(255, 255, 255, 0.72);
@@ -414,9 +420,55 @@ button {
   white-space: nowrap;
 }
 
+.markdown-code__viewport {
+  position: relative;
+  overflow-x: auto;
+  cursor: auto;
+}
+
+.markdown-code.is-overflowing .markdown-code__viewport {
+  cursor: grab;
+}
+
+.markdown-code.is-dragging .markdown-code__viewport {
+  cursor: grabbing;
+}
+
+.markdown-code__viewport--wrapped {
+  overflow-x: hidden;
+}
+
+.markdown-code__edge {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 2.75rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.markdown-code__edge.is-visible {
+  opacity: 1;
+}
+
+.markdown-code__edge--left {
+  left: 0;
+  float: left;
+  margin-right: -2.75rem;
+  background: linear-gradient(90deg, rgba(30, 30, 28, 0.94), rgba(30, 30, 28, 0));
+}
+
+.markdown-code__edge--right {
+  right: 0;
+  float: right;
+  margin-left: -2.75rem;
+  background: linear-gradient(270deg, rgba(30, 30, 28, 0.94), rgba(30, 30, 28, 0));
+}
+
 .markdown-code__pre {
   margin: 0;
-  overflow-x: auto;
   padding: 1rem;
 }
 
@@ -430,6 +482,17 @@ button {
   font-size: 0.9rem;
   line-height: 1.75;
   white-space: pre;
+}
+
+.markdown-code.is-wrapped .markdown-code__pre code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+body.is-dragging-code-block {
+  user-select: none;
 }
 
 .markdown .hljs {
