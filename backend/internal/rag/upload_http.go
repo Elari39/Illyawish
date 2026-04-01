@@ -8,7 +8,6 @@ import (
 
 	"backend/internal/attachment"
 	"backend/internal/auth"
-	"backend/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -32,28 +31,36 @@ func (h *Handler) UploadKnowledgeDocuments(c *gin.Context) {
 		return
 	}
 
-	documents := make([]knowledgeDocumentDTO, 0, len(files))
+	inputs := make([]CreateKnowledgeDocumentInput, 0, len(files))
 	for _, fileHeader := range files {
-		document, err := h.createKnowledgeDocumentFromUpload(c, user.ID, spaceID, fileHeader)
+		input, err := prepareKnowledgeDocumentUploadInput(fileHeader)
 		if err != nil {
 			handleError(c, err)
 			return
 		}
-		documents = append(documents, toKnowledgeDocumentDTO(*document))
+		inputs = append(inputs, input)
+	}
+
+	created, err := h.documents.CreateDocumentsBatch(c.Request.Context(), user.ID, spaceID, inputs)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	documents := make([]knowledgeDocumentDTO, 0, len(created))
+	for _, document := range created {
+		documents = append(documents, toKnowledgeDocumentDTO(document))
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"documents": documents})
 }
 
-func (h *Handler) createKnowledgeDocumentFromUpload(
-	c *gin.Context,
-	userID uint,
-	spaceID uint,
+func prepareKnowledgeDocumentUploadInput(
 	fileHeader *multipart.FileHeader,
-) (*models.KnowledgeDocument, error) {
+) (CreateKnowledgeDocumentInput, error) {
 	prepared, err := prepareKnowledgeUploadFile(fileHeader)
 	if err != nil {
-		return nil, err
+		return CreateKnowledgeDocumentInput{}, err
 	}
 
 	title := fileHeader.Filename
@@ -61,12 +68,12 @@ func (h *Handler) createKnowledgeDocumentFromUpload(
 		title = "attachment"
 	}
 
-	return h.documents.CreateDocument(c.Request.Context(), userID, spaceID, CreateKnowledgeDocumentInput{
+	return CreateKnowledgeDocumentInput{
 		Title:      title,
 		SourceType: SourceTypeAttachment,
 		MIMEType:   prepared.MIMEType,
 		Content:    prepared.Content,
-	})
+	}, nil
 }
 
 func (h *Handler) ReplaceKnowledgeDocumentFile(c *gin.Context) {

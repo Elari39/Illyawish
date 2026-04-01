@@ -50,6 +50,21 @@ const documents: Record<number, KnowledgeDocument[]> = {
       createdAt: '2026-03-26T09:08:00Z',
       updatedAt: '2026-03-26T09:08:00Z',
     },
+    {
+      id: 3,
+      userId: 3,
+      knowledgeSpaceId: 11,
+      title: 'Release notes URL',
+      sourceType: 'url',
+      sourceUri: 'https://old.example.com',
+      mimeType: '',
+      content: 'Old fetched body',
+      status: 'ready',
+      chunkCount: 1,
+      lastIndexedAt: '2026-03-26T09:08:00Z',
+      createdAt: '2026-03-26T09:08:00Z',
+      updatedAt: '2026-03-26T09:08:00Z',
+    },
   ],
 }
 
@@ -193,6 +208,33 @@ describe('KnowledgeSettingsTab', () => {
 
     await waitFor(() => {
       expect(replaceKnowledgeDocumentFile).toHaveBeenCalled()
+    })
+  })
+
+  it('omits stale content when only a URL document source changes', async () => {
+    const updateKnowledgeDocument = vi.fn().mockResolvedValue(documents[11][2])
+
+    renderKnowledgeSettingsTab({
+      knowledgeDocuments: documents,
+      updateKnowledgeDocument,
+    })
+
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Knowledge space' }), {
+      target: { value: '11' },
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit document' })[2]!)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Source URL' }), {
+      target: { value: 'https://new.example.com' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save document' }))
+
+    await waitFor(() => {
+      expect(updateKnowledgeDocument).toHaveBeenCalledWith(11, 3, {
+        title: 'Release notes URL',
+        sourceUri: 'https://new.example.com',
+        content: undefined,
+      })
     })
   })
 

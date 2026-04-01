@@ -1,8 +1,12 @@
 import { getAdminRoleLabel, getAdminStatusLabel } from '../../../i18n/admin'
 import type { I18nContextValue } from '../../../i18n/context'
 import { formatDateTime } from '../../../lib/utils'
-import type { AdminUser, CreateUserPayload } from '../../../types/chat'
-import { updateDraft, type UserDraft } from '../admin-page-helpers'
+import type { AdminUser } from '../../../types/chat'
+import {
+  updateDraft,
+  type CreateUserFormState,
+  type UserDraft,
+} from '../admin-page-helpers'
 import { LabeledInput, LabeledSelect } from './admin-form-fields'
 
 export function AdminUsersTab({
@@ -19,14 +23,14 @@ export function AdminUsersTab({
   onSaveUser,
   onResetPassword,
 }: {
-  createUserForm: CreateUserPayload
+  createUserForm: CreateUserFormState
   sortedUsers: AdminUser[]
   userDrafts: Record<number, UserDraft>
   isCreatingUser: boolean
   isSavingUserId: number | null
   locale: string
   t: I18nContextValue['t']
-  setCreateUserForm: React.Dispatch<React.SetStateAction<CreateUserPayload>>
+  setCreateUserForm: React.Dispatch<React.SetStateAction<CreateUserFormState>>
   setUserDrafts: React.Dispatch<React.SetStateAction<Record<number, UserDraft>>>
   onCreateUser: (event: React.FormEvent<HTMLFormElement>) => Promise<void>
   onSaveUser: (userId: number) => Promise<void>
@@ -51,9 +55,9 @@ export function AdminUsersTab({
             <option value="active">{getAdminStatusLabel('active', t)}</option>
             <option value="disabled">{getAdminStatusLabel('disabled', t)}</option>
           </LabeledSelect>
-          <LabeledInput label={t('admin.field.maxConversations')} placeholder={t('admin.unlimited')} value={String(createUserForm.maxConversations ?? '')} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, maxConversations: value === '' ? null : Number(value) }))} />
-          <LabeledInput label={t('admin.field.maxAttachmentsPerMessage')} placeholder={t('admin.unlimited')} value={String(createUserForm.maxAttachmentsPerMessage ?? '')} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, maxAttachmentsPerMessage: value === '' ? null : Number(value) }))} />
-          <LabeledInput label={t('admin.field.dailyMessageLimit')} placeholder={t('admin.unlimited')} value={String(createUserForm.dailyMessageLimit ?? '')} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, dailyMessageLimit: value === '' ? null : Number(value) }))} />
+          <LabeledInput label={t('admin.field.maxConversations')} placeholder={t('admin.unlimited')} value={createUserForm.maxConversations} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, maxConversations: value }))} />
+          <LabeledInput label={t('admin.field.maxAttachmentsPerMessage')} placeholder={t('admin.unlimited')} value={createUserForm.maxAttachmentsPerMessage} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, maxAttachmentsPerMessage: value }))} />
+          <LabeledInput label={t('admin.field.dailyMessageLimit')} placeholder={t('admin.unlimited')} value={createUserForm.dailyMessageLimit} onChange={(value) => setCreateUserForm((previous) => ({ ...previous, dailyMessageLimit: value }))} />
         </div>
 
         <button className="mt-5 w-full rounded-xl bg-[var(--brand)] px-4 py-3 text-sm font-medium text-white disabled:opacity-60" disabled={isCreatingUser} type="submit">

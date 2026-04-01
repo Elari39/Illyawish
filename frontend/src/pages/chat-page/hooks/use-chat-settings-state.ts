@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { chatApi } from '../../../lib/api'
@@ -58,13 +64,51 @@ export function useChatSettingsState({
   const [conversationTagsDraft, setConversationTagsDraft] = useState('')
   const [knowledgeSpaceIdsDraft, setKnowledgeSpaceIdsDraft] = useState<number[]>([])
   const [pendingKnowledgeSpaceIds, setPendingKnowledgeSpaceIds] = useState<number[]>([])
+  const activeConversationIdRef = useRef(activeConversationId)
+  const knowledgeSpaceIdsDraftRef = useRef<number[]>([])
+  const knowledgeSpaceRequestVersionsRef = useRef<Record<number, number>>({})
+  const pendingKnowledgeSpaceCountsRef = useRef<Record<number, number>>({})
+
+  const setKnowledgeSpaceIdsDraftState = useCallback((value: SetStateAction<number[]>) => {
+    setKnowledgeSpaceIdsDraft((previous) => {
+      const nextValue = typeof value === 'function' ? value(previous) : value
+      knowledgeSpaceIdsDraftRef.current = nextValue
+      return nextValue
+    })
+  }, [])
+
+  const syncPendingKnowledgeSpaceIds = useCallback(() => {
+    setPendingKnowledgeSpaceIds(
+      Object.entries(pendingKnowledgeSpaceCountsRef.current)
+        .filter(([, count]) => count > 0)
+        .map(([id]) => Number(id))
+        .sort((left, right) => left - right),
+    )
+  }, [])
+
+  const updatePendingKnowledgeSpace = useCallback((spaceId: number, delta: number) => {
+    const nextCount = (pendingKnowledgeSpaceCountsRef.current[spaceId] ?? 0) + delta
+    if (nextCount <= 0) {
+      delete pendingKnowledgeSpaceCountsRef.current[spaceId]
+    } else {
+      pendingKnowledgeSpaceCountsRef.current[spaceId] = nextCount
+    }
+    syncPendingKnowledgeSpaceIds()
+  }, [syncPendingKnowledgeSpaceIds])
 
   const applyDraftSnapshot = useCallback((snapshot: ChatSettingsDraftSnapshot) => {
     setSettingsDraft(snapshot.settingsDraft)
     setConversationFolderDraft(snapshot.conversationFolderDraft)
     setConversationTagsDraft(snapshot.conversationTagsDraft)
-    setKnowledgeSpaceIdsDraft(snapshot.knowledgeSpaceIdsDraft)
-  }, [])
+    setKnowledgeSpaceIdsDraftState(snapshot.knowledgeSpaceIdsDraft)
+  }, [setKnowledgeSpaceIdsDraftState])
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId
+    knowledgeSpaceRequestVersionsRef.current = {}
+    pendingKnowledgeSpaceCountsRef.current = {}
+    setPendingKnowledgeSpaceIds([])
+  }, [activeConversationId])
 
   useEffect(() => {
     let cancelled = false
@@ -245,6 +289,8 @@ export function useChatSettingsState({
         conversationTagsDraft: newConversationTagsInput,
       }),
     )
+    knowledgeSpaceRequestVersionsRef.current = {}
+    pendingKnowledgeSpaceCountsRef.current = {}
     setPendingKnowledgeSpaceIds([])
   }, [
     chatSettings,
@@ -257,43 +303,63 @@ export function useChatSettingsState({
   const toggleKnowledgeSpace = useCallback(async (spaceId: number) => {
     setChatError(null)
 
-    const previousIds = currentConversation?.knowledgeSpaceIds ?? knowledgeSpaceIdsDraft
+    const previousIds = knowledgeSpaceIdsDraftRef.current
     const nextIds = resolveKnowledgeSpaceToggle(previousIds, spaceId)
+    const requestVersion = (knowledgeSpaceRequestVersionsRef.current[spaceId] ?? 0) + 1
 
-    setKnowledgeSpaceIdsDraft(nextIds)
+    setKnowledgeSpaceIdsDraftState(nextIds)
 
     if (!activeConversationId || !currentConversation) {
       return
     }
 
-    setPendingKnowledgeSpaceIds((previous) =>
-      previous.includes(spaceId) ? previous : [...previous, spaceId],
-    )
+    const conversationId = activeConversationId
+    knowledgeSpaceRequestVersionsRef.current[spaceId] = requestVersion
+    updatePendingKnowledgeSpace(spaceId, 1)
 
     try {
-      const updatedConversation = await chatApi.updateConversation(activeConversationId, {
+      const updatedConversation = await chatApi.updateConversation(conversationId, {
         knowledgeSpaceIds: nextIds,
       })
-      syncConversationIntoList(updatedConversation)
-      setPendingConversation(updatedConversation)
-      setKnowledgeSpaceIdsDraft(
-        buildConversationDraftSnapshot(updatedConversation).knowledgeSpaceIdsDraft,
-      )
+      if (
+        activeConversationIdRef.current === conversationId &&
+        knowledgeSpaceRequestVersionsRef.current[spaceId] === requestVersion &&
+        haveSameKnowledgeSpaceIds(
+          updatedConversation.knowledgeSpaceIds ?? [],
+          knowledgeSpaceIdsDraftRef.current,
+        )
+      ) {
+        syncConversationIntoList(updatedConversation)
+        setPendingConversation(updatedConversation)
+        setKnowledgeSpaceIdsDraftState(
+          buildConversationDraftSnapshot(updatedConversation).knowledgeSpaceIdsDraft,
+        )
+      }
     } catch (error) {
-      setKnowledgeSpaceIdsDraft(previousIds)
-      setChatError(
-        error instanceof Error ? error.message : t('error.saveSettings'),
-      )
+      if (
+        activeConversationIdRef.current === conversationId &&
+        knowledgeSpaceRequestVersionsRef.current[spaceId] === requestVersion
+      ) {
+        setKnowledgeSpaceIdsDraftState((currentIds) =>
+          rollbackKnowledgeSpaceToggle(currentIds, previousIds, spaceId),
+        )
+        setChatError(
+          error instanceof Error ? error.message : t('error.saveSettings'),
+        )
+      }
     } finally {
-      setPendingKnowledgeSpaceIds((previous) => previous.filter((id) => id !== spaceId))
+      if (activeConversationIdRef.current === conversationId) {
+        updatePendingKnowledgeSpace(spaceId, -1)
+      }
     }
   }, [
     activeConversationId,
     currentConversation,
-    knowledgeSpaceIdsDraft,
     setChatError,
+    setKnowledgeSpaceIdsDraftState,
     syncConversationIntoList,
     t,
+    updatePendingKnowledgeSpace,
   ])
 
   return {
@@ -307,7 +373,7 @@ export function useChatSettingsState({
     setChatSettingsDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
-    setKnowledgeSpaceIdsDraft,
+    setKnowledgeSpaceIdsDraft: setKnowledgeSpaceIdsDraftState,
     setPendingConversation,
     setSettingsDraft,
     applyChatSettings,
@@ -318,4 +384,41 @@ export function useChatSettingsState({
     resetSettingsDraft,
     syncSettingsDraft,
   }
+}
+
+function haveSameKnowledgeSpaceIds(left: number[], right: number[]) {
+  if (left.length !== right.length) {
+    return false
+  }
+  return left.every((value, index) => value === right[index])
+}
+
+function rollbackKnowledgeSpaceToggle(
+  currentIds: number[],
+  previousIds: number[],
+  spaceId: number,
+) {
+  if (!previousIds.includes(spaceId)) {
+    return currentIds.filter((id) => id !== spaceId)
+  }
+  if (currentIds.includes(spaceId)) {
+    return currentIds
+  }
+
+  let insertAt = 0
+  for (const previousId of previousIds) {
+    if (previousId === spaceId) {
+      break
+    }
+    const currentIndex = currentIds.indexOf(previousId)
+    if (currentIndex >= 0) {
+      insertAt = currentIndex + 1
+    }
+  }
+
+  return [
+    ...currentIds.slice(0, insertAt),
+    spaceId,
+    ...currentIds.slice(insertAt),
+  ]
 }

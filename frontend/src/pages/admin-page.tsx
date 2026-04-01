@@ -227,12 +227,12 @@ export function AdminPage() {
             />
           ) : null}
 
-          {!data.isLoading && activeTab === 'policy' && data.workspacePolicy ? (
+          {!data.isLoading && activeTab === 'policy' && data.workspacePolicyDraft ? (
             <AdminPolicyTab
-              workspacePolicy={data.workspacePolicy}
+              workspacePolicyDraft={data.workspacePolicyDraft}
               isSavingPolicy={data.isSavingPolicy}
               t={t}
-              setWorkspacePolicy={data.setWorkspacePolicy}
+              setWorkspacePolicyDraft={data.setWorkspacePolicyDraft}
               onSavePolicy={data.handleSavePolicy}
             />
           ) : null}

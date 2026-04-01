@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"backend/internal/network"
 )
 
 type ToolExecutor struct {
@@ -38,7 +40,12 @@ func (e *ToolExecutor) TransformText(_ context.Context, content string) (string,
 }
 
 func (e *ToolExecutor) doRequest(ctx context.Context, method string, url string, headers map[string]string, body string) (string, error) {
-	request, err := http.NewRequestWithContext(ctx, method, strings.TrimSpace(url), strings.NewReader(body))
+	parsed, err := network.ValidatePublicHTTPURL(ctx, url)
+	if err != nil {
+		return "", err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, method, parsed.String(), strings.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("build request: %w", err)
 	}

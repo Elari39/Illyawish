@@ -162,14 +162,7 @@ export function useKnowledgeSettingsState({
       const updated = await updateKnowledgeDocument(
         documentSpaceId,
         editingDocument.id,
-        {
-          title: documentDraft.title,
-          sourceUri:
-            documentDraft.sourceMode === 'url'
-              ? documentDraft.sourceUri || undefined
-              : undefined,
-          content: documentDraft.content,
-        },
+        buildKnowledgeDocumentUpdatePayload(editingDocument, documentDraft),
       )
       if (!updated) {
         return
@@ -281,4 +274,31 @@ export function createEmptyDocumentDraft(
     attachmentFiles: [] as File[],
     replacementFile: null as File | null,
   }
+}
+
+function buildKnowledgeDocumentUpdatePayload(
+  editingDocument: KnowledgeDocument,
+  documentDraft: ReturnType<typeof createEmptyDocumentDraft>,
+): UpdateKnowledgeDocumentPayload {
+  const payload: UpdateKnowledgeDocumentPayload = {
+    title: documentDraft.title,
+    sourceUri:
+      documentDraft.sourceMode === 'url'
+        ? documentDraft.sourceUri || undefined
+        : undefined,
+  }
+
+  if (documentDraft.sourceMode !== 'url') {
+    payload.content = documentDraft.content
+    return payload
+  }
+
+  const sourceURIChanged =
+    documentDraft.sourceUri.trim() !== editingDocument.sourceUri.trim()
+  const contentChanged = documentDraft.content !== editingDocument.content
+  if (!sourceURIChanged || contentChanged) {
+    payload.content = documentDraft.content
+  }
+
+  return payload
 }

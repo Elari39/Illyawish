@@ -60,21 +60,23 @@ func (s *KnowledgeDocumentService) CreateDocument(
 	spaceID uint,
 	input CreateKnowledgeDocumentInput,
 ) (*models.KnowledgeDocument, error) {
-	if _, err := s.spaces.getSpace(userID, spaceID); err != nil {
+	documents, err := s.CreateDocumentsBatch(ctx, userID, spaceID, []CreateKnowledgeDocumentInput{input})
+	if err != nil {
 		return nil, err
 	}
+	return &documents[0], nil
+}
 
-	document := &models.KnowledgeDocument{
-		UserID:           userID,
-		KnowledgeSpaceID: spaceID,
-		Title:            strings.TrimSpace(input.Title),
-		SourceType:       normalizeSourceType(input.SourceType),
-		SourceURI:        strings.TrimSpace(input.SourceURI),
-		MIMEType:         strings.TrimSpace(input.MIMEType),
-		Content:          strings.TrimSpace(input.Content),
-		Status:           "ready",
+func (s *KnowledgeDocumentService) CreateDocumentsBatch(
+	ctx context.Context,
+	userID uint,
+	spaceID uint,
+	inputs []CreateKnowledgeDocumentInput,
+) ([]models.KnowledgeDocument, error) {
+	if len(inputs) == 0 {
+		return []models.KnowledgeDocument{}, nil
 	}
-	if err := validateDocumentForCreate(document); err != nil {
+	if _, err := s.spaces.getSpace(userID, spaceID); err != nil {
 		return nil, err
 	}
 
@@ -82,10 +84,48 @@ func (s *KnowledgeDocumentService) CreateDocument(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.persistDocumentIndex(ctx, document, provider, false); err != nil {
+
+	prepared := make([]preparedDocumentIndex, 0, len(inputs))
+	documents := make([]models.KnowledgeDocument, 0, len(inputs))
+	for _, input := range inputs {
+		document := &models.KnowledgeDocument{
+			UserID:           userID,
+			KnowledgeSpaceID: spaceID,
+			Title:            strings.TrimSpace(input.Title),
+			SourceType:       normalizeSourceType(input.SourceType),
+			SourceURI:        strings.TrimSpace(input.SourceURI),
+			MIMEType:         strings.TrimSpace(input.MIMEType),
+			Content:          strings.TrimSpace(input.Content),
+			Status:           "ready",
+		}
+		if err := validateDocumentForCreate(document); err != nil {
+			return nil, err
+		}
+
+		index, err := s.prepareDocumentIndex(ctx, document, provider)
+		if err != nil {
+			return nil, err
+		}
+		prepared = append(prepared, index)
+		documents = append(documents, *document)
+	}
+
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		for index := range prepared {
+			if err := persistPreparedDocumentIndex(tx, &prepared[index], false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	return document, nil
+
+	documents = documents[:0]
+	for _, index := range prepared {
+		documents = append(documents, *index.document)
+	}
+	return documents, nil
 }
 
 func (s *KnowledgeDocumentService) UpdateDocument(
@@ -344,10 +384,31 @@ func (s *KnowledgeDocumentService) persistDocumentIndex(
 	provider ProviderConfig,
 	replaceExisting bool,
 ) error {
+	index, err := s.prepareDocumentIndex(ctx, document, provider)
+	if err != nil {
+		return err
+	}
+
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return persistPreparedDocumentIndex(tx, &index, replaceExisting)
+	})
+}
+
+type preparedDocumentIndex struct {
+	document *models.KnowledgeDocument
+	chunks   []string
+	vectors  [][]float32
+}
+
+func (s *KnowledgeDocumentService) prepareDocumentIndex(
+	ctx context.Context,
+	document *models.KnowledgeDocument,
+	provider ProviderConfig,
+) (preparedDocumentIndex, error) {
 	chunks := chunkText(document.Content)
 	vectors, err := s.embedder.EmbedTexts(ctx, chunks, provider)
 	if err != nil {
-		return fmt.Errorf("embed knowledge chunks: %w", err)
+		return preparedDocumentIndex{}, fmt.Errorf("embed knowledge chunks: %w", err)
 	}
 
 	now := time.Now().UTC()
@@ -355,41 +416,52 @@ func (s *KnowledgeDocumentService) persistDocumentIndex(
 	document.LastIndexedAt = &now
 	document.Status = "ready"
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if replaceExisting {
-			if err := tx.Where("knowledge_document_id = ?", document.ID).Delete(&models.KnowledgeChunk{}).Error; err != nil {
-				return fmt.Errorf("delete knowledge chunks: %w", err)
-			}
-			if err := tx.Save(document).Error; err != nil {
-				return fmt.Errorf("update knowledge document: %w", err)
-			}
-		} else if err := tx.Create(document).Error; err != nil {
-			return fmt.Errorf("create knowledge document: %w", err)
-		}
+	return preparedDocumentIndex{
+		document: document,
+		chunks:   chunks,
+		vectors:  vectors,
+	}, nil
+}
 
-		chunkRows := make([]models.KnowledgeChunk, 0, len(chunks))
-		for index, chunk := range chunks {
-			vector := []float32{}
-			if index < len(vectors) {
-				vector = vectors[index]
-			}
-			chunkRows = append(chunkRows, models.KnowledgeChunk{
-				UserID:              document.UserID,
-				KnowledgeSpaceID:    document.KnowledgeSpaceID,
-				KnowledgeDocumentID: document.ID,
-				Position:            index,
-				Content:             chunk,
-				Vector:              vector,
-			})
+func persistPreparedDocumentIndex(
+	tx *gorm.DB,
+	index *preparedDocumentIndex,
+	replaceExisting bool,
+) error {
+	document := index.document
+	if replaceExisting {
+		if err := tx.Where("knowledge_document_id = ?", document.ID).Delete(&models.KnowledgeChunk{}).Error; err != nil {
+			return fmt.Errorf("delete knowledge chunks: %w", err)
 		}
-		if len(chunkRows) == 0 {
-			return nil
+		if err := tx.Save(document).Error; err != nil {
+			return fmt.Errorf("update knowledge document: %w", err)
 		}
-		if err := tx.Create(&chunkRows).Error; err != nil {
-			return fmt.Errorf("create knowledge chunks: %w", err)
+	} else if err := tx.Create(document).Error; err != nil {
+		return fmt.Errorf("create knowledge document: %w", err)
+	}
+
+	chunkRows := make([]models.KnowledgeChunk, 0, len(index.chunks))
+	for position, chunk := range index.chunks {
+		vector := []float32{}
+		if position < len(index.vectors) {
+			vector = index.vectors[position]
 		}
+		chunkRows = append(chunkRows, models.KnowledgeChunk{
+			UserID:              document.UserID,
+			KnowledgeSpaceID:    document.KnowledgeSpaceID,
+			KnowledgeDocumentID: document.ID,
+			Position:            position,
+			Content:             chunk,
+			Vector:              vector,
+		})
+	}
+	if len(chunkRows) == 0 {
 		return nil
-	})
+	}
+	if err := tx.Create(&chunkRows).Error; err != nil {
+		return fmt.Errorf("create knowledge chunks: %w", err)
+	}
+	return nil
 }
 
 func (s *KnowledgeDocumentService) resolveProvider(userID uint, override ProviderConfig) (ProviderConfig, error) {

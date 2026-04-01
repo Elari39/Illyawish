@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"backend/internal/auth"
+	"backend/internal/models"
+	"backend/internal/network"
 
 	"github.com/gin-gonic/gin"
 )
@@ -94,8 +96,16 @@ func (h *Handler) CreateKnowledgeDocument(c *gin.Context) {
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if strings.TrimSpace(req.SourceType) == SourceTypeURL && content == "" && strings.TrimSpace(req.SourceURI) != "" && h.fetcher != nil {
-		fetched, err := h.fetcher.FetchURL(c.Request.Context(), req.SourceURI)
+	sourceType := strings.TrimSpace(req.SourceType)
+	sourceURI := strings.TrimSpace(req.SourceURI)
+	if sourceType == SourceTypeURL && sourceURI != "" {
+		if _, err := network.ValidatePublicHTTPURL(c.Request.Context(), sourceURI); err != nil {
+			handleError(c, requestError{message: err.Error()})
+			return
+		}
+	}
+	if sourceType == SourceTypeURL && content == "" && sourceURI != "" && h.fetcher != nil {
+		fetched, err := h.fetcher.FetchURL(c.Request.Context(), sourceURI)
 		if err != nil {
 			handleError(c, err)
 			return
@@ -128,25 +138,87 @@ func (h *Handler) UpdateKnowledgeDocument(c *gin.Context) {
 		return
 	}
 
-	if req.Content != nil && req.SourceURI != nil && strings.TrimSpace(*req.Content) == "" && strings.TrimSpace(*req.SourceURI) != "" && h.fetcher != nil {
-		fetched, err := h.fetcher.FetchURL(c.Request.Context(), strings.TrimSpace(*req.SourceURI))
-		if err != nil {
-			handleError(c, err)
-			return
-		}
-		req.Content = &fetched
+	existing, err := h.documents.getDocument(user.ID, spaceID, documentID)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	content, err := h.resolveKnowledgeDocumentUpdateContent(c, existing, req)
+	if err != nil {
+		handleError(c, err)
+		return
 	}
 
 	document, err := h.documents.UpdateDocument(c.Request.Context(), user.ID, spaceID, documentID, UpdateKnowledgeDocumentInput{
 		Title:     req.Title,
 		SourceURI: req.SourceURI,
-		Content:   req.Content,
+		Content:   content,
 	})
 	if err != nil {
 		handleError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"document": toKnowledgeDocumentDTO(*document)})
+}
+
+func (h *Handler) resolveKnowledgeDocumentUpdateContent(
+	c *gin.Context,
+	existing *models.KnowledgeDocument,
+	req updateKnowledgeDocumentRequest,
+) (*string, error) {
+	if existing.SourceType != SourceTypeURL {
+		return req.Content, nil
+	}
+
+	trimmedSourceURI := existing.SourceURI
+	sourceURIChanged := false
+	if req.SourceURI != nil {
+		trimmedSourceURI = strings.TrimSpace(*req.SourceURI)
+		sourceURIChanged = trimmedSourceURI != strings.TrimSpace(existing.SourceURI)
+		if trimmedSourceURI != "" {
+			if _, err := network.ValidatePublicHTTPURL(c.Request.Context(), trimmedSourceURI); err != nil {
+				return nil, requestError{message: err.Error()}
+			}
+		}
+	}
+
+	if !sourceURIChanged {
+		if req.Content != nil && strings.TrimSpace(*req.Content) == "" && trimmedSourceURI != "" && h.fetcher != nil {
+			fetched, err := h.fetcher.FetchURL(c.Request.Context(), trimmedSourceURI)
+			if err != nil {
+				return nil, err
+			}
+			return &fetched, nil
+		}
+		return req.Content, nil
+	}
+
+	if trimmedSourceURI == "" || h.fetcher == nil {
+		return req.Content, nil
+	}
+	if shouldRefetchKnowledgeDocumentContent(existing, req.Content) {
+		fetched, err := h.fetcher.FetchURL(c.Request.Context(), trimmedSourceURI)
+		if err != nil {
+			return nil, err
+		}
+		return &fetched, nil
+	}
+	return req.Content, nil
+}
+
+func shouldRefetchKnowledgeDocumentContent(
+	existing *models.KnowledgeDocument,
+	content *string,
+) bool {
+	if content == nil {
+		return true
+	}
+	trimmedContent := strings.TrimSpace(*content)
+	if trimmedContent == "" {
+		return true
+	}
+	return trimmedContent == strings.TrimSpace(existing.Content)
 }
 
 func (h *Handler) DeleteKnowledgeDocument(c *gin.Context) {

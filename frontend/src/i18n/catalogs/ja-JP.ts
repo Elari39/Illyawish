@@ -424,6 +424,8 @@ export const jaJPMessages = {
     'admin.feedback.passwordReset':
       '{{username}} のパスワードをリセットしました。',
     'admin.feedback.policyUpdated': 'ワークスペースポリシーを更新しました。',
+    'admin.validation.optionalPositiveInteger':
+      '1 以上の整数を入力するか、空欄のままにしてください。',
     'admin.feedback.attachmentsDeletedForUser':
       '{{username}} の添付ファイルを {{count}} 件削除しました。',
     'admin.feedback.attachmentsDeletedAll':

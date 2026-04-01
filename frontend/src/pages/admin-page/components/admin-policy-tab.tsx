@@ -1,19 +1,19 @@
 import { getAdminRoleLabel } from '../../../i18n/admin'
 import type { I18nContextValue } from '../../../i18n/context'
-import type { WorkspacePolicy } from '../../../types/chat'
+import type { WorkspacePolicyDraft } from '../admin-page-helpers'
 import { LabeledInput, LabeledSelect } from './admin-form-fields'
 
 export function AdminPolicyTab({
-  workspacePolicy,
+  workspacePolicyDraft,
   isSavingPolicy,
   t,
-  setWorkspacePolicy,
+  setWorkspacePolicyDraft,
   onSavePolicy,
 }: {
-  workspacePolicy: WorkspacePolicy
+  workspacePolicyDraft: WorkspacePolicyDraft
   isSavingPolicy: boolean
   t: I18nContextValue['t']
-  setWorkspacePolicy: React.Dispatch<React.SetStateAction<WorkspacePolicy | null>>
+  setWorkspacePolicyDraft: React.Dispatch<React.SetStateAction<WorkspacePolicyDraft | null>>
   onSavePolicy: (event: React.FormEvent<HTMLFormElement>) => Promise<void>
 }) {
   return (
@@ -26,8 +26,8 @@ export function AdminPolicyTab({
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <LabeledSelect
           label={t('admin.policy.defaultRole')}
-          value={workspacePolicy.defaultUserRole}
-          onChange={(value) => setWorkspacePolicy((previous) => previous ? { ...previous, defaultUserRole: value as 'admin' | 'member' } : previous)}
+          value={workspacePolicyDraft.defaultUserRole}
+          onChange={(value) => setWorkspacePolicyDraft((previous) => previous ? { ...previous, defaultUserRole: value as 'admin' | 'member' } : previous)}
         >
           <option value="member">{getAdminRoleLabel('member', t)}</option>
           <option value="admin">{getAdminRoleLabel('admin', t)}</option>
@@ -35,20 +35,20 @@ export function AdminPolicyTab({
         <LabeledInput
           label={t('admin.policy.defaultMaxConversations')}
           placeholder={t('admin.unlimited')}
-          value={String(workspacePolicy.defaultUserMaxConversations ?? '')}
-          onChange={(value) => setWorkspacePolicy((previous) => previous ? { ...previous, defaultUserMaxConversations: value === '' ? null : Number(value) } : previous)}
+          value={workspacePolicyDraft.defaultUserMaxConversations}
+          onChange={(value) => setWorkspacePolicyDraft((previous) => previous ? { ...previous, defaultUserMaxConversations: value } : previous)}
         />
         <LabeledInput
           label={t('admin.policy.defaultMaxAttachments')}
           placeholder={t('admin.unlimited')}
-          value={String(workspacePolicy.defaultUserMaxAttachmentsPerMessage ?? '')}
-          onChange={(value) => setWorkspacePolicy((previous) => previous ? { ...previous, defaultUserMaxAttachmentsPerMessage: value === '' ? null : Number(value) } : previous)}
+          value={workspacePolicyDraft.defaultUserMaxAttachmentsPerMessage}
+          onChange={(value) => setWorkspacePolicyDraft((previous) => previous ? { ...previous, defaultUserMaxAttachmentsPerMessage: value } : previous)}
         />
         <LabeledInput
           label={t('admin.policy.defaultDailyMessageLimit')}
           placeholder={t('admin.unlimited')}
-          value={String(workspacePolicy.defaultUserDailyMessageLimit ?? '')}
-          onChange={(value) => setWorkspacePolicy((previous) => previous ? { ...previous, defaultUserDailyMessageLimit: value === '' ? null : Number(value) } : previous)}
+          value={workspacePolicyDraft.defaultUserDailyMessageLimit}
+          onChange={(value) => setWorkspacePolicyDraft((previous) => previous ? { ...previous, defaultUserDailyMessageLimit: value } : previous)}
         />
       </div>
 

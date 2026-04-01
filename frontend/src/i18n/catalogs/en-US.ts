@@ -431,6 +431,8 @@ export const enUSMessages = {
   'admin.feedback.userUpdated': 'Updated {{username}}.',
   'admin.feedback.passwordReset': 'Password reset for {{username}}.',
   'admin.feedback.policyUpdated': 'Workspace policy updated.',
+  'admin.validation.optionalPositiveInteger':
+    'Enter a whole number greater than 0 or leave the field blank.',
   'admin.feedback.attachmentsDeletedForUser':
     'Deleted {{count}} attachments for {{username}}.',
   'admin.feedback.attachmentsDeletedAll':

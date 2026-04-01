@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import type {
   AdminUser,
   AuditLogListParams,
-  CreateUserPayload,
+  WorkspacePolicy,
 } from '../../types/chat'
 
 export type AdminTab = 'users' | 'audit' | 'policy' | 'attachments'
@@ -24,14 +24,31 @@ export interface UserDraft {
   dailyMessageLimit: string
 }
 
-export const emptyCreateUserForm: CreateUserPayload = {
+export interface CreateUserFormState {
+  username: string
+  password: string
+  role: 'admin' | 'member'
+  status: 'active' | 'disabled'
+  maxConversations: string
+  maxAttachmentsPerMessage: string
+  dailyMessageLimit: string
+}
+
+export interface WorkspacePolicyDraft {
+  defaultUserRole: 'admin' | 'member'
+  defaultUserMaxConversations: string
+  defaultUserMaxAttachmentsPerMessage: string
+  defaultUserDailyMessageLimit: string
+}
+
+export const emptyCreateUserForm: CreateUserFormState = {
   username: '',
   password: '',
   role: 'member',
   status: 'active',
-  maxConversations: null,
-  maxAttachmentsPerMessage: null,
-  dailyMessageLimit: null,
+  maxConversations: '',
+  maxAttachmentsPerMessage: '',
+  dailyMessageLimit: '',
 }
 
 export const defaultAuditFilters: AuditFilters = {
@@ -54,6 +71,26 @@ export function toUserDraft(user: AdminUser): UserDraft {
   }
 }
 
+export function toWorkspacePolicyDraft(
+  policy: WorkspacePolicy,
+): WorkspacePolicyDraft {
+  return {
+    defaultUserRole: policy.defaultUserRole,
+    defaultUserMaxConversations:
+      policy.defaultUserMaxConversations == null
+        ? ''
+        : String(policy.defaultUserMaxConversations),
+    defaultUserMaxAttachmentsPerMessage:
+      policy.defaultUserMaxAttachmentsPerMessage == null
+        ? ''
+        : String(policy.defaultUserMaxAttachmentsPerMessage),
+    defaultUserDailyMessageLimit:
+      policy.defaultUserDailyMessageLimit == null
+        ? ''
+        : String(policy.defaultUserDailyMessageLimit),
+  }
+}
+
 export function updateDraft(
   userId: number,
   key: keyof UserDraft,
@@ -69,12 +106,42 @@ export function updateDraft(
   }))
 }
 
-export function parseNullableNumber(value: number | string | null) {
-  if (value == null || value === '') {
-    return null
+export function parseOptionalPositiveInteger(value: string) {
+  if (value === '') {
+    return { isValid: true, value: null as number | null }
   }
-  const parsed = typeof value === 'number' ? value : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  if (!/^\d+$/.test(value)) {
+    return { isValid: false, value: null as number | null }
+  }
+
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return { isValid: false, value: null as number | null }
+  }
+
+  return { isValid: true, value: parsed }
+}
+
+export function parseOptionalPositiveIntegerFields<TField extends string>(
+  values: Record<TField, string>,
+) {
+  const parsedValues = {} as Record<TField, number | null>
+  const invalidFields: TField[] = []
+
+  for (const [field, value] of Object.entries(values) as Array<[TField, string]>) {
+    const result = parseOptionalPositiveInteger(value)
+    if (!result.isValid) {
+      invalidFields.push(field)
+      continue
+    }
+    parsedValues[field] = result.value
+  }
+
+  return {
+    isValid: invalidFields.length === 0,
+    invalidFields,
+    values: parsedValues,
+  }
 }
 
 export function buildAuditLogListParams(filters: AuditFilters): AuditLogListParams {

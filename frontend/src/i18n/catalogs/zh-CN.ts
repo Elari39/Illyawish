@@ -392,6 +392,7 @@ export const zhCNMessages = {
     'admin.feedback.userUpdated': '已更新 {{username}}。',
     'admin.feedback.passwordReset': '已重置 {{username}} 的密码。',
     'admin.feedback.policyUpdated': '工作区策略已更新。',
+    'admin.validation.optionalPositiveInteger': '请输入大于 0 的整数，或留空表示不限。',
     'admin.feedback.attachmentsDeletedForUser': '已删除 {{username}} 的 {{count}} 个附件。',
     'admin.feedback.attachmentsDeletedAll': '已删除整个工作区的 {{count}} 个附件。',
     'admin.role.admin': '管理员',

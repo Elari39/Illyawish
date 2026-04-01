@@ -281,4 +281,55 @@ describe('AdminPage', () => {
       expect(purgeAttachmentsSpy).toHaveBeenCalledWith({ scope: 'all' })
     })
   })
+
+  it('keeps invalid create-user limits as raw text and blocks submission', async () => {
+    const createUserSpy = vi.spyOn(adminApi, 'createUser')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Username'), {
+      target: { value: 'luna' },
+    })
+    fireEvent.change(screen.getByLabelText('Password'), {
+      target: { value: 'moonlight123' },
+    })
+
+    const maxConversationsInput = screen.getByLabelText('Max conversations') as HTMLInputElement
+    fireEvent.change(maxConversationsInput, {
+      target: { value: '1e' },
+    })
+
+    expect(maxConversationsInput.value).toBe('1e')
+    expect(screen.queryByDisplayValue('NaN')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create user' }))
+
+    await waitFor(() => {
+      expect(createUserSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  it('blocks saving workspace defaults when a limit is not a positive whole number', async () => {
+    const updateWorkspacePolicySpy = vi.spyOn(adminApi, 'updateWorkspacePolicy')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace Policy' }))
+    const maxConversationsInput =
+      screen.getByLabelText('Default max conversations') as HTMLInputElement
+    fireEvent.change(maxConversationsInput, {
+      target: { value: ' 5' },
+    })
+
+    expect(maxConversationsInput.value).toBe(' 5')
+    fireEvent.click(screen.getByRole('button', { name: 'Save workspace policy' }))
+
+    await waitFor(() => {
+      expect(updateWorkspacePolicySpy).not.toHaveBeenCalled()
+    })
+  })
 })

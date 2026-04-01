@@ -209,6 +209,121 @@ describe('useChatSettingsState', () => {
     expect(setChatError).toHaveBeenCalledWith('knowledge update failed')
   })
 
+  it('keeps consecutive knowledge-space toggles cumulative while earlier saves are still pending', async () => {
+    const syncConversationIntoList = vi.fn()
+    let resolveFirstUpdate: ((conversation: Conversation) => void) | null = null
+    let resolveSecondUpdate: ((conversation: Conversation) => void) | null = null
+
+    chatApiMock.updateConversation
+      .mockImplementationOnce(
+        () => new Promise<Conversation>((resolve) => {
+          resolveFirstUpdate = resolve
+        }),
+      )
+      .mockImplementationOnce(
+        () => new Promise<Conversation>((resolve) => {
+          resolveSecondUpdate = resolve
+        }),
+      )
+
+    const { result } = renderHook(() =>
+      useChatSettingsState(createOptions({ syncConversationIntoList })),
+    )
+
+    act(() => {
+      result.current.syncSettingsDraft()
+    })
+
+    act(() => {
+      void result.current.toggleKnowledgeSpace(9)
+    })
+    act(() => {
+      void result.current.toggleKnowledgeSpace(10)
+    })
+
+    expect(result.current.knowledgeSpaceIdsDraft).toEqual([7, 8, 9, 10])
+    expect(chatApiMock.updateConversation).toHaveBeenNthCalledWith(1, 'conversation-1', {
+      knowledgeSpaceIds: [7, 8, 9],
+    })
+    expect(chatApiMock.updateConversation).toHaveBeenNthCalledWith(2, 'conversation-1', {
+      knowledgeSpaceIds: [7, 8, 9, 10],
+    })
+
+    const secondConversation = createConversation({
+      knowledgeSpaceIds: [7, 8, 9, 10],
+    })
+    await act(async () => {
+      resolveSecondUpdate?.(secondConversation)
+      await Promise.resolve()
+    })
+
+    expect(result.current.knowledgeSpaceIdsDraft).toEqual([7, 8, 9, 10])
+    expect(result.current.pendingConversation).toEqual(secondConversation)
+
+    const firstConversation = createConversation({
+      knowledgeSpaceIds: [7, 8, 9],
+    })
+    await act(async () => {
+      resolveFirstUpdate?.(firstConversation)
+      await Promise.resolve()
+    })
+
+    expect(result.current.knowledgeSpaceIdsDraft).toEqual([7, 8, 9, 10])
+    expect(syncConversationIntoList).toHaveBeenCalledTimes(1)
+    expect(syncConversationIntoList).toHaveBeenCalledWith(secondConversation)
+    expect(result.current.pendingConversation).toEqual(secondConversation)
+  })
+
+  it('rolls back only the failed knowledge-space mutation when requests finish out of order', async () => {
+    const setChatError = vi.fn()
+    let resolveSecondUpdate: ((conversation: Conversation) => void) | null = null
+    let rejectFirstUpdate: ((error: Error) => void) | null = null
+
+    chatApiMock.updateConversation
+      .mockImplementationOnce(
+        () => new Promise<Conversation>((_, reject) => {
+          rejectFirstUpdate = reject
+        }),
+      )
+      .mockImplementationOnce(
+        () => new Promise<Conversation>((resolve) => {
+          resolveSecondUpdate = resolve
+        }),
+      )
+
+    const { result } = renderHook(() =>
+      useChatSettingsState(createOptions({ setChatError })),
+    )
+
+    act(() => {
+      result.current.syncSettingsDraft()
+    })
+
+    act(() => {
+      void result.current.toggleKnowledgeSpace(9)
+    })
+    act(() => {
+      void result.current.toggleKnowledgeSpace(10)
+    })
+
+    await act(async () => {
+      resolveSecondUpdate?.(createConversation({
+        knowledgeSpaceIds: [7, 8, 9, 10],
+      }))
+      await Promise.resolve()
+    })
+
+    expect(result.current.knowledgeSpaceIdsDraft).toEqual([7, 8, 9, 10])
+
+    await act(async () => {
+      rejectFirstUpdate?.(new Error('first update failed'))
+      await Promise.resolve()
+    })
+
+    expect(result.current.knowledgeSpaceIdsDraft).toEqual([7, 8, 10])
+    expect(setChatError).toHaveBeenCalledWith('first update failed')
+  })
+
   it('keeps new-chat knowledge toggles local until a conversation exists', async () => {
     const { result } = renderHook(() =>
       useChatSettingsState(createOptions({
