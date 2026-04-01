@@ -175,7 +175,6 @@ export function parseReasoningContent(content: string): ParsedReasoning {
     return { paragraphs: [], preview: '', totalSteps: 0 }
   }
 
-  // Split by single newlines, filter empty lines
   const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -184,20 +183,14 @@ export function parseReasoningContent(content: string): ParsedReasoning {
   if (lines.length === 0) {
     return {
       paragraphs: [trimmed],
-      preview: trimmed.slice(0, 100),
+      preview: getReasoningPreview(trimmed),
       totalSteps: 1,
     }
   }
 
-  // Build preview: first line + second line (like original getReasoningPreview)
-  const preview =
-    lines.length === 1
-      ? lines[0].slice(0, 100)
-      : `${lines[0]}\n${lines[1]}…`
-
   return {
     paragraphs: lines,
-    preview,
+    preview: getReasoningPreview(lines.join('\n')),
     totalSteps: lines.length,
   }
 }

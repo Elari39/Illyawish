@@ -7,6 +7,7 @@ import {
   getMessageCopyText,
   getReasoningPreview,
   mergePreservedMessages,
+  parseReasoningContent,
 } from './message-utils'
 
 function createMessage(
@@ -142,6 +143,24 @@ describe('getMessageCopyText', () => {
 describe('getReasoningPreview', () => {
   it('keeps the first two lines and truncates the rest with an ellipsis', () => {
     expect(getReasoningPreview('step 1\nstep 2\nstep 3')).toBe('step 1\nstep 2…')
+  })
+})
+
+describe('parseReasoningContent', () => {
+  it('keeps a two-line preview without adding an ellipsis', () => {
+    expect(parseReasoningContent('step 1\nstep 2')).toEqual({
+      paragraphs: ['step 1', 'step 2'],
+      preview: 'step 1\nstep 2',
+      totalSteps: 2,
+    })
+  })
+
+  it('ignores blank lines when counting steps', () => {
+    expect(parseReasoningContent('step 1\n\nstep 2\nstep 3')).toEqual({
+      paragraphs: ['step 1', 'step 2', 'step 3'],
+      preview: 'step 1\nstep 2…',
+      totalSteps: 3,
+    })
   })
 })
 

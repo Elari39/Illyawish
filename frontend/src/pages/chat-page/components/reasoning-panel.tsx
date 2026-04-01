@@ -47,17 +47,6 @@ export function ReasoningPanel({
     isReasoningActive || status === 'failed' || status === 'cancelled'
   const isExpanded = manualExpanded ?? autoExpanded
 
-  // Determine current step for preview
-  const currentStep = useMemo(() => {
-    if (!reasoningContent.trim()) return 1
-    // Count paragraphs that have content
-    const content = reasoningContent.trim()
-    const paragraphs = content.split(/\n\s*\n/)
-    const filledParagraphs = paragraphs.filter((p) => p.trim().length > 0)
-    return Math.min(filledParagraphs.length, parsed.totalSteps || 1)
-  }, [reasoningContent, parsed.totalSteps])
-
-  // Thinking phase label
   const phaseLabel = useMemo(() => {
     if (!isReasoningActive) {
       return durationLabel ? t('message.reasoning') : ''
@@ -73,6 +62,16 @@ export function ReasoningPanel({
     if (!isReasoningActive) return ''
     return 'reasoning-border-flow'
   }, [isReasoningActive])
+
+  const stepStates = useMemo(() => (
+    parsed.paragraphs.map((_, index) => {
+      if (!isReasoningActive) {
+        return 'complete'
+      }
+
+      return index === parsed.paragraphs.length - 1 ? 'active' : 'complete'
+    })
+  ), [isReasoningActive, parsed.paragraphs])
 
   return (
     <section
@@ -112,7 +111,7 @@ export function ReasoningPanel({
 
               {/* Preview text when collapsed */}
               {!isExpanded && parsed.preview ? (
-                <p className="mt-2 truncate text-[13px] leading-6 text-[var(--muted-foreground)]">
+                <p className="mt-2 line-clamp-2 whitespace-pre-line break-words text-[13px] leading-6 text-[var(--muted-foreground)]">
                   {parsed.preview}
                 </p>
               ) : null}
@@ -151,12 +150,12 @@ export function ReasoningPanel({
                 <div key={i} className="flex items-start gap-3">
                   <span
                     className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                      i < currentStep - 1
-                        ? 'bg-[var(--brand)]'
-                        : i === currentStep - 1
-                          ? 'bg-[var(--brand)] animate-pulse'
-                          : 'bg-[var(--line)]'
+                      stepStates[i] === 'active'
+                        ? 'bg-[var(--brand)] animate-pulse'
+                        : 'bg-[var(--brand)]'
                     }`}
+                    data-state={stepStates[i]}
+                    data-testid="reasoning-step-indicator"
                     aria-hidden="true"
                   />
                   <p className="whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--muted-foreground)]">
