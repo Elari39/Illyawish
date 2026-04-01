@@ -1,19 +1,37 @@
 import type { I18nContextValue } from '../../i18n/context'
-import type { ConversationSettings, ProviderPreset, ProviderState } from '../../types/chat'
+import type {
+  ConversationSettings,
+  ProviderFormat,
+  ProviderPreset,
+  ProviderState,
+} from '../../types/chat'
 import type {
   ProviderEditorMode,
   ProviderFormErrors,
   ProviderFormState,
 } from './types'
-import { OPENAI_COMPATIBLE_DEFAULT_BASE_URL } from './types'
+import { PROVIDER_DEFAULT_BASE_URLS } from './types'
+
+export function normalizeProviderFormat(value?: string): ProviderFormat {
+  if (value === 'anthropic' || value === 'gemini') {
+    return value
+  }
+  return 'openai'
+}
+
+export function defaultBaseURLForProviderFormat(format: ProviderFormat) {
+  return PROVIDER_DEFAULT_BASE_URLS[format]
+}
 
 export function createProviderForm(
   fallback?: ProviderState['fallback'],
   preset?: ProviderPreset | null,
 ): ProviderFormState {
   if (preset) {
+    const format = normalizeProviderFormat(preset.format)
     return {
       name: preset.name,
+      format,
       baseURL: preset.baseURL,
       apiKey: '',
       models: resolveProviderModelDraft(preset.models, preset.defaultModel),
@@ -30,10 +48,13 @@ export function createProviderForm(
     fallbackModels,
     fallback?.defaultModel ?? '',
   )
+  const fallbackFormat = normalizeProviderFormat(fallback?.format)
 
   return {
     name: '',
-    baseURL: fallback?.baseURL || OPENAI_COMPATIBLE_DEFAULT_BASE_URL,
+    format: fallbackFormat,
+    baseURL:
+      fallback?.baseURL || defaultBaseURLForProviderFormat(fallbackFormat),
     apiKey: '',
     models: fallbackModels.length > 0 ? fallbackModels : [''],
     defaultModel: fallbackDefaultModel,
@@ -199,7 +220,8 @@ export function resolveChatModelOptions(
 
 export function hasProviderFormErrors(errors: ProviderFormErrors) {
   return Boolean(
-    errors.name ||
+    errors.format ||
+      errors.name ||
       errors.baseURL ||
       errors.apiKey ||
       errors.models ||
@@ -217,6 +239,10 @@ export function validateProviderForm(
 ) {
   const errors = createProviderFormErrors()
   const { requireAPIKey, t } = options
+
+  if (!form.format) {
+    errors.format = t('settings.validationProviderFormatRequired')
+  }
 
   if (!form.name.trim()) {
     errors.name = t('settings.validationPresetNameRequired')

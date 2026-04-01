@@ -4,6 +4,7 @@ export const enUSMessages = {
   'common.loading': 'Loading...',
   'common.cancel': 'Cancel',
   'common.close': 'Close',
+  'common.error': 'Error',
   'common.reset': 'Reset',
   'common.edit': 'Edit',
   'common.delete': 'Delete',
@@ -117,7 +118,7 @@ export const enUSMessages = {
   'settings.historyDescription':
     'Control which conversations appear in history and manage bulk history actions without crowding the sidebar.',
   'settings.providerDescription':
-    'Manage your saved OpenAI-compatible provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
+    'Manage your saved AI provider presets. The active preset is used for new requests, while the server fallback from data/app.json remains available.',
   'settings.chatTab': 'Chat',
   'settings.historyTab': 'History',
   'settings.providerTab': 'AI Provider',
@@ -208,7 +209,7 @@ export const enUSMessages = {
   'settings.key': 'Key',
   'settings.setActive': 'Set active',
   'settings.noSavedPresets':
-    'No saved provider presets yet. Create one to use a custom OpenAI-compatible endpoint.',
+    'No saved provider presets yet. Create one to use a custom AI provider endpoint.',
   'settings.serverFallback': 'Server fallback',
   'settings.serverReady': 'Ready to use when no preset is active.',
   'settings.serverNotConfigured': 'Not configured in data/app.json.',
@@ -217,9 +218,13 @@ export const enUSMessages = {
   'settings.editPreset': 'Edit preset',
   'settings.newPreset': 'New preset',
   'settings.presetDescription':
-    'Save a model, base URL, and API key for any OpenAI-compatible service.',
+    'Save a format, model, base URL, and API key for any supported AI provider.',
+  'settings.providerFormat': 'Provider format',
+  'settings.providerFormatOpenAI': 'openai',
+  'settings.providerFormatAnthropic': 'anthropic',
+  'settings.providerFormatGemini': 'gemini',
   'settings.presetName': 'Preset name',
-  'settings.presetNamePlaceholder': 'My OpenAI-compatible provider',
+  'settings.presetNamePlaceholder': 'My AI provider',
   'settings.modelList': 'Available models',
   'settings.modelListDescription':
     'Add one or more models for this provider, then choose which one is the default.',
@@ -251,6 +256,7 @@ export const enUSMessages = {
   'settings.validationPresetNameRequired': 'Enter a preset name',
   'settings.validationBaseUrlRequired': 'Enter a base URL',
   'settings.validationApiKeyRequired': 'Enter an API key',
+  'settings.validationProviderFormatRequired': 'Choose a provider format',
   'settings.validationModelRequired': 'Enter a model name',
   'settings.validationModelListRequired': 'Add at least one model',
   'settings.validationDefaultModelRequired': 'Choose a default model',

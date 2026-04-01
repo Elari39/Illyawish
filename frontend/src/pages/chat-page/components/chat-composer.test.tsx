@@ -329,4 +329,41 @@ describe('ChatComposer', () => {
     expect(onToggleExpanded).toHaveBeenCalledWith(false)
     scrollHeightGetter.mockRestore()
   })
+
+  it('renders chat errors as a dismissible alert', () => {
+    const onDismissChatError = vi.fn()
+
+    render(
+      <TestProviders>
+        <ChatComposer
+          composerFormRef={createRef()}
+          fileInputRef={createRef()}
+          composerValue=""
+          selectedAttachments={[]}
+          editingMessageId={null}
+          hasPendingUploads={false}
+          canSubmitComposer={false}
+          isSending={false}
+          chatError={{
+            id: 1,
+            message: 'start model stream: error, status code: 404, status: 404 Not Found, message: 模型不存在',
+          }}
+          composerIsComposingRef={{ current: false }}
+          onComposerChange={vi.fn()}
+          onCancelEdit={vi.fn()}
+          onDismissChatError={onDismissChatError}
+          onStopGeneration={vi.fn()}
+          onSubmit={vi.fn()}
+          onFilesSelected={vi.fn()}
+          onRemoveAttachment={vi.fn()}
+        />
+      </TestProviders>,
+    )
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('start model stream: error, status code: 404, status: 404 Not Found, message: 模型不存在')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+    expect(onDismissChatError).toHaveBeenCalledTimes(1)
+  })
 })

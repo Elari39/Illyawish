@@ -2,15 +2,16 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { vi } from 'vitest'
 
 import { TestProviders } from '../../../test/test-providers'
-import type { ProviderState } from '../../../types/chat'
+import type { ProviderPreset, ProviderState } from '../../../types/chat'
 import { createProviderFormErrors } from '../utils'
 import { ProviderSettingsTab } from './provider-settings-tab'
 
 describe('ProviderSettingsTab', () => {
   it('keeps preset edit, activate, and delete actions isolated', () => {
-    const preset = {
+    const preset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -26,6 +27,7 @@ describe('ProviderSettingsTab', () => {
       currentSource: 'none',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -51,6 +53,7 @@ describe('ProviderSettingsTab', () => {
           onStartNewProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: '',
             apiKey: '',
             models: [''],
@@ -98,6 +101,7 @@ describe('ProviderSettingsTab', () => {
           onStartNewProvider={vi.fn()}
           providerForm={{
             name: 'OpenAI',
+            format: 'openai',
             baseURL: 'https://api.openai.com/v1',
             apiKey: '',
             models: ['gpt-4.1-mini'],
@@ -108,6 +112,7 @@ describe('ProviderSettingsTab', () => {
             presets: [{
               id: 7,
               name: 'OpenAI',
+              format: 'openai',
               baseURL: 'https://api.openai.com/v1',
               hasApiKey: true,
               apiKeyHint: 'sk-1...2345',
@@ -121,6 +126,7 @@ describe('ProviderSettingsTab', () => {
             currentSource: 'none',
             fallback: {
               available: false,
+              format: 'openai',
               baseURL: '',
               models: [],
               defaultModel: '',
@@ -153,6 +159,7 @@ describe('ProviderSettingsTab', () => {
           onStartNewProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: 'https://secondary.example.com/v1',
             apiKey: '',
             models: ['model-b'],
@@ -163,6 +170,7 @@ describe('ProviderSettingsTab', () => {
             presets: [{
               id: 7,
               name: 'OpenAI',
+              format: 'openai',
               baseURL: 'https://api.openai.com/v1',
               hasApiKey: true,
               apiKeyHint: 'sk-1...2345',
@@ -176,6 +184,7 @@ describe('ProviderSettingsTab', () => {
             currentSource: 'preset',
             fallback: {
               available: false,
+              format: 'openai',
               baseURL: '',
               models: [],
               defaultModel: '',
@@ -213,6 +222,7 @@ describe('ProviderSettingsTab', () => {
           onStartNewProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: 'https://secondary.example.com/v1',
             apiKey: '',
             models: ['model-b'],
@@ -225,6 +235,7 @@ describe('ProviderSettingsTab', () => {
             currentSource: 'none',
             fallback: {
               available: false,
+              format: 'openai',
               baseURL: '',
               models: [],
               defaultModel: '',
@@ -260,6 +271,7 @@ describe('ProviderSettingsTab', () => {
           onStartNewProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: '',
             apiKey: '',
             models: [''],
@@ -270,6 +282,7 @@ describe('ProviderSettingsTab', () => {
             presets: Array.from({ length: 15 }, (_, index) => ({
               id: index + 1,
               name: `Preset ${index + 1}`,
+              format: 'openai' as const,
               baseURL: `https://provider-${index + 1}.example.com/v1`,
               hasApiKey: true,
               apiKeyHint: `sk-${index + 1}`,
@@ -283,6 +296,7 @@ describe('ProviderSettingsTab', () => {
             currentSource: 'preset',
             fallback: {
               available: false,
+              format: 'openai',
               baseURL: '',
               models: [],
               defaultModel: '',
@@ -296,5 +310,61 @@ describe('ProviderSettingsTab', () => {
     expect(screen.getByTestId('provider-presets-column')).toHaveClass('min-h-0')
     expect(screen.getByTestId('provider-presets-list')).toHaveClass('overflow-y-auto')
     expect(screen.getByTestId('provider-editor-column')).toHaveClass('overflow-y-auto')
+  })
+
+  it('shows the provider format selector and current preset format', () => {
+    render(
+      <TestProviders>
+        <ProviderSettingsTab
+          canReuseActiveAPIKey={false}
+          editingProviderId={7}
+          isLoadingProviders={false}
+          isSavingProvider={false}
+          onActivateProvider={vi.fn()}
+          onDeleteProvider={vi.fn()}
+          onEditProvider={vi.fn()}
+          onProviderFieldChange={vi.fn()}
+          onProviderModelsChange={vi.fn()}
+          onResetProvider={vi.fn()}
+          onStartNewProvider={vi.fn()}
+          providerForm={{
+            name: 'Claude',
+            format: 'anthropic',
+            baseURL: 'https://api.anthropic.com/v1',
+            apiKey: '',
+            models: ['claude-sonnet-4-20250514'],
+            defaultModel: 'claude-sonnet-4-20250514',
+            errors: createProviderFormErrors(),
+          }}
+          providerState={{
+            presets: [{
+              id: 7,
+              name: 'Claude',
+              format: 'anthropic',
+              baseURL: 'https://api.anthropic.com/v1',
+              hasApiKey: true,
+              apiKeyHint: 'sk-a...3456',
+              models: ['claude-sonnet-4-20250514'],
+              defaultModel: 'claude-sonnet-4-20250514',
+              isActive: true,
+              createdAt: '2026-03-26T00:00:00Z',
+              updatedAt: '2026-03-26T00:00:00Z',
+            }],
+            activePresetId: 7,
+            currentSource: 'preset',
+            fallback: {
+              available: false,
+              format: 'openai',
+              baseURL: '',
+              models: [],
+              defaultModel: '',
+            },
+          }}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByLabelText(/Provider format/i)).toHaveValue('anthropic')
+    expect(screen.getByText('anthropic')).toBeInTheDocument()
   })
 })

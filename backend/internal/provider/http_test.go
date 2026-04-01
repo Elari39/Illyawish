@@ -31,7 +31,7 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/ai/providers",
-		bytes.NewBufferString(`{"name":"OpenAI","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","models":["gpt-4.1-mini","gpt-4.1"],"defaultModel":"gpt-4.1-mini"}`),
+		bytes.NewBufferString(`{"format":"openai","name":"OpenAI","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","models":["gpt-4.1-mini","gpt-4.1"],"defaultModel":"gpt-4.1-mini"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Set("current_user", &models.User{ID: 1, Username: "tester"})
@@ -54,6 +54,9 @@ func TestCreateProviderCreatesPresetAndReturnsState(t *testing.T) {
 	}
 	if payload.Presets[0].HasAPIKey != true {
 		t.Fatalf("expected preset to report a stored API key, got %#v", payload.Presets[0])
+	}
+	if payload.Presets[0].Format != "openai" {
+		t.Fatalf("expected preset format openai, got %#v", payload.Presets[0])
 	}
 	if payload.Presets[0].APIKeyHint == "" {
 		t.Fatalf("expected API key hint in response, got %#v", payload.Presets[0])
@@ -111,6 +114,38 @@ func TestCreateProviderReusesActivePresetAPIKeyWhenRequested(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"name":"Secondary"`) {
 		t.Fatalf("expected created preset in response, got %s", recorder.Body.String())
+	}
+}
+
+func TestCreateProviderDefaultsMissingFormatToOpenAI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/ai/providers",
+		bytes.NewBufferString(`{"name":"Defaulted","baseURL":"https://api.openai.com/v1","apiKey":"sk-test","models":["gpt-4.1-mini"],"defaultModel":"gpt-4.1-mini"}`),
+	)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &models.User{ID: 1, Username: "tester"})
+
+	NewHandler(service).CreateProvider(ctx)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d with body %s", http.StatusCreated, recorder.Code, recorder.Body.String())
+	}
+
+	var payload ProviderStateDTO
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if payload.Presets[0].Format != "openai" {
+		t.Fatalf("expected default preset format openai, got %#v", payload.Presets[0])
 	}
 }
 
@@ -296,7 +331,7 @@ func TestTestProviderReturnsResolvedConfiguration(t *testing.T) {
 	ctx.Request = httptest.NewRequest(
 		http.MethodPost,
 		"/api/ai/providers/test",
-		bytes.NewBufferString(`{"baseURL":"https://api.openai.com/v1","apiKey":"sk-test","defaultModel":"gpt-4.1-mini"}`),
+		bytes.NewBufferString(`{"format":"anthropic","baseURL":"https://api.anthropic.com/v1","apiKey":"sk-test","defaultModel":"claude-sonnet-4-20250514"}`),
 	)
 	ctx.Request.Header.Set("Content-Type", "application/json")
 	ctx.Set("current_user", &models.User{ID: 1})
@@ -306,8 +341,11 @@ func TestTestProviderReturnsResolvedConfiguration(t *testing.T) {
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
-	if !strings.Contains(recorder.Body.String(), `"resolvedModel":"gpt-4.1-mini"`) {
+	if !strings.Contains(recorder.Body.String(), `"resolvedModel":"claude-sonnet-4-20250514"`) {
 		t.Fatalf("expected resolved model in response, got %s", recorder.Body.String())
+	}
+	if tester.lastConfig.Format != "anthropic" {
+		t.Fatalf("expected tested provider format anthropic, got %#v", tester.lastConfig)
 	}
 }
 

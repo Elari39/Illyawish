@@ -23,6 +23,7 @@ type Handler struct {
 type ProviderPresetDTO struct {
 	ID           uint     `json:"id"`
 	Name         string   `json:"name"`
+	Format       string   `json:"format"`
 	BaseURL      string   `json:"baseURL"`
 	HasAPIKey    bool     `json:"hasApiKey"`
 	APIKeyHint   string   `json:"apiKeyHint"`
@@ -35,6 +36,7 @@ type ProviderPresetDTO struct {
 
 type ProviderFallbackDTO struct {
 	Available    bool     `json:"available"`
+	Format       string   `json:"format"`
 	BaseURL      string   `json:"baseURL"`
 	Models       []string `json:"models"`
 	DefaultModel string   `json:"defaultModel"`
@@ -48,6 +50,7 @@ type ProviderStateDTO struct {
 }
 
 type createProviderRequest struct {
+	Format            string   `json:"format"`
 	Name              string   `json:"name"`
 	BaseURL           string   `json:"baseURL"`
 	APIKey            string   `json:"apiKey"`
@@ -57,6 +60,7 @@ type createProviderRequest struct {
 }
 
 type updateProviderRequest struct {
+	Format       *string   `json:"format"`
 	Name         *string   `json:"name"`
 	BaseURL      *string   `json:"baseURL"`
 	APIKey       *string   `json:"apiKey"`
@@ -66,6 +70,7 @@ type updateProviderRequest struct {
 
 type testProviderRequest struct {
 	ProviderID        *uint  `json:"providerId"`
+	Format            string `json:"format"`
 	BaseURL           string `json:"baseURL"`
 	APIKey            string `json:"apiKey"`
 	ReuseActiveAPIKey bool   `json:"reuseActiveApiKey"`
@@ -107,6 +112,7 @@ func (h *Handler) CreateProvider(c *gin.Context) {
 	}
 
 	preset, err := h.service.CreatePreset(user.ID, CreatePresetInput{
+		Format:            req.Format,
 		Name:              req.Name,
 		BaseURL:           req.BaseURL,
 		APIKey:            req.APIKey,
@@ -144,6 +150,7 @@ func (h *Handler) UpdateProvider(c *gin.Context) {
 	}
 
 	if _, err := h.service.UpdatePreset(user.ID, presetID, UpdatePresetInput{
+		Format:       req.Format,
 		Name:         req.Name,
 		BaseURL:      req.BaseURL,
 		APIKey:       req.APIKey,
@@ -203,6 +210,7 @@ func (h *Handler) TestProvider(c *gin.Context) {
 
 	result, err := h.service.TestPreset(c.Request.Context(), user.ID, TestPresetInput{
 		PresetID:          req.ProviderID,
+		Format:            req.Format,
 		BaseURL:           req.BaseURL,
 		APIKey:            req.APIKey,
 		ReuseActiveAPIKey: req.ReuseActiveAPIKey,
@@ -262,6 +270,7 @@ func (h *Handler) toProviderStateDTO(state *State) (ProviderStateDTO, error) {
 		CurrentSource:  state.CurrentSource,
 		Fallback: ProviderFallbackDTO{
 			Available:    state.Fallback.Available,
+			Format:       normalizeProviderFormat(state.Fallback.Format),
 			BaseURL:      state.Fallback.BaseURL,
 			Models:       state.Fallback.Models,
 			DefaultModel: state.Fallback.DefaultModel,
@@ -275,6 +284,7 @@ func (h *Handler) toProviderPresetDTO(
 	return ProviderPresetDTO{
 		ID:           preset.ID,
 		Name:         preset.Name,
+		Format:       normalizeProviderFormat(preset.Format),
 		BaseURL:      preset.BaseURL,
 		HasAPIKey:    preset.EncryptedAPIKey != "",
 		APIKeyHint:   preset.APIKeyHint,

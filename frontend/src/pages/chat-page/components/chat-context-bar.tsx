@@ -73,12 +73,14 @@ export function ChatContextBar({
     currentSelection.model !== '' &&
     (currentSelection.providerPresetId !== globalSelection.providerPresetId ||
       currentSelection.model !== globalSelection.model)
+  const selectedProviderModelOption =
+    providerModelOptions.find((option) => option.value === currentSelection.value) ?? null
 
   if (compact) {
     const showModelControl = compactVariant === 'all' || compactVariant === 'model'
-    const modelLabel = currentSelection.preset && currentSelection.model
-      ? `${currentSelection.preset.name} · ${currentSelection.model}`
-      : t('chatContext.noProviderOptions')
+    const modelLabel =
+      (selectedProviderModelOption?.label ?? currentSelection.model) ||
+      t('chatContext.noProviderOptions')
 
     return (
       <div className="flex items-center gap-0.5">

@@ -507,6 +507,7 @@ describe('ChatPage conversation navigation', () => {
       knowledgeSpaceIds: [],
       settings: {
         ...defaultSettings,
+        temperature: 1,
       },
     })
     expect(streamMessageMock).toHaveBeenCalledTimes(1)
@@ -621,6 +622,12 @@ describe('ChatPage conversation navigation', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location')).toHaveTextContent(chatPath(5))
     })
+    await waitFor(() => {
+      expect(
+        getConversationMessagesMock.mock.calls.filter(([conversationId]) => conversationId === '5'),
+      ).toHaveLength(2)
+    })
+    expect(await screen.findByText('provider unavailable')).toBeInTheDocument()
     expect(deleteConversationMock).not.toHaveBeenCalled()
   })
 
@@ -1225,6 +1232,7 @@ describe('ChatPage conversation navigation', () => {
         settings: {
           ...defaultSettings,
           systemPrompt: 'Draft session prompt',
+          temperature: 1,
         },
       }))
     })

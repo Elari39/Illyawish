@@ -35,6 +35,7 @@ func IsRequestError(err error) bool {
 
 type FallbackState struct {
 	Available    bool
+	Format       string
 	BaseURL      string
 	Models       []string
 	DefaultModel string
@@ -48,6 +49,7 @@ type State struct {
 }
 
 type CreatePresetInput struct {
+	Format            string
 	Name              string
 	BaseURL           string
 	APIKey            string
@@ -57,6 +59,7 @@ type CreatePresetInput struct {
 }
 
 type UpdatePresetInput struct {
+	Format       *string
 	Name         *string
 	BaseURL      *string
 	APIKey       *string
@@ -73,6 +76,7 @@ type ResolvedProvider struct {
 
 type TestPresetInput struct {
 	PresetID          *uint
+	Format            string
 	BaseURL           string
 	APIKey            string
 	ReuseActiveAPIKey bool
@@ -111,6 +115,7 @@ func NewService(db *gorm.DB, cfg *config.Config, tester providerTester) (*Servic
 	return &Service{
 		db: db,
 		fallback: llm.ProviderConfig{
+			Format:       normalizeProviderFormat(cfg.ProviderFormat),
 			BaseURL:      normalizeBaseURL(cfg.OpenAIBaseURL),
 			APIKey:       strings.TrimSpace(cfg.OpenAIAPIKey),
 			DefaultModel: strings.TrimSpace(cfg.Model),

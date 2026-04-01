@@ -2,6 +2,7 @@ package chat
 
 import (
 	"net/http"
+	"strconv"
 
 	"backend/internal/auth"
 
@@ -89,6 +90,35 @@ func (h *Handler) StreamMessage(c *gin.Context) {
 			user.ID,
 			conversation.ID,
 			req,
+			writeEvent,
+		)
+	})
+}
+
+func (h *Handler) ResumeStream(c *gin.Context) {
+	user := auth.CurrentUser(c)
+	conversation, err := h.conversationParam(c, user.ID)
+	if err != nil {
+		handleChatError(c, err)
+		return
+	}
+
+	afterSeq := 0
+	if rawAfterSeq := c.Query("afterSeq"); rawAfterSeq != "" {
+		parsedAfterSeq, err := strconv.Atoi(rawAfterSeq)
+		if err != nil || parsedAfterSeq < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid afterSeq"})
+			return
+		}
+		afterSeq = parsedAfterSeq
+	}
+
+	h.streamAction(c, func(writeEvent func(StreamEvent) error) error {
+		return h.service.ResumeActiveStream(
+			c.Request.Context(),
+			user.ID,
+			conversation.ID,
+			afterSeq,
 			writeEvent,
 		)
 	})

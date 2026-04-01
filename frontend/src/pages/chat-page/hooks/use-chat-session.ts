@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
 import type { Conversation } from '../../../types/chat'
@@ -50,6 +50,7 @@ export function useChatSession({
   locale,
 }: UseChatSessionOptions) {
   const activeGenerationRef = useRef<ActiveGenerationState | null>(null)
+  const skipNextConversationSyncRef = useRef<Conversation['id'] | null>(null)
   const nextGenerationIdRef = useRef(0)
   const activeConversationIdRef = useRef<Conversation['id'] | null>(null)
 
@@ -70,7 +71,6 @@ export function useChatSession({
     startEditingMessage,
   } = useChatComposerState({
     setChatError,
-    showToast,
     t,
   })
   const {
@@ -125,6 +125,7 @@ export function useChatSession({
     t,
     activeConversationIdRef,
     activeGenerationRef,
+    skipNextConversationSyncRef,
     messageViewportRef,
     clearEditingMessage,
     resetForNewChatSettings,
@@ -183,6 +184,7 @@ export function useChatSession({
     resetComposer,
     activeConversationIdRef,
     activeGenerationRef,
+    skipNextConversationSyncRef,
     nextGenerationIdRef,
     reconcileConversationState: history.reconcileConversationState,
     waitForConversationToSettle: history.waitForConversationToSettle,
@@ -193,6 +195,24 @@ export function useChatSession({
     !isSending &&
     !hasPendingUploads &&
     (composerValue.trim().length > 0 || selectedAttachments.length > 0)
+
+  useEffect(() => {
+    if (
+      !activeConversationId ||
+      isSending ||
+      latestAssistantMessage?.conversationId !== activeConversationId ||
+      latestAssistantMessage.status !== 'streaming'
+    ) {
+      return
+    }
+
+    void generation.handleResumeConversation(activeConversationId)
+  }, [
+    activeConversationId,
+    generation,
+    isSending,
+    latestAssistantMessage,
+  ])
 
   return {
     composerFormRef,

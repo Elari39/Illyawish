@@ -16,6 +16,7 @@ func handleChatError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "conversation or message not found"})
 	case errors.Is(err, ErrConversationBusy),
 		errors.Is(err, ErrNoActiveGeneration),
+		errors.Is(err, ErrNoActiveStream),
 		errors.Is(err, ErrInvalidRetryAction),
 		errors.Is(err, ErrInvalidRegenerateAction),
 		errors.Is(err, ErrInvalidUserEdit):
@@ -37,6 +38,7 @@ func errorMessage(err error) string {
 	}
 	if isRequestError(err) || errors.Is(err, ErrConversationBusy) ||
 		errors.Is(err, ErrNoActiveGeneration) ||
+		errors.Is(err, ErrNoActiveStream) ||
 		errors.Is(err, ErrInvalidRetryAction) ||
 		errors.Is(err, ErrInvalidRegenerateAction) ||
 		errors.Is(err, ErrInvalidUserEdit) ||

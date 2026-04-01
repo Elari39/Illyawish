@@ -11,6 +11,10 @@ func (s *Service) resolveTestConfig(userID uint, input TestPresetInput) (llm.Pro
 	baseURL := strings.TrimSpace(input.BaseURL)
 	apiKey := strings.TrimSpace(input.APIKey)
 	defaultModel := strings.TrimSpace(input.DefaultModel)
+	format := normalizeProviderFormat(input.Format)
+	if format == "" {
+		format = llm.ProviderFormatOpenAI
+	}
 
 	if input.PresetID != nil {
 		preset, err := s.getPreset(userID, *input.PresetID)
@@ -21,6 +25,7 @@ func (s *Service) resolveTestConfig(userID uint, input TestPresetInput) (llm.Pro
 		if baseURL == "" {
 			baseURL = preset.BaseURL
 		}
+		format = normalizeProviderFormat(preset.Format)
 		if defaultModel == "" {
 			defaultModel = preset.DefaultModel
 		}
@@ -52,6 +57,7 @@ func (s *Service) resolveTestConfig(userID uint, input TestPresetInput) (llm.Pro
 	}
 
 	return llm.ProviderConfig{
+		Format:       format,
 		BaseURL:      normalized,
 		APIKey:       apiKey,
 		DefaultModel: defaultModel,

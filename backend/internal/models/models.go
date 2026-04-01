@@ -127,6 +127,7 @@ type LLMProviderPreset struct {
 	ID              uint     `gorm:"primaryKey"`
 	UserID          uint     `gorm:"not null;index;uniqueIndex:idx_provider_active_per_user,priority:1,where:is_active = 1"`
 	Name            string   `gorm:"size:120;not null"`
+	Format          string   `gorm:"size:32;not null;default:openai"`
 	BaseURL         string   `gorm:"size:512;not null"`
 	EncryptedAPIKey string   `gorm:"type:text;not null"`
 	APIKeyHint      string   `gorm:"size:64;not null"`

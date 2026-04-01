@@ -66,7 +66,7 @@ export interface SettingsPanelProps {
   onExport: () => void
   onImport: (file: File) => void
   onProviderFieldChange: (
-    field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
+    field: 'name' | 'format' | 'baseURL' | 'apiKey' | 'defaultModel',
     value: string,
   ) => void
   onProviderModelsChange: (
@@ -150,4 +150,3 @@ export interface SettingsPanelProps {
   onTestProvider: () => void
   onStartNewProvider: () => void
 }
-

@@ -22,6 +22,8 @@ import {
 } from '../utils'
 import {
   readExecutionPanelState,
+  readLastEventSeq,
+  writeLastEventSeq,
   writeExecutionPanelState,
   type StoredExecutionPanelState,
 } from '../execution-panel-storage'
@@ -124,8 +126,26 @@ export function useChatGenerationStreamState({
           : event.type === 'tool_call_completed' || event.type === 'done' || event.type === 'cancelled' || event.type === 'error'
             ? null
             : currentState.pendingConfirmationId,
+      lastEventSeq:
+        typeof event.seq === 'number' && event.seq > 0
+          ? Math.max(currentState.lastEventSeq, event.seq)
+          : currentState.lastEventSeq,
     }
     persistExecutionState(conversationId, nextState)
+  }
+
+  function syncEventSequence(conversationId: Conversation['id'], event: StreamEvent) {
+    if (typeof event.seq !== 'number' || event.seq <= 0) {
+      return
+    }
+
+    const currentLastSeq = readLastEventSeq(conversationId)
+    if (event.seq > currentLastSeq) {
+      writeLastEventSeq(conversationId, event.seq)
+      if (activeConversationIdRef.current === conversationId) {
+        setExecutionStateVersion((previous) => previous + 1)
+      }
+    }
   }
 
   function flushBufferedMessageDelta() {
@@ -271,6 +291,7 @@ export function useChatGenerationStreamState({
     persistExecutionState(conversationId, {
       events: [],
       pendingConfirmationId: null,
+      lastEventSeq: 0,
     })
   }
 
@@ -301,6 +322,7 @@ export function useChatGenerationStreamState({
 
     const eventMessage = event.message
     syncGenerationMessageId(activeGenerationRef, placeholderId, eventMessage)
+    syncEventSequence(conversationId, event)
 
     if (
       event.type === 'run_started' ||
@@ -374,7 +396,8 @@ export function useChatGenerationStreamState({
       clearReasoningPriorityTarget(conversationId, placeholderId)
       if (
         event.type === 'cancelled' &&
-        !activeGenerationRef.current?.stopRequested
+        !activeGenerationRef.current?.stopRequested &&
+        !activeGenerationRef.current?.suppressCancelError
       ) {
         setChatError(t('error.generationStopped'))
       }
@@ -422,6 +445,7 @@ export function useChatGenerationStreamState({
     flushActiveMessageDelta,
     handleStreamEventForConversation,
     persistExecutionState,
+    readLastEventSeq,
     resetExecutionState,
   }
 }

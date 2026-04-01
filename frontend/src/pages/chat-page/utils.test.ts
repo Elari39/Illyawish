@@ -2,6 +2,7 @@ import { enUSMessages } from '../../i18n/catalogs/en-US'
 import { formatMessage } from '../../i18n/messages'
 import type { I18nContextValue } from '../../i18n/context'
 import { formatDateTime } from '../../lib/utils'
+import { buildProviderModelOptions } from './provider-model-utils'
 import {
   appendToStreamingMessage,
   buildConversationExportFilename,
@@ -315,6 +316,94 @@ describe('chat page utils', () => {
     expect(options).toEqual(['gpt-4.1-mini', 'gpt-4.1'])
   })
 
+  it('shows only the model name when provider models are unique', () => {
+    const options = buildProviderModelOptions({
+      activePresetId: 1,
+      currentSource: 'preset',
+      fallback: {
+        available: true,
+        baseURL: 'https://fallback.example.com/v1',
+        models: ['fallback-model'],
+        defaultModel: 'fallback-model',
+      },
+      presets: [
+        {
+          id: 1,
+          name: 'DeepSeek',
+          baseURL: 'https://deepseek.example.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-1...2345',
+          models: ['deepseek-reasoner'],
+          defaultModel: 'deepseek-reasoner',
+          isActive: true,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+        {
+          id: 2,
+          name: 'AIWave',
+          baseURL: 'https://aiwave.example.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-2...3456',
+          models: ['gemini-3-flash-preview'],
+          defaultModel: 'gemini-3-flash-preview',
+          isActive: false,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+      ],
+    })
+
+    expect(options.map((option) => option.label)).toEqual([
+      'deepseek-reasoner',
+      'gemini-3-flash-preview',
+    ])
+  })
+
+  it('shows provider and model when the same model exists under multiple providers', () => {
+    const options = buildProviderModelOptions({
+      activePresetId: 1,
+      currentSource: 'preset',
+      fallback: {
+        available: true,
+        baseURL: 'https://fallback.example.com/v1',
+        models: ['fallback-model'],
+        defaultModel: 'fallback-model',
+      },
+      presets: [
+        {
+          id: 1,
+          name: 'DeepSeek',
+          baseURL: 'https://deepseek.example.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-1...2345',
+          models: ['deepseek-chat'],
+          defaultModel: 'deepseek-chat',
+          isActive: true,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+        {
+          id: 2,
+          name: 'AIWave',
+          baseURL: 'https://aiwave.example.com/v1',
+          hasApiKey: true,
+          apiKeyHint: 'sk-2...3456',
+          models: ['deepseek-chat'],
+          defaultModel: 'deepseek-chat',
+          isActive: false,
+          createdAt: '2026-03-26T00:00:00Z',
+          updatedAt: '2026-03-26T00:00:00Z',
+        },
+      ],
+    })
+
+    expect(options.map((option) => option.label)).toEqual([
+      'DeepSeek · deepseek-chat',
+      'AIWave · deepseek-chat',
+    ])
+  })
+
   it('keeps the default model in the provider draft when models are missing it', () => {
     const models = resolveProviderModelDraft(['gpt-4.1'], 'gpt-4.1-mini')
 
@@ -325,6 +414,7 @@ describe('chat page utils', () => {
     const validation = validateProviderForm(
       {
         name: '',
+        format: 'openai',
         baseURL: '',
         apiKey: '',
         models: [''],

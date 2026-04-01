@@ -47,6 +47,25 @@ function MessageBubbleComponent({
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
+  const displayContent = useMemo(() => {
+    if (message.content) {
+      return message.content
+    }
+
+    if (message.role !== 'assistant') {
+      return message.content
+    }
+
+    if (message.status === 'failed') {
+      return t('error.assistantEndedUnexpectedly')
+    }
+
+    if (message.status === 'cancelled') {
+      return t('error.generationStopped')
+    }
+
+    return message.content
+  }, [message.content, message.role, message.status, t])
   const imageAttachments = useMemo(() => (
     message.attachments.filter((attachment) => isImageAttachment(attachment))
   ), [message.attachments])
@@ -64,7 +83,7 @@ function MessageBubbleComponent({
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(message.content)
+      await navigator.clipboard.writeText(displayContent)
       setCopied(true)
       onCopySuccessToast(t('message.copied'), 'success')
       if (resetCopiedTimerRef.current) {
@@ -166,7 +185,7 @@ function MessageBubbleComponent({
         isStreaming={message.status === 'streaming'}
         reasoningContent={message.reasoningContent ?? ''}
       />
-      <MarkdownContent content={message.content} />
+      <MarkdownContent content={displayContent} />
 
       {canRetry || canRegenerate ? (
         <div className="mt-3 flex flex-wrap gap-2">

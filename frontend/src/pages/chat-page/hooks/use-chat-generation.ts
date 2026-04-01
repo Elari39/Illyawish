@@ -7,7 +7,7 @@ import {
 
 import type { I18nContextValue } from '../../../i18n/context'
 import { agentApi, chatApi } from '../../../lib/api'
-import { isAbortError } from '../../../lib/http'
+import { ApiError, isAbortError } from '../../../lib/http'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
   Attachment,
@@ -53,6 +53,7 @@ interface UseChatGenerationOptions {
   resetComposer: () => void
   activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
   activeGenerationRef: MutableRefObject<ActiveGenerationState | null>
+  skipNextConversationSyncRef: MutableRefObject<Conversation['id'] | null>
   nextGenerationIdRef: MutableRefObject<number>
   reconcileConversationState: (
     conversationId: Conversation['id'],
@@ -87,6 +88,7 @@ export function useChatGeneration({
   resetComposer,
   activeConversationIdRef,
   activeGenerationRef,
+  skipNextConversationSyncRef,
   nextGenerationIdRef,
   reconcileConversationState,
   waitForConversationToSettle,
@@ -98,6 +100,7 @@ export function useChatGeneration({
     flushActiveMessageDelta,
     handleStreamEventForConversation,
     persistExecutionState,
+    readLastEventSeq,
     resetExecutionState,
   } = useChatGenerationStreamState({
     activeConversationId,
@@ -147,6 +150,17 @@ export function useChatGeneration({
     return currentConversation?.settings ?? settingsDraft
   }
 
+  function snapshotSubmittedSettings(): ConversationSettings {
+    return {
+      systemPrompt: settingsDraft.systemPrompt,
+      providerPresetId: settingsDraft.providerPresetId ?? null,
+      model: settingsDraft.model,
+      temperature: settingsDraft.temperature,
+      maxTokens: settingsDraft.maxTokens,
+      contextWindowTurns: settingsDraft.contextWindowTurns,
+    }
+  }
+
   async function handleSendSubmit(content: string, attachments: Attachment[]) {
     setChatError(null)
     setIsSending(true)
@@ -154,10 +168,14 @@ export function useChatGeneration({
     const optimisticAssistantId = -(Date.now() + 1)
     let conversationId = activeConversationId
     let createdConversationId: Conversation['id'] | null = null
+    let shouldNavigateToConversation = false
     let generation: ActiveGenerationState | null = null
+    const submittedSettings = snapshotSubmittedSettings()
 
     try {
       let conversation = currentConversation
+      let initialStreamSettings =
+        conversation?.settings ?? submittedSettings
 
       if (!conversationId) {
         const createdConversation = await chatApi.createConversation({
@@ -165,28 +183,20 @@ export function useChatGeneration({
             conversationFolderDraft,
             conversationTagsDraft,
           ),
-          settings: {
-            ...settingsDraft,
-            providerPresetId: settingsDraft.providerPresetId ?? null,
-            model: settingsDraft.model,
-            temperature: null,
-            maxTokens: null,
-            contextWindowTurns: null,
-          },
+          settings: submittedSettings,
           workflowPresetId: workflowPresetIdDraft,
           knowledgeSpaceIds: knowledgeSpaceIdsDraft,
         })
         conversation = createdConversation
         conversationId = createdConversation.id
         createdConversationId = createdConversation.id
+        initialStreamSettings = submittedSettings
         activeConversationIdRef.current = conversationId
         setPendingConversation(createdConversation)
         insertCreatedConversation(createdConversation)
-        navigateToConversation(conversationId)
+        shouldNavigateToConversation = true
       }
 
-      const conversationSettings =
-        conversation?.settings ?? resolveSavedGenerationSettings()
       generation = beginGeneration({
         conversationId,
         placeholderId: optimisticAssistantId,
@@ -196,6 +206,9 @@ export function useChatGeneration({
         setChatError,
         resetExecutionState,
       })
+      if (shouldNavigateToConversation) {
+        navigateToConversation(conversationId)
+      }
       const optimisticUserMessage: Message = {
         id: -Date.now(),
         conversationId,
@@ -231,7 +244,7 @@ export function useChatGeneration({
         {
           content,
           attachments,
-          options: conversationSettings,
+          options: initialStreamSettings,
           workflowPresetId:
             conversation?.workflowPresetId ?? workflowPresetIdDraft,
           knowledgeSpaceIds:
@@ -256,9 +269,8 @@ export function useChatGeneration({
         return
       }
 
-      setChatError(
-        error instanceof Error ? error.message : t('error.sendMessage'),
-      )
+      const errorMessage =
+        error instanceof Error ? error.message : t('error.sendMessage')
       setMessages((previous) =>
         previous.map((message) => {
           if (message.id !== optimisticAssistantId) {
@@ -273,12 +285,14 @@ export function useChatGeneration({
         }),
       )
       if (createdConversationId) {
+        skipNextConversationSyncRef.current = createdConversationId
         await cleanupEmptyCreatedConversation(createdConversationId)
       } else if (conversationId) {
         await reconcileConversationState(conversationId, {
           clearErrorOnSuccess: false,
         })
       }
+      setChatError(errorMessage)
     } finally {
       await settleGenerationCleanup({
         generation,
@@ -617,6 +631,7 @@ export function useChatGeneration({
       persistExecutionState(activeConversationId, {
         events: executionEvents,
         pendingConfirmationId: null,
+        lastEventSeq: readLastEventSeq(activeConversationId),
       })
     } catch (error) {
       setChatError(
@@ -658,7 +673,69 @@ export function useChatGeneration({
     }
   }
 
+  async function handleResumeConversation(conversationId: Conversation['id']) {
+    if (activeGenerationRef.current?.conversationId === conversationId) {
+      return
+    }
+
+    const generation: ActiveGenerationState = {
+      id: nextGenerationIdRef.current + 1,
+      conversationId,
+      placeholderId: 0,
+      messageId: null,
+      controller: new AbortController(),
+      stopRequested: false,
+      suppressCancelError: true,
+      stopPromise: null,
+    }
+
+    nextGenerationIdRef.current = generation.id
+    activeGenerationRef.current = generation
+    setIsSending(true)
+
+    try {
+      await chatApi.resumeStream(
+        conversationId,
+        readLastEventSeq(conversationId),
+        async (eventData) => {
+          handleStreamEventForConversation(
+            eventData,
+            conversationId,
+            0,
+          )
+        },
+        generation.controller.signal,
+      )
+
+      await reconcileConversationState(conversationId)
+      await loadConversations()
+    } catch (error) {
+      if (isAbortError(error)) {
+        return
+      }
+
+      if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
+        await reconcileConversationState(conversationId, {
+          clearErrorOnSuccess: false,
+        })
+        return
+      }
+
+      setChatError(
+        error instanceof Error ? error.message : t('error.streamingFailed'),
+      )
+    } finally {
+      await finalizeGeneration({
+        generationId: generation.id,
+        activeGenerationRef,
+        flushActiveMessageDelta,
+        setIsSending,
+      })
+    }
+  }
+
   return {
+    handleResumeConversation,
     handleRetryAssistant,
     handleRegenerateAssistant,
     handleStopGeneration,

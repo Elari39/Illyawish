@@ -6,6 +6,7 @@ export const jaJPMessages = {
     'common.loading': '読み込み中...',
     'common.cancel': 'キャンセル',
     'common.close': '閉じる',
+    'common.error': 'エラー',
     'common.reset': 'リセット',
     'common.edit': '編集',
     'common.delete': '削除',
@@ -119,7 +120,7 @@ export const jaJPMessages = {
     'settings.historyDescription':
       'サイドバーを詰め込まずに、履歴表示と一括管理の操作をここにまとめます。',
     'settings.providerDescription':
-      '保存済みの OpenAI 互換プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
+      '保存済みの AI プロバイダープリセットを管理します。新しいリクエストにはアクティブなプリセットが使われ、`data/app.json` のサーバーフォールバックも利用できます。',
     'settings.chatTab': 'チャット',
     'settings.historyTab': '履歴',
     'settings.providerTab': 'AI プロバイダー',
@@ -207,7 +208,7 @@ export const jaJPMessages = {
     'settings.key': 'キー',
     'settings.setActive': '有効化',
     'settings.noSavedPresets':
-      'まだ保存済みのプロバイダープリセットはありません。カスタムの OpenAI 互換エンドポイントを使うには作成してください。',
+      'まだ保存済みのプロバイダープリセットはありません。カスタムの AI プロバイダーエンドポイントを使うには作成してください。',
     'settings.serverFallback': 'サーバーフォールバック',
     'settings.serverReady': 'プリセットが有効でないときに利用できます。',
     'settings.serverNotConfigured': 'data/app.json の設定がまだ不完全です。',
@@ -216,9 +217,13 @@ export const jaJPMessages = {
     'settings.editPreset': 'プリセットを編集',
     'settings.newPreset': '新しいプリセット',
     'settings.presetDescription':
-      '任意の OpenAI 互換サービス用に、モデル、Base URL、API キーを保存できます。',
+      '対応している AI プロバイダー向けに、形式、モデル、Base URL、API キーを保存できます。',
+    'settings.providerFormat': 'プロバイダー形式',
+    'settings.providerFormatOpenAI': 'openai',
+    'settings.providerFormatAnthropic': 'anthropic',
+    'settings.providerFormatGemini': 'gemini',
     'settings.presetName': 'プリセット名',
-    'settings.presetNamePlaceholder': '私の OpenAI 互換プロバイダー',
+    'settings.presetNamePlaceholder': '私の AI プロバイダー',
     'settings.modelList': '利用可能なモデル',
     'settings.modelListDescription':
       'このプロバイダーで使えるモデルを 1 つ以上追加し、その中から既定のモデルを選びます。',
@@ -249,6 +254,7 @@ export const jaJPMessages = {
     'settings.validationPresetNameRequired': 'プリセット名を入力してください',
     'settings.validationBaseUrlRequired': 'Base URL を入力してください',
     'settings.validationApiKeyRequired': 'API キーを入力してください',
+    'settings.validationProviderFormatRequired': 'プロバイダー形式を選択してください',
     'settings.validationModelRequired': 'モデル名を入力してください',
     'settings.validationModelListRequired': '少なくとも 1 つのモデルを追加してください',
     'settings.validationDefaultModelRequired': '既定のモデルを選択してください',

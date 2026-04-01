@@ -33,17 +33,30 @@ export function buildProviderModelOptions(providerState: ProviderState | null) {
     return []
   }
 
+  const modelCounts = new Map<string, number>()
+
+  for (const preset of providerState.presets) {
+    const models = resolveProviderModelList(preset)
+    for (const model of models) {
+      modelCounts.set(model, (modelCounts.get(model) ?? 0) + 1)
+    }
+  }
+
   const options: ProviderModelOption[] = []
 
   for (const preset of providerState.presets) {
     const models = resolveProviderModelList(preset)
     for (const model of models) {
+      const label = (modelCounts.get(model) ?? 0) > 1
+        ? `${preset.name} · ${model}`
+        : model
+
       options.push({
         value: encodeProviderModelValue(preset.id, model),
         providerPresetId: preset.id,
         providerName: preset.name,
         model,
-        label: `${preset.name} · ${model}`,
+        label,
       })
     }
   }

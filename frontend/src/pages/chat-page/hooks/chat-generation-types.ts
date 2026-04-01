@@ -7,6 +7,6 @@ export interface ActiveGenerationState {
   messageId: number | null
   controller: AbortController
   stopRequested: boolean
+  suppressCancelError?: boolean
   stopPromise: Promise<void> | null
 }
-

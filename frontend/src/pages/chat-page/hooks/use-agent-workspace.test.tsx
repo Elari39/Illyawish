@@ -252,4 +252,120 @@ describe('useAgentWorkspace', () => {
 
     expect(result.current.workflowPresets).toEqual([])
   })
+
+  it('keeps knowledge and workflow data when provider loading fails', async () => {
+    const setChatError = vi.fn()
+    getProvidersMock.mockRejectedValue(new Error('provider unavailable'))
+    listKnowledgeSpacesMock.mockResolvedValue([space])
+    listTemplatesMock.mockResolvedValue([
+      {
+        key: 'knowledge_qa',
+        name: 'Knowledge Q&A',
+        description: 'Answer questions from knowledge spaces.',
+        nodes: [],
+      },
+    ])
+    listPresetsMock.mockResolvedValue([
+      {
+        id: 5,
+        userId: 3,
+        name: 'Knowledge Q&A',
+        templateKey: 'knowledge_qa',
+        defaultInputs: {},
+        knowledgeSpaceIds: [space.id],
+        toolEnablements: {},
+        outputMode: 'markdown',
+        createdAt: '2026-03-26T09:08:00Z',
+        updatedAt: '2026-03-26T09:08:00Z',
+      },
+    ])
+
+    const { result } = renderHook(
+      () =>
+        useAgentWorkspace({
+          isSettingsOpen: false,
+          setChatError,
+        }),
+      { wrapper },
+    )
+
+    await act(async () => {
+      await result.current.loadWorkspace()
+    })
+
+    expect(result.current.ragProviders).toBeNull()
+    expect(result.current.knowledgeSpaces).toEqual([space])
+    expect(result.current.workflowTemplates).toEqual([
+      {
+        key: 'knowledge_qa',
+        name: 'Knowledge Q&A',
+        description: 'Answer questions from knowledge spaces.',
+        nodes: [],
+      },
+    ])
+    expect(result.current.workflowPresets).toEqual([
+      expect.objectContaining({
+        id: 5,
+        knowledgeSpaceIds: [space.id],
+      }),
+    ])
+    expect(setChatError).toHaveBeenLastCalledWith('provider unavailable')
+  })
+
+  it('keeps workflow data and reports an error when knowledge spaces fail to load', async () => {
+    const setChatError = vi.fn()
+    listKnowledgeSpacesMock.mockRejectedValue(new Error('spaces unavailable'))
+    listTemplatesMock.mockResolvedValue([
+      {
+        key: 'webpage_digest',
+        name: 'Webpage Digest',
+        description: 'Summarize a webpage.',
+        nodes: [],
+      },
+    ])
+    listPresetsMock.mockResolvedValue([
+      {
+        id: 9,
+        userId: 3,
+        name: 'Web Digest',
+        templateKey: 'webpage_digest',
+        defaultInputs: { url: 'https://example.com' },
+        knowledgeSpaceIds: [],
+        toolEnablements: { fetch_url: true },
+        outputMode: 'markdown',
+        createdAt: '2026-03-26T09:08:00Z',
+        updatedAt: '2026-03-26T09:08:00Z',
+      },
+    ])
+
+    const { result } = renderHook(
+      () =>
+        useAgentWorkspace({
+          isSettingsOpen: false,
+          setChatError,
+        }),
+      { wrapper },
+    )
+
+    await act(async () => {
+      await result.current.loadWorkspace()
+    })
+
+    expect(result.current.knowledgeSpaces).toEqual([])
+    expect(result.current.workflowTemplates).toEqual([
+      {
+        key: 'webpage_digest',
+        name: 'Webpage Digest',
+        description: 'Summarize a webpage.',
+        nodes: [],
+      },
+    ])
+    expect(result.current.workflowPresets).toEqual([
+      expect.objectContaining({
+        id: 9,
+        templateKey: 'webpage_digest',
+      }),
+    ])
+    expect(setChatError).toHaveBeenLastCalledWith('spaces unavailable')
+  })
 })

@@ -98,6 +98,7 @@ describe('overlay accessibility', () => {
           onTestProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: '',
             apiKey: '',
             models: [''],
@@ -181,6 +182,7 @@ describe('overlay accessibility', () => {
           onTestProvider={vi.fn()}
           providerForm={{
             name: '',
+            format: 'openai',
             baseURL: '',
             apiKey: '',
             models: [''],
@@ -192,6 +194,7 @@ describe('overlay accessibility', () => {
             presets: Array.from({ length: 12 }, (_, index) => ({
               id: index + 1,
               name: `Provider ${index + 1}`,
+              format: 'openai' as const,
               baseURL: `https://provider-${index + 1}.example.com/v1`,
               hasApiKey: true,
               apiKeyHint: `sk-${index + 1}`,
@@ -275,6 +278,8 @@ describe('overlay accessibility', () => {
       <TestProviders>
         <ToastViewport
           onDismiss={onDismiss}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
           toasts={[
             {
               id: 1,

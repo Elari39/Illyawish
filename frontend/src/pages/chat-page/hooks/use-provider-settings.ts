@@ -7,7 +7,9 @@ import type { ProviderEditorMode, ProviderFormState } from '../types'
 import {
   canReuseActivePresetAPIKey,
   createProviderForm,
+  defaultBaseURLForProviderFormat,
   hasProviderFormErrors,
+  normalizeProviderFormat,
   normalizeModelEntries,
   resolveProviderEditorState,
   validateProviderForm,
@@ -170,9 +172,33 @@ export function useProviderSettings({
   }
 
   function handleProviderFieldChange(
-    field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
+    field: 'format' | 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
     value: string,
   ) {
+    if (field === 'format') {
+      setProviderForm((previous) => {
+        const nextFormat = normalizeProviderFormat(value)
+        const previousFormat = normalizeProviderFormat(previous.format)
+        const previousDefaultBaseURL = defaultBaseURLForProviderFormat(previousFormat)
+        const shouldResetBaseURL =
+          !previous.baseURL.trim() || previous.baseURL === previousDefaultBaseURL
+
+        return {
+          ...previous,
+          format: nextFormat,
+          baseURL: shouldResetBaseURL
+            ? defaultBaseURLForProviderFormat(nextFormat)
+            : previous.baseURL,
+          errors: {
+            ...previous.errors,
+            format: undefined,
+            baseURL: undefined,
+          },
+        }
+      })
+      return
+    }
+
     setProviderForm((previous) => ({
       ...previous,
       [field]: value,
@@ -226,6 +252,7 @@ export function useProviderSettings({
         canReuseActiveAPIKey && !nextAPIKey
       const nextState = providerEditorMode.type === 'edit'
         ? await providerApi.update(providerEditorMode.providerId, {
+            format: providerForm.format,
             name: providerForm.name,
             baseURL: providerForm.baseURL,
             models,
@@ -233,6 +260,7 @@ export function useProviderSettings({
             ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
           })
         : await providerApi.create({
+            format: providerForm.format,
             name: providerForm.name,
             baseURL: providerForm.baseURL,
             ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
@@ -298,6 +326,7 @@ export function useProviderSettings({
         ...(providerEditorMode.type === 'edit'
           ? { providerId: providerEditorMode.providerId }
           : {}),
+        format: providerForm.format,
         baseURL: providerForm.baseURL,
         ...(nextAPIKey ? { apiKey: nextAPIKey } : {}),
         ...(shouldReuseActiveAPIKey ? { reuseActiveApiKey: true } : {}),
@@ -310,7 +339,6 @@ export function useProviderSettings({
           ? error.message
           : t('error.saveProviderSettings')
       setChatError(message)
-      showToast(message, 'error')
     } finally {
       setIsTestingProvider(false)
     }

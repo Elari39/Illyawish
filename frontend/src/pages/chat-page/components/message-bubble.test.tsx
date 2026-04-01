@@ -250,6 +250,39 @@ describe('MessageBubble', () => {
     expect(screen.queryByRole('button', { name: 'Regenerate' })).not.toBeInTheDocument()
   })
 
+  it('renders an interruption fallback for failed assistant replies without content', () => {
+    render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry
+          executionPanelModel={null}
+          isEditing={false}
+          message={{
+            id: 4,
+            conversationId: '1',
+            role: 'assistant',
+            content: '',
+            reasoningContent: '',
+            attachments: [],
+            status: 'failed',
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(
+      screen.getByText('The assistant response ended unexpectedly.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Thinking...')).not.toBeInTheDocument()
+  })
+
   it('renders the execution chain above assistant content and keeps user messages unchanged', () => {
     const { rerender } = render(
       <TestProviders>

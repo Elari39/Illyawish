@@ -25,6 +25,7 @@ describe('ChatWorkspace', () => {
         isHeroState={false}
         messageListProps={{} as never}
         modelControl={<div data-testid="model-control" />}
+        onDismissChatError={vi.fn()}
         openSidebarLabel="Open sidebar"
         settingsLabel="Settings"
         showAdminEntry

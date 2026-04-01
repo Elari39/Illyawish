@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,6 +39,61 @@ type fakeStreamResponse struct {
 	deltas          []llm.StreamDelta
 	finishReason    string
 	err             error
+}
+
+type blockingChatModel struct {
+	started chan struct{}
+	done    chan struct{}
+}
+
+func (m *blockingChatModel) Stream(
+	ctx context.Context,
+	_ llm.ProviderConfig,
+	_ []llm.ChatMessage,
+	_ llm.RequestOptions,
+	onDelta func(llm.StreamDelta),
+) (llm.StreamResult, error) {
+	select {
+	case <-m.started:
+	default:
+		close(m.started)
+	}
+
+	if onDelta != nil {
+		onDelta(llm.StreamDelta{Reasoning: "thinking"})
+		onDelta(llm.StreamDelta{Content: "partial"})
+	}
+
+	<-ctx.Done()
+	close(m.done)
+	return llm.StreamResult{
+		Content:          "partial",
+		ReasoningContent: "thinking",
+	}, ctx.Err()
+}
+
+type delayedChatModel struct {
+	delay time.Duration
+}
+
+func (m *delayedChatModel) Stream(
+	_ context.Context,
+	_ llm.ProviderConfig,
+	_ []llm.ChatMessage,
+	_ llm.RequestOptions,
+	onDelta func(llm.StreamDelta),
+) (llm.StreamResult, error) {
+	if onDelta != nil {
+		onDelta(llm.StreamDelta{Reasoning: "step 1"})
+		time.Sleep(m.delay)
+		onDelta(llm.StreamDelta{Content: "answer"})
+	}
+
+	return llm.StreamResult{
+		Content:          "answer",
+		ReasoningContent: "step 1",
+		FinishReason:     "stop",
+	}, nil
 }
 
 func (f *fakeChatModel) Stream(
@@ -312,8 +368,8 @@ func TestStreamAssistantReplyPersistsOnlyFinalAgentDeltasOnFailure(t *testing.T)
 	}, func(StreamEvent) error {
 		return nil
 	})
-	if err == nil {
-		t.Fatal("expected agent runtime failure")
+	if err != nil {
+		t.Fatalf("expected async agent runtime failure to stay in stream state, got %v", err)
 	}
 
 	var messages []models.Message
@@ -608,6 +664,205 @@ func TestStreamAssistantReplyPersistsReasoningContentWhenStreamingFails(t *testi
 	}
 	if errorEvent.Message.ReasoningContent != "partial thinking" {
 		t.Fatalf("expected error event message reasoning content, got %#v", errorEvent.Message)
+	}
+}
+
+func TestStreamAssistantReplyContinuesAfterSubscriberDisconnect(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	service := NewService(db, &delayedChatModel{delay: 20 * time.Millisecond}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	disconnectErr := errors.New("client disconnected")
+	var emitted []StreamEvent
+	var once sync.Once
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		emitted = append(emitted, event)
+		if event.Type == "reasoning_delta" {
+			var err error
+			once.Do(func() {
+				err = disconnectErr
+			})
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		var messages []models.Message
+		if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+			t.Fatalf("query messages: %v", err)
+		}
+		if len(messages) == 2 && messages[1].Status == models.MessageStatusCompleted {
+			if messages[1].Content != "answer" {
+				t.Fatalf("expected completed answer to persist, got %q", messages[1].Content)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	t.Fatalf("expected assistant message to complete after disconnect, got %#v", emitted)
+}
+
+func TestStreamAssistantReplyCancelsAfterDetachTimeout(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &blockingChatModel{
+		started: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+	service.detachTimeout = 20 * time.Millisecond
+
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(StreamEvent) error {
+		return errors.New("client disconnected")
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	select {
+	case <-model.started:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("expected model stream to start")
+	}
+
+	select {
+	case <-model.done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected model stream to be cancelled after detach timeout")
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[1].Status != models.MessageStatusCancelled {
+		t.Fatalf("expected detached stream to become cancelled, got %q", messages[1].Status)
+	}
+}
+
+func TestResumeActiveStreamReplaysEventsAfterSequence(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	service := NewService(db, &delayedChatModel{delay: 40 * time.Millisecond}, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	lastSeenSeq := 0
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		if event.Type == "reasoning_delta" {
+			lastSeenSeq = event.Seq
+			return errors.New("client disconnected")
+		}
+		lastSeenSeq = event.Seq
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	var resumed []StreamEvent
+	if err := service.ResumeActiveStream(context.Background(), user.ID, conversation.ID, lastSeenSeq, func(event StreamEvent) error {
+		resumed = append(resumed, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("ResumeActiveStream() error = %v", err)
+	}
+
+	if len(resumed) < 2 {
+		t.Fatalf("expected replayed delta and done events, got %#v", resumed)
+	}
+	if resumed[0].Type != "delta" {
+		t.Fatalf("expected first resumed event to be delta, got %#v", resumed)
+	}
+	if resumed[len(resumed)-1].Type != "done" {
+		t.Fatalf("expected final resumed event to be done, got %#v", resumed)
+	}
+	if resumed[0].Seq <= lastSeenSeq {
+		t.Fatalf("expected resumed events after seq %d, got %#v", lastSeenSeq, resumed)
+	}
+}
+
+func TestStreamAssistantReplyDisconnectDoesNotFailMessageAfterStreamStart(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Content: "partial answer"},
+				},
+				finishReason: "stop",
+			},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	expectedErr := errors.New("stream writer failed")
+	err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		if event.Type == "delta" {
+			return expectedErr
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected disconnect to stop only the subscriber, got %v", err)
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if messages[1].Status != models.MessageStatusCompleted {
+		t.Fatalf("expected assistant message to complete after disconnect, got %q", messages[1].Status)
+	}
+	if messages[1].Content != "partial answer" {
+		t.Fatalf("expected partial content to be preserved, got %q", messages[1].Content)
 	}
 }
 

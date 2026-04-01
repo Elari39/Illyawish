@@ -32,6 +32,7 @@ interface UseChatHistoryOptions {
   t: I18nContextValue['t']
   activeConversationIdRef: MutableRefObject<Conversation['id'] | null>
   activeGenerationRef: MutableRefObject<{ conversationId: Conversation['id'] } | null>
+  skipNextConversationSyncRef: MutableRefObject<Conversation['id'] | null>
   messageViewportRef: MutableRefObject<HTMLDivElement | null>
   clearEditingMessage: () => void
   resetForNewChatSettings: () => void
@@ -55,6 +56,7 @@ export function useChatHistory({
   t,
   activeConversationIdRef,
   activeGenerationRef,
+  skipNextConversationSyncRef,
   messageViewportRef,
   clearEditingMessage,
   resetForNewChatSettings,
@@ -102,10 +104,12 @@ export function useChatHistory({
     resetForNewChatSettings()
     clearEditingMessage()
     setChatError(null)
+    skipNextConversationSyncRef.current = null
   }, [
     activeConversationId,
     clearEditingMessage,
     resetForNewChatSettings,
+    skipNextConversationSyncRef,
     setChatError,
     setMessages,
   ])
@@ -137,12 +141,19 @@ export function useChatHistory({
     }
 
     const targetConversationId = activeConversationId
+    const shouldPreserveErrorDuringSync =
+      skipNextConversationSyncRef.current === activeConversationId
+    if (shouldPreserveErrorDuringSync) {
+      skipNextConversationSyncRef.current = null
+    }
     let cancelled = false
 
     async function syncMessages() {
       try {
         setIsLoadingMessages(true)
-        setChatError(null)
+        if (!shouldPreserveErrorDuringSync) {
+          setChatError(null)
+        }
 
         const response =
           await chatApi.getConversationMessages(targetConversationId)
@@ -187,6 +198,7 @@ export function useChatHistory({
     activeConversationId,
     activeConversationIdRef,
     activeGenerationRef,
+    skipNextConversationSyncRef,
     applyConversationSnapshot,
     setChatError,
     setConversationFolderDraft,

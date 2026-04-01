@@ -12,6 +12,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const sharedSQLiteFileMode = 0o666
+
 func Open(cfg *config.Config) (*gorm.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0o755); err != nil {
 		return nil, fmt.Errorf("create sqlite directory: %w", err)
@@ -50,8 +52,36 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	if err := migrateUsersAndWorkspacePolicy(db); err != nil {
 		return nil, err
 	}
+	if err := ensureSharedWritableSQLiteArtifacts(cfg.SQLitePath); err != nil {
+		return nil, err
+	}
 
 	return db, nil
+}
+
+func ensureSharedWritableSQLiteArtifacts(sqlitePath string) error {
+	for _, path := range []string{
+		sqlitePath,
+		sqlitePath + "-journal",
+		sqlitePath + "-shm",
+		sqlitePath + "-wal",
+	} {
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("stat sqlite artifact %s: %w", path, err)
+		}
+		if info.Mode().Perm() == sharedSQLiteFileMode {
+			continue
+		}
+		if err := os.Chmod(path, sharedSQLiteFileMode); err != nil {
+			return fmt.Errorf("set sqlite artifact permissions %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 func rejectLegacyConversationSchema(db *gorm.DB, sqlitePath string) error {

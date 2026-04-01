@@ -29,9 +29,14 @@ type ChatMessage struct {
 const (
 	AttachmentKindImage = "image"
 	AttachmentKindText  = "text"
+
+	ProviderFormatOpenAI    = "openai"
+	ProviderFormatAnthropic = "anthropic"
+	ProviderFormatGemini    = "gemini"
 )
 
 type ProviderConfig struct {
+	Format       string
 	BaseURL      string
 	APIKey       string
 	DefaultModel string
@@ -68,11 +73,15 @@ type EinoChatModel struct {
 	newChatModel func(context.Context, *openai.ChatModelConfig) (componentmodel.BaseChatModel, error)
 }
 
-func New() *EinoChatModel {
-	return &EinoChatModel{
-		newChatModel: func(ctx context.Context, cfg *openai.ChatModelConfig) (componentmodel.BaseChatModel, error) {
-			return openai.NewChatModel(ctx, cfg)
+func New() ChatModel {
+	return &RouterChatModel{
+		openai: &EinoChatModel{
+			newChatModel: func(ctx context.Context, cfg *openai.ChatModelConfig) (componentmodel.BaseChatModel, error) {
+				return openai.NewChatModel(ctx, cfg)
+			},
 		},
+		anthropic: newAnthropicChatModel(nil),
+		gemini:    newGeminiChatModel(nil),
 	}
 }
 

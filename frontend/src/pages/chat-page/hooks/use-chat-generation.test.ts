@@ -11,6 +11,7 @@ import type {
 const chatApiMock = vi.hoisted(() => ({
   createConversation: vi.fn(),
   streamMessage: vi.fn(),
+  resumeStream: vi.fn(),
   retryMessage: vi.fn(),
   regenerateMessage: vi.fn(),
   editMessage: vi.fn(),
@@ -76,9 +77,13 @@ function createOptions(
   overrides: Partial<Parameters<typeof useChatGeneration>[0]> = {},
 ) {
   const currentConversation = createConversation(7)
+  const activeConversationId =
+    overrides.activeConversationId === undefined
+      ? currentConversation.id
+      : overrides.activeConversationId
 
   return {
-    activeConversationId: currentConversation.id,
+    activeConversationId,
     currentConversation,
     composerValue: 'Edited content',
     selectedAttachments: [],
@@ -97,6 +102,7 @@ function createOptions(
     resetComposer: vi.fn(),
     activeConversationIdRef: { current: currentConversation.id },
     activeGenerationRef: { current: null },
+    skipNextConversationSyncRef: { current: null },
     nextGenerationIdRef: { current: 0 },
     reconcileConversationState: vi.fn().mockResolvedValue(null),
     waitForConversationToSettle: vi.fn().mockResolvedValue(null),
@@ -116,6 +122,7 @@ describe('useChatGeneration saved settings behavior', () => {
     chatApiMock.regenerateMessage.mockResolvedValue(undefined)
     chatApiMock.editMessage.mockResolvedValue(undefined)
     chatApiMock.streamMessage.mockResolvedValue(undefined)
+    chatApiMock.resumeStream.mockResolvedValue(undefined)
     chatApiMock.createConversation.mockResolvedValue(createConversation(21, {
       settings: {
         systemPrompt: 'new chat saved prompt',
@@ -188,7 +195,7 @@ describe('useChatGeneration saved settings behavior', () => {
     )
   })
 
-  it('uses the saved next-chat settings returned from conversation creation for the first stream', async () => {
+  it('uses the submitted draft settings for new conversation creation and the first stream', async () => {
     const createdConversation = createConversation(21, {
       settings: {
         systemPrompt: 'new chat saved prompt',
@@ -219,21 +226,45 @@ describe('useChatGeneration saved settings behavior', () => {
       settings: {
         ...draftSettings,
         providerPresetId: null,
-        model: 'draft-model',
-        temperature: null,
-        maxTokens: null,
-        contextWindowTurns: null,
       },
     })
     expect(chatApiMock.streamMessage).toHaveBeenCalledWith(
       '21',
       expect.objectContaining({
         content: 'First message',
-        options: createdConversation.settings,
+        options: {
+          ...draftSettings,
+          providerPresetId: null,
+        },
       }),
       expect.any(Function),
       expect.any(AbortSignal),
     )
+  })
+
+  it('starts generation before navigating when sending the first message in a new conversation', async () => {
+    const activeGenerationRef = { current: null }
+    const navigateToConversation = vi.fn(() => {
+      expect(activeGenerationRef.current).toMatchObject({
+        conversationId: '21',
+      })
+    })
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      activeConversationId: null,
+      currentConversation: null,
+      activeConversationIdRef: { current: null },
+      activeGenerationRef,
+      composerValue: 'First message',
+      navigateToConversation,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    expect(navigateToConversation).toHaveBeenCalledWith('21')
   })
 
   it('ignores stream events after the user switches to another conversation', async () => {
@@ -697,6 +728,56 @@ describe('useChatGeneration saved settings behavior', () => {
       ],
     })
   })
+
+  it('resumes a streaming conversation without surfacing a stopped error on disconnect', async () => {
+    const setChatError = vi.fn()
+    const setMessages = vi.fn()
+    const reconcileConversationState = vi.fn().mockResolvedValue({
+      conversation: createConversation(7),
+      messages: [
+        createMessage(1, 'user', 'completed'),
+        {
+          ...createMessage(2, 'assistant', 'streaming'),
+          content: '',
+          reasoningContent: '',
+        },
+      ],
+    })
+    chatApiMock.resumeStream.mockImplementation(
+      async (
+        _conversationId: string,
+        _afterSeq: number,
+        onEvent: (event: MessageStreamEvent) => Promise<void>,
+      ) => {
+        await onEvent({
+          type: 'cancelled',
+          seq: 3,
+          message: {
+            ...createMessage(2, 'assistant', 'cancelled'),
+            conversationId: '7',
+          },
+        })
+      },
+    )
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      setChatError,
+      setMessages,
+      reconcileConversationState,
+    })))
+
+    await act(async () => {
+      await result.current.handleResumeConversation('7')
+    })
+
+    expect(chatApiMock.resumeStream).toHaveBeenCalledWith(
+      '7',
+      0,
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+
+    expect(setChatError).not.toHaveBeenCalledWith('error.generationStopped')
+  })
 })
 
 type MessageStreamEvent = {
@@ -719,6 +800,7 @@ type MessageStreamEvent = {
   stepName?: string
   toolName?: string
   confirmationId?: string
+  seq?: number
   metadata?: Record<string, unknown>
   citations?: Array<{
     documentId: number

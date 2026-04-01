@@ -24,6 +24,7 @@ const (
 
 type Config struct {
 	AppEnv                            string
+	ProviderFormat                    string
 	OpenAIBaseURL                     string
 	OpenAIAPIKey                      string
 	Model                             string
@@ -43,6 +44,10 @@ type Config struct {
 
 type fileConfig struct {
 	AppEnv                            string `json:"appEnv,omitempty"`
+	ProviderFormat                    string `json:"providerFormat,omitempty"`
+	ProviderBaseURL                   string `json:"providerBaseURL,omitempty"`
+	ProviderAPIKey                    string `json:"providerApiKey,omitempty"`
+	ProviderModel                     string `json:"providerModel,omitempty"`
 	OpenAIBaseURL                     string `json:"openAIBaseURL,omitempty"`
 	OpenAIAPIKey                      string `json:"openAIApiKey,omitempty"`
 	Model                             string `json:"model,omitempty"`
@@ -98,6 +103,7 @@ func loadFromDataDir(dataDir string) (*Config, error) {
 
 	cfg := &Config{
 		AppEnv:                            normalized.AppEnv,
+		ProviderFormat:                    normalized.ProviderFormat,
 		OpenAIBaseURL:                     normalized.OpenAIBaseURL,
 		OpenAIAPIKey:                      normalized.OpenAIAPIKey,
 		Model:                             normalized.Model,
@@ -105,8 +111,8 @@ func loadFromDataDir(dataDir string) (*Config, error) {
 		RAGAPIKey:                         normalized.RAGAPIKey,
 		RAGEmbeddingModel:                 normalized.RAGEmbeddingModel,
 		RAGRerankerModel:                  normalized.RAGRerankerModel,
-		SQLitePath:                        normalized.SQLitePath,
-		UploadDir:                         normalized.UploadDir,
+		SQLitePath:                        resolveConfiguredPath(normalized.SQLitePath, defaultSQLiteFileName, absoluteDataDir),
+		UploadDir:                         resolveConfiguredPath(normalized.UploadDir, defaultUploadDirName, absoluteDataDir),
 		ServerPort:                        normalized.ServerPort,
 		SessionSecret:                     normalized.SessionSecret,
 		SettingsEncryptionKey:             normalized.SettingsEncryptionKey,
@@ -133,6 +139,10 @@ func (c *Config) validate() error {
 func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, error) {
 	normalized := fileConfig{
 		AppEnv:                            strings.TrimSpace(raw.AppEnv),
+		ProviderFormat:                    strings.TrimSpace(raw.ProviderFormat),
+		ProviderBaseURL:                   strings.TrimSpace(raw.ProviderBaseURL),
+		ProviderAPIKey:                    strings.TrimSpace(raw.ProviderAPIKey),
+		ProviderModel:                     strings.TrimSpace(raw.ProviderModel),
 		OpenAIBaseURL:                     strings.TrimSpace(raw.OpenAIBaseURL),
 		OpenAIAPIKey:                      strings.TrimSpace(raw.OpenAIAPIKey),
 		Model:                             strings.TrimSpace(raw.Model),
@@ -157,6 +167,21 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 	if normalized.AppEnv == "" {
 		normalized.AppEnv = defaultAppEnv
 	}
+	if normalized.ProviderFormat == "" {
+		normalized.ProviderFormat = "openai"
+	}
+	if normalized.ProviderBaseURL == "" {
+		normalized.ProviderBaseURL = normalized.OpenAIBaseURL
+	}
+	if normalized.ProviderAPIKey == "" {
+		normalized.ProviderAPIKey = normalized.OpenAIAPIKey
+	}
+	if normalized.ProviderModel == "" {
+		normalized.ProviderModel = normalized.Model
+	}
+	normalized.OpenAIBaseURL = normalized.ProviderBaseURL
+	normalized.OpenAIAPIKey = normalized.ProviderAPIKey
+	normalized.Model = normalized.ProviderModel
 	if normalized.ServerPort == "" {
 		normalized.ServerPort = defaultServerPort
 	}
@@ -170,11 +195,8 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		normalized.RAGRerankerModel = defaultRAGRerankerModel
 	}
 
-	defaultSQLitePath := filepath.Join(dataDir, defaultSQLiteFileName)
-	normalized.SQLitePath = normalizePath(normalized.SQLitePath, defaultSQLitePath, dataDir)
-
-	defaultUploadDir := filepath.Join(dataDir, defaultUploadDirName)
-	normalized.UploadDir = normalizePath(normalized.UploadDir, defaultUploadDir, dataDir)
+	normalized.SQLitePath = normalizePathForStorage(normalized.SQLitePath, defaultSQLiteFileName, dataDir)
+	normalized.UploadDir = normalizePathForStorage(normalized.UploadDir, defaultUploadDirName, dataDir)
 
 	if normalized.SessionSecret == "" {
 		secret, err := generateSecret()
@@ -207,6 +229,32 @@ func normalizePath(value string, fallback string, dataDir string) string {
 	return filepath.Clean(filepath.Join(dataDir, trimmed))
 }
 
+func resolveConfiguredPath(value string, defaultName string, dataDir string) string {
+	return normalizePath(value, filepath.Join(dataDir, defaultName), dataDir)
+}
+
+func normalizePathForStorage(value string, defaultName string, dataDir string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultName
+	}
+	if !filepath.IsAbs(trimmed) {
+		return filepath.Clean(trimmed)
+	}
+
+	cleaned := filepath.Clean(trimmed)
+	defaultPath := filepath.Join(dataDir, defaultName)
+	if cleaned == filepath.Clean(defaultPath) {
+		return defaultName
+	}
+	if filepath.Base(cleaned) == filepath.Base(defaultName) &&
+		filepath.Base(filepath.Dir(cleaned)) == filepath.Base(dataDir) {
+		return defaultName
+	}
+
+	return cleaned
+}
+
 func readFileConfig(configPath string) (fileConfig, bool, error) {
 	payload, err := os.ReadFile(configPath)
 	if err != nil {
@@ -232,7 +280,7 @@ func writeFileConfig(configPath string, cfg fileConfig) error {
 	payload = append(payload, '\n')
 
 	tempPath := configPath + ".tmp"
-	if err := os.WriteFile(tempPath, payload, 0o600); err != nil {
+	if err := os.WriteFile(tempPath, payload, 0o644); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
 

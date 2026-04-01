@@ -312,3 +312,39 @@ func TestToSchemaMessagesOrdersUserTextDocumentAndImages(t *testing.T) {
 		t.Fatalf("unexpected image URL: %#v", parts[2].Image)
 	}
 }
+
+func TestNewRoutesByProviderFormat(t *testing.T) {
+	model := New()
+
+	router, ok := model.(*RouterChatModel)
+	if !ok {
+		t.Fatalf("expected New() to return *RouterChatModel, got %T", model)
+	}
+
+	if router.openai == nil {
+		t.Fatal("expected openai adapter to be configured")
+	}
+	if router.anthropic == nil {
+		t.Fatal("expected anthropic adapter to be configured")
+	}
+	if router.gemini == nil {
+		t.Fatal("expected gemini adapter to be configured")
+	}
+}
+
+func TestRouterChatModelRejectsUnknownProviderFormat(t *testing.T) {
+	model := &RouterChatModel{}
+
+	_, err := model.Stream(context.Background(), ProviderConfig{
+		Format:       "unknown",
+		BaseURL:      "https://example.com",
+		APIKey:       "test-key",
+		DefaultModel: "test-model",
+	}, nil, RequestOptions{}, nil)
+	if err == nil {
+		t.Fatal("expected unknown format error")
+	}
+	if err.Error() != `unsupported provider format: "unknown"` {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

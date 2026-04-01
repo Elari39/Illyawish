@@ -181,6 +181,7 @@ func New() (*App, error) {
 		api.POST("/conversations/import", limitRequestBody(chatJSONBodyLimit), chatHandler.ImportConversation)
 		api.PATCH("/conversations/:id", limitRequestBody(mediumJSONBodyLimit), chatHandler.UpdateConversation)
 		api.GET("/conversations/:id/messages", chatHandler.ListMessages)
+		api.GET("/conversations/:id/stream", chatHandler.ResumeStream)
 		api.POST("/conversations/:id/messages", limitRequestBody(chatJSONBodyLimit), chatHandler.StreamMessage)
 		api.POST("/conversations/:id/messages/regenerate", limitRequestBody(chatJSONBodyLimit), chatHandler.RegenerateMessage)
 		api.POST("/conversations/:id/messages/:messageId/regenerate", limitRequestBody(chatJSONBodyLimit), chatHandler.RegenerateMessageByID)

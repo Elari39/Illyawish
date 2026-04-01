@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"backend/internal/agent"
 	"backend/internal/llm"
@@ -23,6 +24,7 @@ var (
 	defaultTemperature         = float32(1)
 	ErrConversationBusy        = errors.New("conversation is already generating a reply")
 	ErrNoActiveGeneration      = errors.New("no active generation for this conversation")
+	ErrNoActiveStream          = errors.New("no active stream for this conversation")
 	ErrInvalidRetryAction      = errors.New("assistant message cannot be retried")
 	ErrInvalidRegenerateAction = errors.New("assistant message cannot be regenerated")
 	ErrInvalidUserEdit         = errors.New("only the latest user message can be edited")
@@ -50,7 +52,8 @@ type Service struct {
 	workflowPresets workflowPresetResolver
 
 	activeMu      sync.Mutex
-	activeStreams map[uint]context.CancelFunc
+	activeStreams map[uint]*activeRun
+	detachTimeout time.Duration
 }
 
 type providerResolver interface {
@@ -73,6 +76,7 @@ type workflowPresetResolver interface {
 
 type StreamEvent struct {
 	Type           string                 `json:"type"`
+	Seq            int                    `json:"seq,omitempty"`
 	Content        string                 `json:"content,omitempty"`
 	Message        *MessageDTO            `json:"message,omitempty"`
 	Error          string                 `json:"error,omitempty"`
@@ -165,7 +169,8 @@ func NewService(
 		model:         model,
 		providers:     providers,
 		uploads:       uploads,
-		activeStreams: map[uint]context.CancelFunc{},
+		activeStreams: map[uint]*activeRun{},
+		detachTimeout: defaultDetachTimeout,
 	}
 }
 

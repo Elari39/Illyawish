@@ -3,6 +3,7 @@ import { Menu, Settings2, Shield } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { cn } from '../../../lib/utils'
+import type { ChatErrorState } from '../types'
 import { ChatComposer } from './chat-composer'
 import { MessageList } from './message-list'
 
@@ -17,10 +18,11 @@ interface ChatWorkspaceProps {
   headerTitle: string
   isHeroState: boolean
   isComposerExpanded: boolean
-  chatError: string | null
+  chatError: ChatErrorState | null
   showAdminEntry: boolean
   composerToolTrigger: ReactNode
   modelControl: ReactNode
+  onDismissChatError: () => void
   onOpenSidebar: () => void
   onOpenSettings: () => void
   onOpenAdmin: () => void
@@ -41,6 +43,7 @@ export function ChatWorkspace({
   showAdminEntry,
   composerToolTrigger,
   modelControl,
+  onDismissChatError,
   onOpenSidebar,
   onOpenSettings,
   onOpenAdmin,
@@ -56,6 +59,7 @@ export function ChatWorkspace({
       isExpanded={isComposerExpanded}
       leftContextBar={composerToolTrigger}
       modelControl={modelControl}
+      onDismissChatError={onDismissChatError}
       onToggleExpanded={onToggleComposerExpanded}
     />
   )

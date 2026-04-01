@@ -2,6 +2,8 @@ export type MessageRole = 'system' | 'user' | 'assistant'
 
 export type MessageStatus = 'completed' | 'streaming' | 'failed' | 'cancelled'
 
+export type ProviderFormat = 'openai' | 'anthropic' | 'gemini'
+
 export interface Attachment {
   id: string
   name: string
@@ -31,6 +33,7 @@ export interface ChatSettings {
 export interface ProviderPreset {
   id: number
   name: string
+  format?: ProviderFormat
   baseURL: string
   hasApiKey: boolean
   apiKeyHint: string
@@ -43,6 +46,7 @@ export interface ProviderPreset {
 
 export interface ProviderFallbackState {
   available: boolean
+  format?: ProviderFormat
   baseURL: string
   models: string[]
   defaultModel: string
@@ -179,6 +183,7 @@ export interface ImportConversationPayload {
 }
 
 export interface CreateProviderPayload {
+  format: ProviderFormat
   name: string
   baseURL: string
   apiKey?: string
@@ -188,6 +193,7 @@ export interface CreateProviderPayload {
 }
 
 export interface UpdateProviderPayload {
+  format?: ProviderFormat
   name?: string
   baseURL?: string
   apiKey?: string
@@ -197,6 +203,7 @@ export interface UpdateProviderPayload {
 
 export interface TestProviderPayload {
   providerId?: number
+  format?: ProviderFormat
   baseURL: string
   apiKey?: string
   reuseActiveApiKey?: boolean
@@ -211,6 +218,7 @@ export interface TestProviderResult {
 }
 
 interface BaseStreamEvent {
+  seq?: number
   content?: string
   error?: string
   message?: Message

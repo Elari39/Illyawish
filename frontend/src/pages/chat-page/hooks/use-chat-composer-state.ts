@@ -6,7 +6,6 @@ import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS,
   type ComposerAttachment,
-  type ToastVariant,
 } from '../types'
 import {
   cleanupComposerAttachments,
@@ -18,13 +17,11 @@ import type { Message } from '../../../types/chat'
 
 interface UseChatComposerStateOptions {
   setChatError: (value: string | null) => void
-  showToast: (message: string, variant?: ToastVariant) => void
   t: I18nContextValue['t']
 }
 
 export function useChatComposerState({
   setChatError,
-  showToast,
   t,
 }: UseChatComposerStateOptions) {
   const composerFormRef = useRef<HTMLFormElement | null>(null)
@@ -108,13 +105,9 @@ export function useChatComposerState({
             ? error.message
             : t('error.uploadAttachmentGeneric')
         setChatError(message || t('error.uploadAttachment', { name: file.name }))
-        showToast(
-          message || t('error.uploadAttachment', { name: file.name }),
-          'error',
-        )
       }
     }
-  }, [setChatError, showToast, t])
+  }, [setChatError, t])
 
   const removeSelectedAttachment = useCallback((id: string) => {
     setSelectedAttachments((previous) => {

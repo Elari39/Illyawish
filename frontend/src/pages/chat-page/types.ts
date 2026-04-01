@@ -1,4 +1,10 @@
-import type { AgentRunSummary, Attachment, ChatSettings, ConversationSettings } from '../../types/chat'
+import type {
+  AgentRunSummary,
+  Attachment,
+  ChatSettings,
+  ConversationSettings,
+  ProviderFormat,
+} from '../../types/chat'
 
 export const MAX_ATTACHMENTS = 4
 export const MAX_ATTACHMENT_BYTES = 6 * 1024 * 1024
@@ -10,7 +16,11 @@ export const CONVERSATION_PAGE_SIZE = 20
 export const LAST_CONVERSATION_STORAGE_KEY = 'aichat:last-conversation-public-id'
 export const DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY =
   'aichat:desktop-sidebar-collapsed'
-export const OPENAI_COMPATIBLE_DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+export const PROVIDER_DEFAULT_BASE_URLS: Record<ProviderFormat, string> = {
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+  gemini: 'https://generativelanguage.googleapis.com/v1beta',
+}
 
 export interface ComposerAttachment {
   id: string
@@ -36,6 +46,7 @@ export type SettingsTab =
   | 'transfer'
 
 export interface ProviderFormErrors {
+  format?: string
   name?: string
   baseURL?: string
   apiKey?: string
@@ -46,6 +57,7 @@ export interface ProviderFormErrors {
 
 export interface ProviderFormState {
   name: string
+  format: ProviderFormat
   baseURL: string
   apiKey: string
   models: string[]
@@ -64,6 +76,15 @@ export interface ToastState {
   id: number
   message: string
   variant: ToastVariant
+  durationMs?: number
+  remainingMs?: number
+  closeAt?: number
+  isPaused?: boolean
+}
+
+export interface ChatErrorState {
+  id: number
+  message: string
 }
 
 export interface ConfirmationState {

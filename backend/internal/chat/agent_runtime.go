@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"backend/internal/agent"
@@ -31,6 +32,7 @@ type agentRunConfiguration struct {
 
 func (s *Service) streamAgentIntoAssistantMessage(
 	ctx context.Context,
+	run *activeRun,
 	conversation *models.Conversation,
 	assistantMessage *models.Message,
 	providerConfig llm.ProviderConfig,
@@ -85,12 +87,27 @@ func (s *Service) streamAgentIntoAssistantMessage(
 		})
 	})
 	if err != nil {
+		status := models.MessageStatusFailed
+		eventType := "error"
+		if errors.Is(err, context.Canceled) &&
+			(run.getCancelReason() == runCancelReasonUser || run.getCancelReason() == runCancelReasonDetached) {
+			status = models.MessageStatusCancelled
+			eventType = "cancelled"
+		}
 		if updateErr := s.db.Model(assistantMessage).Updates(map[string]any{
-			"status":            models.MessageStatusFailed,
+			"status":            status,
 			"content":           assistantMessage.Content,
 			"reasoning_content": assistantMessage.ReasoningContent,
 		}).Error; updateErr != nil {
 			return fmt.Errorf("fail assistant message after agent error: %w", updateErr)
+		}
+		assistantMessage.Status = status
+		if eventType == "cancelled" || eventType == "error" {
+			return emit(StreamEvent{
+				Type:    eventType,
+				Error:   err.Error(),
+				Message: ToMessageDTO(assistantMessage, conversation.PublicID),
+			})
 		}
 		return err
 	}

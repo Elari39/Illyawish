@@ -406,14 +406,15 @@ func (s *Service) CancelGeneration(userID uint, conversationID uint) error {
 	}
 
 	s.activeMu.Lock()
-	cancel, exists := s.activeStreams[conversationID]
+	run, exists := s.activeStreams[conversationID]
 	s.activeMu.Unlock()
 
 	if !exists {
 		return nil
 	}
 
-	cancel()
+	run.setCancelReason(runCancelReasonUser)
+	run.cancel()
 	return nil
 }
 

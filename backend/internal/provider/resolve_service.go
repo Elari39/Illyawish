@@ -28,6 +28,7 @@ func (s *Service) ResolveForUser(userID uint, preferredPresetID *uint) (*Resolve
 			ActivePresetID: &activePresetID,
 			Name:           preset.Name,
 			Config: llm.ProviderConfig{
+				Format:       normalizeProviderFormat(preset.Format),
 				BaseURL:      preset.BaseURL,
 				APIKey:       apiKey,
 				DefaultModel: preset.DefaultModel,
@@ -141,6 +142,7 @@ func (s *Service) fallbackState() FallbackState {
 
 	return FallbackState{
 		Available:    isCompleteProviderConfig(s.fallback),
+		Format:       normalizeProviderFormat(s.fallback.Format),
 		BaseURL:      s.fallback.BaseURL,
 		Models:       fallbackModels,
 		DefaultModel: s.fallback.DefaultModel,

@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from 'react'
 import {
+  AlertCircle,
   FileText,
   Maximize2,
   Minimize2,
@@ -23,7 +24,7 @@ import { Button } from '../../../components/ui/button'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
-import type { ComposerAttachment } from '../types'
+import type { ChatErrorState, ComposerAttachment } from '../types'
 import {
   ATTACHMENT_INPUT_ACCEPT,
   formatAttachmentSize,
@@ -39,7 +40,7 @@ interface ChatComposerProps {
   hasPendingUploads: boolean
   canSubmitComposer: boolean
   isSending: boolean
-  chatError: string | null
+  chatError: ChatErrorState | null
   composerIsComposingRef: MutableRefObject<boolean>
   layoutMode?: 'hero' | 'docked'
   isExpanded?: boolean
@@ -49,6 +50,7 @@ interface ChatComposerProps {
   onToggleExpanded?: (expanded: boolean) => void
   onComposerChange: (value: string) => void
   onCancelEdit: () => void
+  onDismissChatError?: () => void
   onStopGeneration: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onFilesSelected: (files: File[]) => void
@@ -78,6 +80,7 @@ export function ChatComposer({
   onToggleExpanded,
   onComposerChange,
   onCancelEdit,
+  onDismissChatError,
   onStopGeneration,
   onSubmit,
   onFilesSelected,
@@ -405,7 +408,34 @@ export function ChatComposer({
         />
 
         {chatError ? (
-          <p className="px-1 text-sm text-[var(--danger)]">{chatError}</p>
+          <div className="px-1">
+            <div
+              className="flex items-start justify-between gap-4 rounded-[1.25rem] border border-[color-mix(in_srgb,var(--danger)_55%,var(--line)_45%)] bg-[linear-gradient(135deg,color-mix(in_srgb,var(--danger)_16%,var(--surface)_84%),color-mix(in_srgb,var(--danger)_10%,var(--surface)_90%))] px-4 py-3.5 text-[var(--foreground)] shadow-[0_18px_44px_rgba(120,26,26,0.18)]"
+              role="alert"
+            >
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--danger)_28%,var(--line)_72%)] bg-[color-mix(in_srgb,var(--danger)_18%,transparent)] text-[var(--danger)] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <AlertCircle className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-semibold leading-5 text-[var(--danger)]">
+                    {t('common.error')}
+                  </p>
+                  <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-6 text-[color-mix(in_srgb,var(--foreground)_92%,var(--danger)_8%)]">
+                    {chatError.message}
+                  </p>
+                </div>
+              </div>
+              <button
+                aria-label={t('common.close')}
+                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--danger)_24%,var(--line)_76%)] bg-[color-mix(in_srgb,var(--surface)_82%,var(--danger)_18%)] text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--surface)_68%,var(--danger)_32%)]"
+                onClick={onDismissChatError}
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         ) : null}
       </div>
     </footer>

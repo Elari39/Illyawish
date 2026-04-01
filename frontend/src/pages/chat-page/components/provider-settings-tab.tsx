@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
+import { Select } from '../../../components/ui/select'
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import type { ProviderPreset, ProviderState } from '../../../types/chat'
@@ -19,7 +20,7 @@ interface ProviderSettingsTabProps {
   onDeleteProvider: (preset: ProviderPreset) => void
   onEditProvider: (preset: ProviderPreset) => void
   onProviderFieldChange: (
-    field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
+    field: 'format' | 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
     value: string,
   ) => void
   onProviderModelsChange: (
@@ -153,7 +154,7 @@ export function ProviderSettingsTab({
                           {preset.name}
                         </p>
                         <p className="mt-1 truncate text-xs text-[var(--muted-foreground)]">
-                          {preset.defaultModel}
+                          {(preset.format ?? 'openai')} · {preset.defaultModel}
                         </p>
                       </div>
                       {preset.isActive ? (
@@ -250,6 +251,28 @@ export function ProviderSettingsTab({
           <div className="mt-5 grid gap-5">
             <label className="block space-y-2">
               <span className="text-sm font-medium text-[var(--foreground)]">
+                {t('settings.providerFormat')}
+              </span>
+              <Select
+                aria-label={t('settings.providerFormat')}
+                value={providerForm.format}
+                onChange={(event) =>
+                  onProviderFieldChange('format', event.target.value)
+                }
+              >
+                <option value="openai">{t('settings.providerFormatOpenAI')}</option>
+                <option value="anthropic">{t('settings.providerFormatAnthropic')}</option>
+                <option value="gemini">{t('settings.providerFormatGemini')}</option>
+              </Select>
+              {providerForm.errors.format ? (
+                <p className="text-xs text-[var(--danger)]">
+                  {providerForm.errors.format}
+                </p>
+              ) : null}
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-[var(--foreground)]">
                 {t('settings.presetName')}
               </span>
               <Input
@@ -281,7 +304,7 @@ export function ProviderSettingsTab({
               </span>
               <Input
                 ref={baseURLInputRef}
-                placeholder="https://api.openai.com/v1"
+                placeholder={providerForm.baseURL}
                 value={providerForm.baseURL}
                 onChange={(event) =>
                   onProviderFieldChange('baseURL', event.target.value)

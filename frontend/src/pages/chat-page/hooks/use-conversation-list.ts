@@ -297,6 +297,8 @@ export function useConversationList(options: UseConversationListOptions) {
             {
               showArchived: stateRef.current.showArchived,
               search: deferredConversationSearch,
+              selectedFolder: stateRef.current.selectedFolder,
+              selectedTags: stateRef.current.selectedTags,
             },
             {
               updateCountsForVisibilityChange:
@@ -368,11 +370,15 @@ export function useConversationList(options: UseConversationListOptions) {
             {
               showArchived: stateRef.current.showArchived,
               search: deferredConversationSearch,
+              selectedFolder: stateRef.current.selectedFolder,
+              selectedTags: stateRef.current.selectedTags,
             },
             {
               countAsNew: matchesConversationFilters(conversation, {
                 showArchived: stateRef.current.showArchived,
                 search: deferredConversationSearch,
+                selectedFolder: stateRef.current.selectedFolder,
+                selectedTags: stateRef.current.selectedTags,
               }),
             },
           )

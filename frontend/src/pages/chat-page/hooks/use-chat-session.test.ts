@@ -102,6 +102,7 @@ const transferState = {
 const generationState = {
   executionEvents: [],
   pendingConfirmationId: null,
+  handleResumeConversation: vi.fn(),
   handleRegenerateAssistant: vi.fn(),
   handleRetryAssistant: vi.fn(),
   handleConfirmToolCall: vi.fn(),
@@ -160,6 +161,73 @@ function createConversation(
 }
 
 describe('useChatSession', () => {
+  it('automatically resumes the latest streaming assistant after messages load', () => {
+    hookMocks.useChatComposerState.mockReturnValue(composerState)
+    hookMocks.useChatMessagesState.mockReturnValue({
+      ...messagesState,
+      messages: [
+        {
+          id: 1,
+          conversationId: 'conversation-1',
+          role: 'user',
+          content: 'hello',
+          reasoningContent: '',
+          attachments: [],
+          status: 'completed',
+          createdAt: '2026-03-29T00:00:00Z',
+        },
+        {
+          id: 2,
+          conversationId: 'conversation-1',
+          role: 'assistant',
+          content: '',
+          reasoningContent: 'thinking',
+          attachments: [],
+          status: 'streaming',
+          createdAt: '2026-03-29T00:00:01Z',
+        },
+      ],
+      latestAssistantMessage: {
+        id: 2,
+        conversationId: 'conversation-1',
+        role: 'assistant',
+        content: '',
+        reasoningContent: 'thinking',
+        attachments: [],
+        status: 'streaming',
+        createdAt: '2026-03-29T00:00:01Z',
+      },
+    })
+    hookMocks.useChatSettingsState.mockReturnValue(settingsState)
+    hookMocks.useChatHistory.mockReturnValue(historyState)
+    hookMocks.useChatTransfer.mockReturnValue(transferState)
+    hookMocks.useChatGeneration.mockReturnValue(generationState)
+
+    const conversation = createConversation()
+
+    renderHook(() =>
+      useChatSession({
+        activeConversationId: conversation.id,
+        currentConversation: conversation,
+        search: '',
+        showArchived: false,
+        setChatError: vi.fn(),
+        showToast: vi.fn(),
+        insertCreatedConversation: vi.fn(),
+        removeConversationFromList: vi.fn(),
+        syncConversationIntoList: vi.fn(),
+        loadConversations: vi.fn().mockResolvedValue(undefined),
+        navigateToConversation: vi.fn(),
+        navigateHome: vi.fn(),
+        setSkipAutoResume: vi.fn(),
+        t: ((key: string) => key) as Parameters<typeof useChatSession>[0]['t'],
+        locale: 'ja-JP',
+      }),
+    )
+
+    expect(generationState.handleResumeConversation).toHaveBeenCalledWith(conversation.id)
+  })
+
   it('exposes pending knowledge space ids from settings state', () => {
     hookMocks.useChatComposerState.mockReturnValue(composerState)
     hookMocks.useChatMessagesState.mockReturnValue(messagesState)

@@ -73,6 +73,7 @@ describe('useProviderSettings', () => {
     const preset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -88,6 +89,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -119,6 +121,7 @@ describe('useProviderSettings', () => {
     })
 
     expect(updateProviderMock).toHaveBeenCalledWith(7, {
+      format: 'openai',
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
       models: ['gpt-4.1-mini'],
@@ -132,6 +135,7 @@ describe('useProviderSettings', () => {
     const createdPreset: ProviderPreset = {
       id: 9,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-c...9876',
@@ -147,6 +151,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -178,6 +183,7 @@ describe('useProviderSettings', () => {
     })
 
     expect(createProviderMock).toHaveBeenCalledWith({
+      format: 'openai',
       name: 'OpenAI',
       baseURL: 'https://api.openai.com/v1',
       apiKey: 'sk-created-9876',
@@ -193,6 +199,7 @@ describe('useProviderSettings', () => {
     const activePreset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -208,6 +215,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -219,6 +227,7 @@ describe('useProviderSettings', () => {
           ...activePreset,
           id: 8,
           name: 'Secondary',
+          format: 'anthropic',
           baseURL: 'https://secondary.example.com/v1',
           models: ['model-b'],
           defaultModel: 'model-b',
@@ -232,6 +241,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -267,6 +277,7 @@ describe('useProviderSettings', () => {
     })
 
     expect(createProviderMock).toHaveBeenCalledWith({
+      format: 'openai',
       name: 'Secondary',
       baseURL: 'https://secondary.example.com/v1',
       reuseActiveApiKey: true,
@@ -274,6 +285,60 @@ describe('useProviderSettings', () => {
       defaultModel: 'model-b',
     })
     expect(result.current.providerForm.errors.apiKey).toBeUndefined()
+  })
+
+  it('defaults a new preset to openai format and default base url', () => {
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: false,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    expect(result.current.providerForm.format).toBe('openai')
+    expect(result.current.providerForm.baseURL).toBe('https://api.openai.com/v1')
+  })
+
+  it('switches to the selected format default base url when the current base url is still default', () => {
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: false,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.handleProviderFieldChange('format', 'anthropic')
+    })
+
+    expect(result.current.providerForm.format).toBe('anthropic')
+    expect(result.current.providerForm.baseURL).toBe('https://api.anthropic.com/v1')
+  })
+
+  it('does not overwrite a custom base url when switching formats', () => {
+    const { result } = renderHook(
+      () =>
+        useProviderSettings({
+          isSettingsOpen: false,
+          setChatError: vi.fn(),
+          showToast: vi.fn(),
+        }),
+      { wrapper },
+    )
+
+    act(() => {
+      result.current.handleProviderFieldChange('baseURL', 'https://gateway.example.com/v1')
+      result.current.handleProviderFieldChange('format', 'gemini')
+    })
+
+    expect(result.current.providerForm.baseURL).toBe('https://gateway.example.com/v1')
+    expect(result.current.providerForm.format).toBe('gemini')
   })
 
   it('requires an api key for a new preset when no active preset key can be reused', async () => {
@@ -310,6 +375,7 @@ describe('useProviderSettings', () => {
         {
           id: 3,
           name: 'Existing preset',
+          format: 'openai',
           baseURL: 'https://api.openai.com/v1',
           hasApiKey: true,
           apiKeyHint: 'sk-1...2345',
@@ -324,6 +390,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: true,
+        format: 'openai',
         baseURL: 'https://fallback.example.com/v1',
         models: ['fallback-model'],
         defaultModel: 'fallback-model',
@@ -380,6 +447,7 @@ describe('useProviderSettings', () => {
     const preset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -395,6 +463,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -431,6 +500,7 @@ describe('useProviderSettings', () => {
 
     expect(testProviderMock).toHaveBeenCalledWith({
       providerId: 7,
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       defaultModel: 'gpt-4.1-mini',
     })
@@ -440,6 +510,7 @@ describe('useProviderSettings', () => {
     const preset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -455,6 +526,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -492,6 +564,7 @@ describe('useProviderSettings', () => {
 
     expect(testProviderMock).toHaveBeenCalledWith({
       providerId: 7,
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       apiKey: 'sk-updated-5678',
       defaultModel: 'gpt-4.1-mini',
@@ -502,6 +575,7 @@ describe('useProviderSettings', () => {
     const activePreset: ProviderPreset = {
       id: 7,
       name: 'OpenAI',
+      format: 'openai',
       baseURL: 'https://api.openai.com/v1',
       hasApiKey: true,
       apiKeyHint: 'sk-1...2345',
@@ -517,6 +591,7 @@ describe('useProviderSettings', () => {
       currentSource: 'preset',
       fallback: {
         available: false,
+        format: 'openai',
         baseURL: '',
         models: [],
         defaultModel: '',
@@ -558,6 +633,7 @@ describe('useProviderSettings', () => {
     })
 
     expect(testProviderMock).toHaveBeenCalledWith({
+      format: 'openai',
       baseURL: 'https://secondary.example.com/v1',
       reuseActiveApiKey: true,
       defaultModel: 'model-b',

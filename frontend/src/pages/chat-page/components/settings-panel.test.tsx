@@ -58,6 +58,7 @@ function ProviderSettingsHarness() {
   const [settings, setSettings] = useState(initialSettings)
   const [providerForm, setProviderForm] = useState({
     name: '',
+    format: 'openai' as const,
     baseURL: '',
     apiKey: '',
     models: [''],
@@ -174,6 +175,7 @@ function ChatSettingsHarness() {
       onTestProvider={() => {}}
       providerForm={{
         name: '',
+        format: 'openai',
         baseURL: '',
         apiKey: '',
         models: [''],
@@ -186,6 +188,7 @@ function ChatSettingsHarness() {
           {
             id: 7,
             name: 'OpenAI',
+            format: 'openai',
             baseURL: 'https://api.openai.com/v1',
             hasApiKey: true,
             apiKeyHint: 'sk-***',
@@ -254,6 +257,7 @@ function HistorySettingsHarness() {
       onTestProvider={() => {}}
       providerForm={{
         name: '',
+        format: 'openai',
         baseURL: '',
         apiKey: '',
         models: [''],

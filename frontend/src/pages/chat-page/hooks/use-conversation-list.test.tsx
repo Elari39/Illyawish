@@ -803,4 +803,53 @@ describe('useConversationList', () => {
     expect(result.current.hasMoreConversations).toBe(false)
   })
 
+  it('does not increment counters for synced conversations hidden by folder filters', async () => {
+    listConversationsPageMock.mockResolvedValue({
+      conversations: [
+        createConversation(1, {
+          title: 'Work chat',
+          folder: 'Work',
+          updatedAt: '2026-03-26T00:00:00Z',
+        }),
+      ],
+      total: 1,
+    })
+
+    const onError = vi.fn()
+    const navigateToConversation = vi.fn()
+
+    const { result } = renderHook(
+      () =>
+        useConversationList({
+          activeConversationId: null,
+          onError,
+          navigateToConversation,
+        }),
+      { wrapper },
+    )
+
+    await waitFor(() => {
+      expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
+    })
+
+    act(() => {
+      result.current.setSelectedFolder('Work')
+    })
+
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
+    expect(result.current.conversationTotal).toBe(1)
+
+    act(() => {
+      result.current.syncConversationIntoList(createConversation(2, {
+        title: 'Personal chat',
+        folder: 'Personal',
+        updatedAt: '2026-03-27T00:00:00Z',
+      }))
+    })
+
+    expect(result.current.conversations.map((conversation) => conversation.id)).toEqual(['1'])
+    expect(result.current.conversationTotal).toBe(1)
+    expect(result.current.hasMoreConversations).toBe(false)
+  })
+
 })

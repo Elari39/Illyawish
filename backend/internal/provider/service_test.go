@@ -29,6 +29,7 @@ func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 	})
 
 	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Format:       llm.ProviderFormatOpenAI,
 		Name:         "OpenAI",
 		BaseURL:      "https://api.openai.com/v1",
 		APIKey:       "sk-test-123456",
@@ -57,8 +58,40 @@ func TestCreatePresetEncryptsAPIKeyAndActivatesIt(t *testing.T) {
 	if resolved.Source != SourcePreset {
 		t.Fatalf("expected provider source %q, got %q", SourcePreset, resolved.Source)
 	}
+	if resolved.Config.Format != llm.ProviderFormatOpenAI {
+		t.Fatalf("expected provider format %q, got %q", llm.ProviderFormatOpenAI, resolved.Config.Format)
+	}
 	if resolved.Config.APIKey != "sk-test-123456" {
 		t.Fatalf("expected decrypted API key, got %q", resolved.Config.APIKey)
+	}
+}
+
+func TestCreatePresetDefaultsFormatToOpenAI(t *testing.T) {
+	service := newTestService(t, &config.Config{
+		SessionSecret: "session-secret",
+	})
+
+	preset, err := service.CreatePreset(1, CreatePresetInput{
+		Name:         "Default Format",
+		BaseURL:      "https://example.com/v1",
+		APIKey:       "test-key",
+		Models:       []string{"model-a"},
+		DefaultModel: "model-a",
+	})
+	if err != nil {
+		t.Fatalf("CreatePreset() error = %v", err)
+	}
+
+	if preset.Format != llm.ProviderFormatOpenAI {
+		t.Fatalf("expected default format %q, got %q", llm.ProviderFormatOpenAI, preset.Format)
+	}
+
+	state, err := service.ListState(1)
+	if err != nil {
+		t.Fatalf("ListState() error = %v", err)
+	}
+	if state.Presets[0].Format != llm.ProviderFormatOpenAI {
+		t.Fatalf("expected listed preset format %q, got %q", llm.ProviderFormatOpenAI, state.Presets[0].Format)
 	}
 }
 
@@ -160,6 +193,7 @@ func TestOnlyOnePresetRemainsActive(t *testing.T) {
 
 func TestResolveFallsBackToServerConfig(t *testing.T) {
 	service := newTestService(t, &config.Config{
+		ProviderFormat: "gemini",
 		OpenAIBaseURL: "https://fallback.example.com/v1",
 		OpenAIAPIKey:  "fallback-key",
 		Model:         "fallback-model",
@@ -173,6 +207,9 @@ func TestResolveFallsBackToServerConfig(t *testing.T) {
 
 	if resolved.Source != SourceFallback {
 		t.Fatalf("expected provider source %q, got %q", SourceFallback, resolved.Source)
+	}
+	if resolved.Config.Format != llm.ProviderFormatGemini {
+		t.Fatalf("expected fallback format %q, got %q", llm.ProviderFormatGemini, resolved.Config.Format)
 	}
 	if resolved.Config.DefaultModel != "fallback-model" {
 		t.Fatalf("expected fallback model, got %q", resolved.Config.DefaultModel)

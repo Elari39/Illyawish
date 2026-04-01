@@ -151,6 +151,20 @@ export const chatApi = {
       signal,
     )
   },
+  async resumeStream(
+    conversationId: string,
+    afterSeq: number,
+    onEvent: (event: StreamEvent) => void | Promise<void>,
+    signal?: AbortSignal,
+  ) {
+    await streamChatRequest(
+      `/api/conversations/${conversationId}/stream?afterSeq=${afterSeq}`,
+      undefined,
+      onEvent,
+      'GET',
+      signal,
+    )
+  },
   async retryMessage(
     conversationId: string,
     messageId: number,

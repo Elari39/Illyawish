@@ -14,6 +14,11 @@ func isCompleteProviderConfig(provider llm.ProviderConfig) bool {
 }
 
 func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, error) {
+	format := normalizeProviderFormat(input.Format)
+	if format == "" {
+		return CreatePresetInput{}, requestError{message: "provider format is invalid"}
+	}
+
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return CreatePresetInput{}, requestError{message: "provider name is required"}
@@ -35,6 +40,7 @@ func sanitizeCreatePresetInput(input CreatePresetInput) (CreatePresetInput, erro
 	}
 
 	return CreatePresetInput{
+		Format:            format,
 		Name:              name,
 		BaseURL:           baseURL,
 		APIKey:            apiKey,
@@ -49,6 +55,14 @@ func sanitizeUpdatePresetInput(
 	current *models.LLMProviderPreset,
 ) (UpdatePresetInput, error) {
 	var normalized UpdatePresetInput
+
+	if input.Format != nil {
+		format := normalizeProviderFormat(*input.Format)
+		if format == "" {
+			return UpdatePresetInput{}, requestError{message: "provider format is invalid"}
+		}
+		normalized.Format = &format
+	}
 
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)

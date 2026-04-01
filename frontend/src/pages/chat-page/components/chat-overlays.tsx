@@ -87,11 +87,13 @@ interface ChatOverlaysProps {
   onCloseSettings: () => void
   onDeleteProvider: (preset: ProviderPreset) => void
   onDismissToast: (toastId: number) => void
+  onPauseToast: (toastId: number) => void
+  onResumeToast: (toastId: number) => void
   onEditProvider: (preset: ProviderPreset) => void
   onExport: () => void
   onImport: (file: File) => void
   onProviderFieldChange: (
-    field: 'name' | 'baseURL' | 'apiKey' | 'defaultModel',
+    field: 'name' | 'format' | 'baseURL' | 'apiKey' | 'defaultModel',
     value: string,
   ) => void
   onProviderModelsChange: (value: { defaultModel: string; models: string[] }) => void
@@ -222,6 +224,8 @@ export function ChatOverlays({
   onCloseSettings,
   onDeleteProvider,
   onDismissToast,
+  onPauseToast,
+  onResumeToast,
   onEditProvider,
   onExport,
   onImport,
@@ -338,6 +342,8 @@ export function ChatOverlays({
       <ToastViewport
         toasts={toasts}
         onDismiss={onDismissToast}
+        onPause={onPauseToast}
+        onResume={onResumeToast}
       />
     </Suspense>
   )

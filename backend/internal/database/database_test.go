@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,6 +186,35 @@ func TestOpenRejectsLegacyConversationSchemaWithoutPublicID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "public_id") {
 		t.Fatalf("expected error to mention public_id, got %v", err)
+	}
+}
+
+func TestOpenCreatesSharedWritableSQLiteFile(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "shared.db")
+
+	db, err := Open(&config.Config{
+		SQLitePath: dbPath,
+		UploadDir:  filepath.Join(t.TempDir(), "uploads"),
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
+
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		t.Fatalf("stat sqlite file: %v", err)
+	}
+
+	if info.Mode().Perm() != 0o666 {
+		t.Fatalf("expected sqlite file permissions 0666, got %04o", info.Mode().Perm())
 	}
 }
 

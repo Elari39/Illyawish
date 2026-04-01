@@ -11,6 +11,7 @@ import (
 )
 
 type providerPresetUpdates struct {
+	Format          *string   `gorm:"column:format"`
 	Name            *string   `gorm:"column:name"`
 	BaseURL         *string   `gorm:"column:base_url"`
 	EncryptedAPIKey *string   `gorm:"column:encrypted_api_key"`
@@ -75,6 +76,7 @@ func (s *Service) CreatePreset(userID uint, input CreatePresetInput) (*models.LL
 	preset := &models.LLMProviderPreset{
 		UserID:          userID,
 		Name:            normalized.Name,
+		Format:          normalized.Format,
 		BaseURL:         normalized.BaseURL,
 		EncryptedAPIKey: encryptedAPIKey,
 		APIKeyHint:      apiKeyHint(apiKey),
@@ -120,6 +122,10 @@ func (s *Service) UpdatePreset(userID uint, presetID uint, input UpdatePresetInp
 
 	if normalized.Name != nil {
 		updates.Name = normalized.Name
+		hasUpdates = true
+	}
+	if normalized.Format != nil {
+		updates.Format = normalized.Format
 		hasUpdates = true
 	}
 	if normalized.BaseURL != nil {

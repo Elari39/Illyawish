@@ -11,6 +11,50 @@ import (
 	"gorm.io/gorm"
 )
 
+func (s *Service) launchActiveRun(
+	requestCtx context.Context,
+	conversationID uint,
+	execute func(run *activeRun) error,
+	emit func(StreamEvent) error,
+) error {
+	run, err := s.registerActiveStream(conversationID)
+	if err != nil {
+		return err
+	}
+
+	events, subscriber, unsubscribe := run.subscribe(0)
+	cleanupSubscription := func() {
+		unsubscribe()
+		s.scheduleDetachCancellation(conversationID, run)
+	}
+	defer cleanupSubscription()
+
+	go func() {
+		defer s.finishActiveStream(conversationID, run)
+		s.publishActiveRunError(run, execute(run))
+	}()
+
+	for _, event := range events {
+		if err := emit(event); err != nil {
+			return nil
+		}
+	}
+
+	for {
+		select {
+		case <-requestCtx.Done():
+			return nil
+		case event, ok := <-subscriber:
+			if !ok {
+				return nil
+			}
+			if err := emit(event); err != nil {
+				return nil
+			}
+		}
+	}
+}
+
 func (s *Service) StreamAssistantReply(
 	ctx context.Context,
 	userID uint,
@@ -46,12 +90,6 @@ func (s *Service) StreamAssistantReply(
 	if err != nil {
 		return err
 	}
-
-	ctx, cleanup, err := s.registerActiveStream(ctx, conversation.ID)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
 
 	var assistantMessage models.Message
 	if err := s.db.Transaction(func(tx *gorm.DB) error {
@@ -102,18 +140,37 @@ func (s *Service) StreamAssistantReply(
 	}
 
 	if s.shouldUseAgentRuntime(conversation, normalizedInput) {
-		return s.streamAgentIntoAssistantMessage(ctx, conversation, &assistantMessage, resolvedProvider.Config, normalizedInput, emit)
+		return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
+			return s.streamAgentIntoAssistantMessage(
+				run.ctx,
+				run,
+				conversation,
+				&assistantMessage,
+				resolvedProvider.Config,
+				normalizedInput,
+				func(event StreamEvent) error {
+					run.publish(event)
+					return nil
+				},
+			)
+		}, emit)
 	}
 
-	return s.streamIntoAssistantMessage(
-		ctx,
-		&assistantMessage,
-		conversation.PublicID,
-		resolvedProvider.Config,
-		history,
-		settings,
-		emit,
-	)
+	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
+		return s.streamIntoAssistantMessage(
+			run.ctx,
+			run,
+			&assistantMessage,
+			conversation.PublicID,
+			resolvedProvider.Config,
+			history,
+			settings,
+			func(event StreamEvent) error {
+				run.publish(event)
+				return nil
+			},
+		)
+	}, emit)
 }
 
 func (s *Service) RetryAssistantMessage(
@@ -145,12 +202,6 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	ctx, cleanup, err := s.registerActiveStream(ctx, conversation.ID)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(
 		conversation.ID,
 		assistantMessageID,
@@ -170,15 +221,21 @@ func (s *Service) RetryAssistantMessage(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(
-		ctx,
-		assistantMessage,
-		conversation.PublicID,
-		resolvedProvider.Config,
-		history,
-		settings,
-		emit,
-	)
+	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
+		return s.streamIntoAssistantMessage(
+			run.ctx,
+			run,
+			assistantMessage,
+			conversation.PublicID,
+			resolvedProvider.Config,
+			history,
+			settings,
+			func(event StreamEvent) error {
+				run.publish(event)
+				return nil
+			},
+		)
+	}, emit)
 }
 
 func (s *Service) RegenerateAssistantMessage(
@@ -210,12 +267,6 @@ func (s *Service) RegenerateAssistantMessage(
 		return err
 	}
 
-	ctx, cleanup, err := s.registerActiveStream(ctx, conversation.ID)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
 	assistantMessage, cleanupMessages, err := s.prepareAssistantReplay(
 		conversation.ID,
 		assistantMessageID,
@@ -234,15 +285,21 @@ func (s *Service) RegenerateAssistantMessage(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(
-		ctx,
-		assistantMessage,
-		conversation.PublicID,
-		resolvedProvider.Config,
-		history,
-		settings,
-		emit,
-	)
+	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
+		return s.streamIntoAssistantMessage(
+			run.ctx,
+			run,
+			assistantMessage,
+			conversation.PublicID,
+			resolvedProvider.Config,
+			history,
+			settings,
+			func(event StreamEvent) error {
+				run.publish(event)
+				return nil
+			},
+		)
+	}, emit)
 }
 
 func (s *Service) RegenerateLastAssistantReply(
@@ -263,6 +320,20 @@ func (s *Service) RegenerateLastAssistantReply(
 	}
 
 	return s.RegenerateAssistantMessage(ctx, userID, conversationID, latestMessage.ID, options, emit)
+}
+
+func (s *Service) ResumeActiveStream(
+	ctx context.Context,
+	userID uint,
+	conversationID uint,
+	afterSeq int,
+	emit func(StreamEvent) error,
+) error {
+	if _, err := s.GetConversation(userID, conversationID); err != nil {
+		return err
+	}
+
+	return s.streamActiveRun(ctx, conversationID, afterSeq, emit)
 }
 
 func (s *Service) EditUserMessageAndRegenerate(
@@ -298,12 +369,6 @@ func (s *Service) EditUserMessageAndRegenerate(
 	if err != nil {
 		return err
 	}
-
-	ctx, cleanup, err := s.registerActiveStream(ctx, conversation.ID)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
 
 	var (
 		assistantMessage models.Message
@@ -387,13 +452,19 @@ func (s *Service) EditUserMessageAndRegenerate(
 		return err
 	}
 
-	return s.streamIntoAssistantMessage(
-		ctx,
-		&assistantMessage,
-		conversation.PublicID,
-		resolvedProvider.Config,
-		history,
-		settings,
-		emit,
-	)
+	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
+		return s.streamIntoAssistantMessage(
+			run.ctx,
+			run,
+			&assistantMessage,
+			conversation.PublicID,
+			resolvedProvider.Config,
+			history,
+			settings,
+			func(event StreamEvent) error {
+				run.publish(event)
+				return nil
+			},
+		)
+	}, emit)
 }

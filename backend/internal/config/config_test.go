@@ -62,6 +62,24 @@ func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadFromDataDirCreatesSharedReadableConfigFile(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+
+	if _, err := loadFromDataDir(dataDir); err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	info, err := os.Stat(configPath)
+	if err != nil {
+		t.Fatalf("stat config file: %v", err)
+	}
+
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("expected config file permissions 0644, got %04o", info.Mode().Perm())
+	}
+}
+
 func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "data")
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
@@ -96,6 +114,9 @@ func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
 
 	if cfg.OpenAIBaseURL != "https://example.com/v1" {
 		t.Fatalf("expected fallback base URL to load, got %q", cfg.OpenAIBaseURL)
+	}
+	if cfg.ProviderFormat != "openai" {
+		t.Fatalf("expected legacy fallback format to default to openai, got %q", cfg.ProviderFormat)
 	}
 	if cfg.OpenAIAPIKey != "test-key" {
 		t.Fatalf("expected fallback API key to load, got %q", cfg.OpenAIAPIKey)
@@ -132,6 +153,87 @@ func TestLoadFromDataDirReusesExistingSecretsAndFallback(t *testing.T) {
 	}
 	if cfg.TrustProxyHeadersForSecureCookies {
 		t.Fatal("expected trust proxy headers for secure cookies to remain false when omitted")
+	}
+}
+
+func TestLoadFromDataDirUsesGenericProviderFallbackFields(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "providerFormat": "anthropic",
+  "providerBaseURL": "https://api.anthropic.com/v1",
+  "providerApiKey": "anthropic-key",
+  "providerModel": "claude-sonnet-4-20250514",
+  "sessionSecret": "existing-session-secret",
+  "settingsEncryptionKey": "existing-settings-secret"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
+	if err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	if cfg.ProviderFormat != "anthropic" {
+		t.Fatalf("expected generic fallback format to load, got %q", cfg.ProviderFormat)
+	}
+	if cfg.OpenAIBaseURL != "https://api.anthropic.com/v1" {
+		t.Fatalf("expected generic fallback base URL to map to provider config, got %q", cfg.OpenAIBaseURL)
+	}
+	if cfg.OpenAIAPIKey != "anthropic-key" {
+		t.Fatalf("expected generic fallback API key to map to provider config, got %q", cfg.OpenAIAPIKey)
+	}
+	if cfg.Model != "claude-sonnet-4-20250514" {
+		t.Fatalf("expected generic fallback model to map to provider config, got %q", cfg.Model)
+	}
+}
+
+func TestLoadFromDataDirMigratesManagedAbsolutePathsIntoCurrentDataDir(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+
+	configPath := filepath.Join(dataDir, defaultConfigFileName)
+	content := `{
+  "sqlitePath": "/home/elaina/workspace/AICoding/ReactGo/Project01/data/aichat.db",
+  "uploadDir": "/home/elaina/workspace/AICoding/ReactGo/Project01/data/uploads",
+  "sessionSecret": "existing-session-secret",
+  "settingsEncryptionKey": "existing-settings-secret"
+}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := loadFromDataDir(dataDir)
+	if err != nil {
+		t.Fatalf("loadFromDataDir() error = %v", err)
+	}
+
+	if cfg.SQLitePath != filepath.Join(dataDir, defaultSQLiteFileName) {
+		t.Fatalf("expected sqlite path to migrate into current data dir, got %q", cfg.SQLitePath)
+	}
+	if cfg.UploadDir != filepath.Join(dataDir, defaultUploadDirName) {
+		t.Fatalf("expected upload dir to migrate into current data dir, got %q", cfg.UploadDir)
+	}
+
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config file: %v", err)
+	}
+	if !strings.Contains(string(payload), `"sqlitePath": "aichat.db"`) {
+		t.Fatalf("expected sqlite path to be rewritten as portable relative path, got %s", string(payload))
+	}
+	if !strings.Contains(string(payload), `"uploadDir": "uploads"`) {
+		t.Fatalf("expected upload dir to be rewritten as portable relative path, got %s", string(payload))
 	}
 }
 

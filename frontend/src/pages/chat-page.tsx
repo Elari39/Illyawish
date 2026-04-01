@@ -14,6 +14,7 @@ import { ChatToolMenuTrigger } from './chat-page/components/chat-tool-menu-trigg
 import { ChatWorkspace } from './chat-page/components/chat-workspace'
 import { buildExecutionPanelModel } from './chat-page/components/execution-panel-model'
 import { useAgentWorkspace } from './chat-page/hooks/use-agent-workspace'
+import { useChatErrorState } from './chat-page/hooks/use-chat-error-state'
 import { useChatPageActions } from './chat-page/hooks/use-chat-page-actions'
 import { useChatSession } from './chat-page/hooks/use-chat-session'
 import { useConversationList } from './chat-page/hooks/use-conversation-list'
@@ -35,13 +36,13 @@ export function ChatPage() {
   }, [navigate])
 
   const [isSavingSettings, setIsSavingSettings] = useState(false)
-  const [chatError, setChatError] = useState<string | null>(null)
   const [isComposerExpanded, setIsComposerExpanded] = useState(false)
+  const chatErrorState = useChatErrorState()
   const uiState = useChatUIState()
 
   const conversationList = useConversationList({
     activeConversationId,
-    onError: setChatError,
+    onError: chatErrorState.setChatError,
     navigateToConversation,
   })
 
@@ -54,7 +55,7 @@ export function ChatPage() {
     currentConversation,
     search: conversationList.deferredConversationSearch,
     showArchived: conversationList.showArchived,
-    setChatError,
+    setChatError: chatErrorState.setChatError,
     showToast: uiState.showToast,
     insertCreatedConversation: conversationList.insertCreatedConversation,
     removeConversationFromList: conversationList.removeConversationFromList,
@@ -69,12 +70,12 @@ export function ChatPage() {
 
   const providerSettings = useProviderSettings({
     isSettingsOpen: uiState.isSettingsOpen,
-    setChatError,
+    setChatError: chatErrorState.setChatError,
     showToast: uiState.showToast,
   })
   const agentWorkspace = useAgentWorkspace({
     isSettingsOpen: uiState.isSettingsOpen,
-    setChatError,
+    setChatError: chatErrorState.setChatError,
   })
   const interactionDisabled = chatSession.isSending
   const displayConversation =
@@ -121,7 +122,7 @@ export function ChatPage() {
     navigateHome,
     logout,
     setIsSavingSettings,
-    setChatError,
+    setChatError: chatErrorState.setChatError,
     t,
   })
 
@@ -258,10 +259,11 @@ export function ChatPage() {
         headerTitle={headerTitle}
         isHeroState={isHeroState}
         isComposerExpanded={effectiveComposerExpanded}
-        chatError={chatError}
+        chatError={chatErrorState.chatError}
         showAdminEntry={user?.role === 'admin'}
         composerToolTrigger={composerToolTrigger}
         modelControl={modelControl}
+        onDismissChatError={chatErrorState.clearChatError}
         onOpenSidebar={() => uiState.setSidebarOpen(true)}
         onOpenSettings={() => actions.handleOpenSettings('chat')}
         onOpenAdmin={() => navigate('/admin')}
@@ -317,10 +319,10 @@ export function ChatPage() {
         onCloseSettings={() => uiState.setIsSettingsOpen(false)}
         onDeleteProvider={actions.handleDeleteProvider}
         onDismissToast={(toastId) =>
-          uiState.setToasts((previous) =>
-            previous.filter((toast) => toast.id !== toastId),
-          )
+          uiState.dismissToast(toastId)
         }
+        onPauseToast={uiState.pauseToast}
+        onResumeToast={uiState.resumeToast}
         onEditProvider={providerSettings.handleEditProvider}
         onProviderFieldChange={providerSettings.handleProviderFieldChange}
         onProviderModelsChange={providerSettings.handleProviderModelsChange}

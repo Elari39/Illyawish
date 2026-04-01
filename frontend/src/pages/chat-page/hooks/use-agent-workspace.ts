@@ -60,17 +60,44 @@ export function useAgentWorkspace({
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [providers, spaces, templates, presets] = await Promise.all([
+      const [providersResult, spacesResult, templatesResult, presetsResult] = await Promise.allSettled([
         ragApi.getProviders(),
         ragApi.listKnowledgeSpaces(),
         workflowApi.listTemplates(),
         workflowApi.listPresets(),
       ])
-      setRAGProviders(providers)
-      setKnowledgeSpaces(spaces)
-      setWorkflowTemplates(templates)
-      setWorkflowPresets(presets)
-      setChatErrorRef.current(null)
+
+      let workspaceError: string | null = null
+      const resolveWorkspaceError = (error: unknown) =>
+        error instanceof Error
+          ? error.message
+          : tRef.current('error.loadAgentWorkspace')
+
+      if (providersResult.status === 'fulfilled') {
+        setRAGProviders(providersResult.value)
+      } else {
+        workspaceError = resolveWorkspaceError(providersResult.reason)
+      }
+
+      if (spacesResult.status === 'fulfilled') {
+        setKnowledgeSpaces(spacesResult.value)
+      } else if (workspaceError == null) {
+        workspaceError = resolveWorkspaceError(spacesResult.reason)
+      }
+
+      if (templatesResult.status === 'fulfilled') {
+        setWorkflowTemplates(templatesResult.value)
+      } else if (workspaceError == null) {
+        workspaceError = resolveWorkspaceError(templatesResult.reason)
+      }
+
+      if (presetsResult.status === 'fulfilled') {
+        setWorkflowPresets(presetsResult.value)
+      } else if (workspaceError == null) {
+        workspaceError = resolveWorkspaceError(presetsResult.reason)
+      }
+
+      setChatErrorRef.current(workspaceError)
     } catch (error) {
       setChatErrorRef.current(
         error instanceof Error
