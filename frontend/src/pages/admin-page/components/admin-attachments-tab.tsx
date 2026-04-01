@@ -1,25 +1,26 @@
 import type { I18nContextValue } from '../../../i18n/context'
-import type { AdminUsageStats, AdminUser, WorkspacePolicy } from '../../../types/chat'
+import type { AdminUsageStats, AdminUser } from '../../../types/chat'
+import type { AttachmentPolicyDraft } from '../admin-page-helpers'
 import { LabeledInput } from './admin-form-fields'
 
 export function AdminAttachmentsTab({
-  workspacePolicy,
+  attachmentPolicyDraft,
   usageStats,
   users,
   isSavingPolicy,
   t,
-  setWorkspacePolicy,
-  onSavePolicy,
+  setAttachmentPolicyDraft,
+  onSaveAttachmentPolicy,
   onPurgeUser,
   onPurgeAll,
 }: {
-  workspacePolicy: WorkspacePolicy
+  attachmentPolicyDraft: AttachmentPolicyDraft
   usageStats: AdminUsageStats | null
   users: AdminUser[]
   isSavingPolicy: boolean
   t: I18nContextValue['t']
-  setWorkspacePolicy: React.Dispatch<React.SetStateAction<WorkspacePolicy | null>>
-  onSavePolicy: (event: React.FormEvent<HTMLFormElement>) => Promise<void>
+  setAttachmentPolicyDraft: React.Dispatch<React.SetStateAction<AttachmentPolicyDraft | null>>
+  onSaveAttachmentPolicy: (event: React.FormEvent<HTMLFormElement>) => Promise<void>
   onPurgeUser: (user: AdminUser) => void
   onPurgeAll: () => void
 }) {
@@ -27,7 +28,7 @@ export function AdminAttachmentsTab({
     <section className="space-y-6">
       <form
         className="rounded-[2rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[var(--shadow-md)]"
-        onSubmit={onSavePolicy}
+        onSubmit={onSaveAttachmentPolicy}
       >
         <h2 className="text-xl font-semibold">{t('admin.attachments.title')}</h2>
         <p className="mt-2 text-sm leading-7 text-[var(--muted-foreground)]">
@@ -36,11 +37,11 @@ export function AdminAttachmentsTab({
         <div className="mt-5 max-w-sm">
           <LabeledInput
             label={t('admin.attachments.retentionDays')}
-            type="number"
-            value={String(workspacePolicy.attachmentRetentionDays)}
-            onChange={(value) => setWorkspacePolicy((previous) => previous ? {
+            inputMode="numeric"
+            value={attachmentPolicyDraft.attachmentRetentionDays}
+            onChange={(value) => setAttachmentPolicyDraft((previous) => previous ? {
               ...previous,
-              attachmentRetentionDays: value === '' ? 0 : Number(value),
+              attachmentRetentionDays: value,
             } : previous)}
           />
         </div>

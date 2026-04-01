@@ -30,6 +30,12 @@ const chatSettings: ChatSettings = {
   contextWindowTurns: null,
 }
 
+const chatNumericInputDrafts = {
+  temperature: '1',
+  maxTokens: '',
+  contextWindowTurns: '',
+}
+
 const conversation: Conversation = {
   id: '1',
   title: 'Imported conversation',
@@ -63,6 +69,7 @@ describe('overlay accessibility', () => {
       <TestProviders>
         <SettingsPanel
           activeTab="chat"
+          chatNumericInputDrafts={chatNumericInputDrafts}
           chatSettings={chatSettings}
           conversationFolder=""
           conversationTags=""
@@ -82,6 +89,7 @@ describe('overlay accessibility', () => {
           isSavingProvider={false}
           isTestingProvider={false}
           onActivateProvider={vi.fn()}
+          onChatNumericInputChange={vi.fn()}
           onClose={onClose}
           onDeleteProvider={vi.fn()}
           onEditProvider={vi.fn()}
@@ -147,6 +155,7 @@ describe('overlay accessibility', () => {
       <TestProviders>
         <SettingsPanel
           activeTab="provider"
+          chatNumericInputDrafts={chatNumericInputDrafts}
           chatSettings={chatSettings}
           conversationFolder=""
           conversationTags=""
@@ -166,6 +175,7 @@ describe('overlay accessibility', () => {
           isSavingProvider={false}
           isTestingProvider={false}
           onActivateProvider={vi.fn()}
+          onChatNumericInputChange={vi.fn()}
           onClose={vi.fn()}
           onDeleteProvider={vi.fn()}
           onEditProvider={vi.fn()}

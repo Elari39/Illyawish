@@ -86,6 +86,7 @@ export function useChatSession({
   } = useChatMessagesState()
   const {
     chatSettingsDraft,
+    chatNumericInputDrafts,
     conversationFolderDraft,
     conversationTagsDraft,
     knowledgeSpaceIdsDraft,
@@ -93,6 +94,7 @@ export function useChatSession({
     pendingConversation,
     settingsDraft,
     setChatSettingsDraft,
+    setChatNumericInputDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
     setKnowledgeSpaceIdsDraft,
@@ -219,6 +221,7 @@ export function useChatSession({
     messages,
     composerValue,
     chatSettingsDraft,
+    chatNumericInputDrafts,
     conversationFolderDraft,
     conversationTagsDraft,
     knowledgeSpaceIdsDraft,
@@ -239,6 +242,7 @@ export function useChatSession({
     canSubmitComposer,
     setComposerValue,
     setChatSettingsDraft,
+    setChatNumericInputDraft,
     setConversationFolderDraft,
     setConversationTagsDraft,
     setKnowledgeSpaceIdsDraft,

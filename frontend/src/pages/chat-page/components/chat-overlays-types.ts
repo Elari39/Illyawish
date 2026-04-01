@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 
+import type { ChatNumericInputDrafts } from '../../../lib/numeric-input'
 import type {
   ChatSettings,
   Conversation,
@@ -22,6 +23,7 @@ export interface ChatOverlaysProps {
   activeTab: SettingsTab
   confirmation: ConfirmationState | null
   editingProviderId: number | null
+  chatNumericInputDrafts: ChatNumericInputDrafts
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
@@ -49,6 +51,10 @@ export interface ChatOverlaysProps {
   knowledgeDocuments: Record<number, KnowledgeDocument[]>
   settings: ConversationSettings
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
+  onChatNumericInputChange: (
+    field: keyof ChatNumericInputDrafts,
+    value: string,
+  ) => void
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
   onToggleArchived: (value: boolean) => void

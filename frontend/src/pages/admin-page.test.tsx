@@ -251,6 +251,64 @@ describe('AdminPage', () => {
     })
   })
 
+  it('does not submit unsaved workspace default drafts when saving attachment retention', async () => {
+    const updateWorkspacePolicySpy = vi.spyOn(adminApi, 'updateWorkspacePolicy')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace Policy' }))
+    fireEvent.change(screen.getByLabelText('Default max conversations'), {
+      target: { value: '99' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    fireEvent.change(screen.getByLabelText('Attachment retention (days)'), {
+      target: { value: '45' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save attachment policy' }))
+
+    await waitFor(() => {
+      expect(updateWorkspacePolicySpy).toHaveBeenLastCalledWith({
+        defaultUserRole: 'member',
+        defaultUserMaxConversations: 20,
+        defaultUserMaxAttachmentsPerMessage: 4,
+        defaultUserDailyMessageLimit: 100,
+        attachmentRetentionDays: 45,
+      })
+    })
+  })
+
+  it('does not submit unsaved attachment drafts when saving workspace defaults', async () => {
+    const updateWorkspacePolicySpy = vi.spyOn(adminApi, 'updateWorkspacePolicy')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    fireEvent.change(screen.getByLabelText('Attachment retention (days)'), {
+      target: { value: '45' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace Policy' }))
+    fireEvent.change(screen.getByLabelText('Default max conversations'), {
+      target: { value: '22' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save workspace policy' }))
+
+    await waitFor(() => {
+      expect(updateWorkspacePolicySpy).toHaveBeenLastCalledWith({
+        defaultUserRole: 'member',
+        defaultUserMaxConversations: 22,
+        defaultUserMaxAttachmentsPerMessage: 4,
+        defaultUserDailyMessageLimit: 100,
+        attachmentRetentionDays: 30,
+      })
+    })
+  })
+
   it('purges attachments for one user and the whole workspace through confirmations', async () => {
     const purgeAttachmentsSpy = vi.spyOn(adminApi, 'purgeAttachments')
 
@@ -327,6 +385,31 @@ describe('AdminPage', () => {
 
     expect(maxConversationsInput.value).toBe(' 5')
     fireEvent.click(screen.getByRole('button', { name: 'Save workspace policy' }))
+
+    await waitFor(() => {
+      expect(updateWorkspacePolicySpy).not.toHaveBeenCalled()
+    })
+  })
+
+  it('keeps invalid attachment retention as raw text and blocks submission', async () => {
+    const updateWorkspacePolicySpy = vi.spyOn(adminApi, 'updateWorkspacePolicy')
+
+    renderAdminPage('en-US')
+
+    expect(await screen.findByRole('heading', { name: 'Admin Console' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    const retentionInput =
+      screen.getByLabelText('Attachment retention (days)') as HTMLInputElement
+
+    fireEvent.change(retentionInput, {
+      target: { value: '1e' },
+    })
+
+    expect(retentionInput.value).toBe('1e')
+    expect(screen.queryByDisplayValue('NaN')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save attachment policy' }))
 
     await waitFor(() => {
       expect(updateWorkspacePolicySpy).not.toHaveBeenCalled()

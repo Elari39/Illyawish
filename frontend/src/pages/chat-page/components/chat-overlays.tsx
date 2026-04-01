@@ -18,6 +18,7 @@ export function ChatOverlays({
   activeTab,
   confirmation,
   editingProviderId,
+  chatNumericInputDrafts,
   chatSettings,
   conversationFolder,
   conversationTags,
@@ -45,6 +46,7 @@ export function ChatOverlays({
   knowledgeDocuments,
   settings,
   setChatSettings,
+  onChatNumericInputChange,
   setConversationFolder,
   setConversationTags,
   onToggleArchived,
@@ -116,7 +118,9 @@ export function ChatOverlays({
   }
 
   const chatPanelProps = {
+    chatNumericInputDrafts,
     chatSettings,
+    onChatNumericInputChange,
     onReset,
     onSave,
     settings,

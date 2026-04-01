@@ -1,6 +1,11 @@
 import type { Dispatch, SetStateAction } from 'react'
 
 import { Input } from '../../../components/ui/input'
+import {
+  parseOptionalNonNegativeInteger,
+  parseOptionalTemperature,
+  type ChatNumericInputDrafts,
+} from '../../../lib/numeric-input'
 import { Select } from '../../../components/ui/select'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n/use-i18n'
@@ -11,9 +16,14 @@ import {
 } from '../provider-model-utils'
 
 interface ChatSettingsTabProps {
+  chatNumericInputDrafts: ChatNumericInputDrafts
   chatSettings: ChatSettings
   conversationFolder: string
   conversationTags: string
+  onChatNumericInputChange: (
+    field: keyof ChatNumericInputDrafts,
+    value: string,
+  ) => void
   providerState: ProviderState | null
   settings: ConversationSettings
   setConversationFolder: Dispatch<SetStateAction<string>>
@@ -23,9 +33,11 @@ interface ChatSettingsTabProps {
 }
 
 export function ChatSettingsTab({
+  chatNumericInputDrafts,
   chatSettings,
   conversationFolder,
   conversationTags,
+  onChatNumericInputChange,
   providerState,
   settings,
   setConversationFolder,
@@ -137,20 +149,21 @@ export function ChatSettingsTab({
               {t('settings.temperature')}
             </span>
             <Input
-              min="0"
-              max="2"
-              step="0.1"
-              type="number"
-              value={chatSettings.temperature ?? ''}
-              onChange={(event) =>
+              inputMode="decimal"
+              value={chatNumericInputDrafts.temperature}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                onChatNumericInputChange('temperature', nextValue)
+                const parsed = parseOptionalTemperature(nextValue)
+                if (!parsed.isValid) {
+                  return
+                }
+
                 setChatSettings((previous) => ({
                   ...previous,
-                  temperature:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  temperature: parsed.value,
                 }))
-              }
+              }}
             />
           </label>
 
@@ -159,19 +172,21 @@ export function ChatSettingsTab({
               {t('settings.maxTokens')}
             </span>
             <Input
-              min="0"
-              step="1"
-              type="number"
-              value={chatSettings.maxTokens ?? ''}
-              onChange={(event) =>
+              inputMode="numeric"
+              value={chatNumericInputDrafts.maxTokens}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                onChatNumericInputChange('maxTokens', nextValue)
+                const parsed = parseOptionalNonNegativeInteger(nextValue)
+                if (!parsed.isValid) {
+                  return
+                }
+
                 setChatSettings((previous) => ({
                   ...previous,
-                  maxTokens:
-                    event.target.value === ''
-                      ? null
-                      : Number(event.target.value),
+                  maxTokens: parsed.value,
                 }))
-              }
+              }}
             />
           </label>
         </div>
@@ -181,19 +196,21 @@ export function ChatSettingsTab({
             {t('settings.contextWindowTurns')}
           </span>
           <Input
-            min="0"
-            step="1"
-            type="number"
-            value={chatSettings.contextWindowTurns ?? ''}
-            onChange={(event) =>
+            inputMode="numeric"
+            value={chatNumericInputDrafts.contextWindowTurns}
+            onChange={(event) => {
+              const nextValue = event.target.value
+              onChatNumericInputChange('contextWindowTurns', nextValue)
+              const parsed = parseOptionalNonNegativeInteger(nextValue)
+              if (!parsed.isValid) {
+                return
+              }
+
               setChatSettings((previous) => ({
                 ...previous,
-                contextWindowTurns:
-                  event.target.value === ''
-                    ? null
-                    : Number(event.target.value),
+                contextWindowTurns: parsed.value,
               }))
-            }
+            }}
           />
           <p className="text-sm leading-6 text-[var(--muted-foreground)]">
             {t('settings.contextWindowTurnsHelp')}

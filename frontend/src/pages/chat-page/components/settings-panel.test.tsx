@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { vi } from 'vitest'
 
+import {
+  parseOptionalNonNegativeInteger,
+  parseOptionalTemperature,
+} from '../../../lib/numeric-input'
 import type {
   ChatSettings,
   ConversationSettings,
@@ -51,6 +55,12 @@ const historyHandlers = {
   onBulkRemoveTags: vi.fn(),
 }
 
+const emptyChatNumericInputDrafts = {
+  temperature: '',
+  maxTokens: '',
+  contextWindowTurns: '',
+}
+
 function ProviderSettingsHarness() {
   const [chatSettings, setChatSettings] = useState(initialChatSettings)
   const [conversationFolder, setConversationFolder] = useState('')
@@ -69,6 +79,7 @@ function ProviderSettingsHarness() {
   return (
     <SettingsPanel
       activeTab="provider"
+      chatNumericInputDrafts={emptyChatNumericInputDrafts}
       chatSettings={chatSettings}
       conversationFolder={conversationFolder}
       conversationTags={conversationTags}
@@ -88,6 +99,7 @@ function ProviderSettingsHarness() {
       isSavingProvider={false}
       isTestingProvider={false}
       onActivateProvider={() => {}}
+      onChatNumericInputChange={() => {}}
       onClose={() => {}}
       onDeleteProvider={() => {}}
       onEditProvider={() => {}}
@@ -132,6 +144,11 @@ function ChatSettingsHarness() {
     providerPresetId: 7,
     model: 'gpt-4.1-mini',
   })
+  const [chatNumericInputDrafts, setChatNumericInputDrafts] = useState({
+    temperature: '1',
+    maxTokens: '',
+    contextWindowTurns: '',
+  })
   const [conversationFolder, setConversationFolder] = useState('')
   const [conversationTags, setConversationTags] = useState('')
   const [settings, setSettings] = useState(initialSettings)
@@ -139,6 +156,7 @@ function ChatSettingsHarness() {
   return (
     <SettingsPanel
       activeTab="chat"
+      chatNumericInputDrafts={chatNumericInputDrafts}
       chatSettings={chatSettings}
       conversationFolder={conversationFolder}
       conversationTags={conversationTags}
@@ -158,6 +176,25 @@ function ChatSettingsHarness() {
       isSavingProvider={false}
       isTestingProvider={false}
       onActivateProvider={() => {}}
+      onChatNumericInputChange={(field, value) => {
+        setChatNumericInputDrafts((previous) => ({
+          ...previous,
+          [field]: value,
+        }))
+
+        const parsed =
+          field === 'temperature'
+            ? parseOptionalTemperature(value)
+            : parseOptionalNonNegativeInteger(value)
+        if (!parsed.isValid) {
+          return
+        }
+
+        setChatSettings((previous) => ({
+          ...previous,
+          [field]: parsed.value,
+        }))
+      }}
       onClose={() => {}}
       onDeleteProvider={() => {}}
       onEditProvider={() => {}}
@@ -212,6 +249,110 @@ function ChatSettingsHarness() {
   )
 }
 
+function ChatNumericSettingsHarness() {
+  const [chatSettings, setChatSettings] = useState<ChatSettings>({
+    ...initialChatSettings,
+    temperature: 1,
+    maxTokens: 256,
+    contextWindowTurns: 6,
+  })
+  const [chatNumericInputDrafts, setChatNumericInputDrafts] = useState({
+    temperature: '1',
+    maxTokens: '256',
+    contextWindowTurns: '6',
+  })
+  const [conversationFolder, setConversationFolder] = useState('')
+  const [conversationTags, setConversationTags] = useState('')
+  const [settings, setSettings] = useState(initialSettings)
+
+  return (
+    <>
+      <SettingsPanel
+        activeTab="chat"
+        chatNumericInputDrafts={chatNumericInputDrafts}
+        chatSettings={chatSettings}
+        conversationFolder={conversationFolder}
+        conversationTags={conversationTags}
+        showArchived={false}
+        availableFolders={['Work']}
+        availableTags={['planning']}
+        selectedFolder={null}
+        selectedTags={[]}
+        editingProviderId={null}
+        isLoadingProviders={false}
+        isImporting={false}
+        isOpen
+        messageCount={0}
+        selectedConversationIds={[]}
+        selectionMode={false}
+        isSaving={false}
+        isSavingProvider={false}
+        isTestingProvider={false}
+        onActivateProvider={() => {}}
+        onChatNumericInputChange={(field, value) => {
+          setChatNumericInputDrafts((previous) => ({
+            ...previous,
+            [field]: value,
+          }))
+
+          if (value === '') {
+            setChatSettings((previous) => ({
+              ...previous,
+              [field]: null,
+            }))
+            return
+          }
+
+          const parsed =
+            field === 'temperature'
+              ? parseOptionalTemperature(value)
+              : parseOptionalNonNegativeInteger(value)
+          if (!parsed.isValid) {
+            return
+          }
+
+          setChatSettings((previous) => ({
+            ...previous,
+            [field]: parsed.value,
+          }))
+        }}
+        onClose={() => {}}
+        onDeleteProvider={() => {}}
+        onEditProvider={() => {}}
+        onExport={() => {}}
+        onImport={() => {}}
+        onProviderFieldChange={() => {}}
+        onProviderModelsChange={() => {}}
+        {...historyHandlers}
+        onProviderTabChange={() => {}}
+        onReset={() => {}}
+        onResetProvider={() => {}}
+        onSave={() => {}}
+        onSaveProvider={() => {}}
+        onStartNewProvider={() => {}}
+        onTestProvider={() => {}}
+        providerForm={{
+          name: '',
+          format: 'openai',
+          baseURL: '',
+          apiKey: '',
+          models: [''],
+          defaultModel: '',
+          errors: createProviderFormErrors(),
+        }}
+        providerState={providerState}
+        settings={settings}
+        setChatSettings={setChatSettings}
+        setConversationFolder={setConversationFolder}
+        setConversationTags={setConversationTags}
+        setSettings={setSettings}
+        transferConversation={null}
+      />
+      <output data-testid="chat-settings-state">{JSON.stringify(chatSettings)}</output>
+    </>
+  )
+}
+
 function HistorySettingsHarness() {
   const [chatSettings, setChatSettings] = useState(initialChatSettings)
   const [conversationFolder, setConversationFolder] = useState('')
@@ -221,6 +362,7 @@ function HistorySettingsHarness() {
   return (
     <SettingsPanel
       activeTab="history"
+      chatNumericInputDrafts={emptyChatNumericInputDrafts}
       chatSettings={chatSettings}
       conversationFolder={conversationFolder}
       conversationTags={conversationTags}
@@ -240,6 +382,7 @@ function HistorySettingsHarness() {
       isSavingProvider={false}
       isTestingProvider={false}
       onActivateProvider={() => {}}
+      onChatNumericInputChange={() => {}}
       onClose={() => {}}
       onDeleteProvider={() => {}}
       onEditProvider={() => {}}
@@ -341,6 +484,37 @@ describe('SettingsPanel', () => {
     expect(
       screen.getByRole('option', { name: 'gpt-4.1-mini' }),
     ).toBeInTheDocument()
+  })
+
+  it('keeps intermediate numeric chat inputs as raw text without writing invalid values upstream', () => {
+    render(
+      <TestProviders>
+        <ChatNumericSettingsHarness />
+      </TestProviders>,
+    )
+
+    const temperatureInput = screen.getByLabelText('Temperature') as HTMLInputElement
+    const maxTokensInput = screen.getByLabelText('Max output tokens') as HTMLInputElement
+    const contextWindowTurnsInput =
+      screen.getByLabelText(/Context window/) as HTMLInputElement
+
+    fireEvent.change(temperatureInput, {
+      target: { value: '-' },
+    })
+    expect(temperatureInput.value).toBe('-')
+    expect(screen.getByTestId('chat-settings-state')).toHaveTextContent('"temperature":1')
+
+    fireEvent.change(maxTokensInput, {
+      target: { value: '1e' },
+    })
+    expect(maxTokensInput.value).toBe('1e')
+    expect(screen.getByTestId('chat-settings-state')).toHaveTextContent('"maxTokens":256')
+
+    fireEvent.change(contextWindowTurnsInput, {
+      target: { value: '' },
+    })
+    expect(contextWindowTurnsInput.value).toBe('')
+    expect(screen.getByTestId('chat-settings-state')).toHaveTextContent('"contextWindowTurns":null')
   })
 
   it('exposes a dedicated history tab in settings', () => {
