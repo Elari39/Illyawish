@@ -159,6 +159,49 @@ export function getReasoningPreview(reasoningContent: string, maxLines = 2) {
   return `${lines.slice(0, maxLines).join('\n')}…`
 }
 
+export interface ParsedReasoning {
+  paragraphs: string[]
+  preview: string
+  totalSteps: number
+}
+
+/**
+ * Parse reasoning content into paragraphs by splitting on single newlines.
+ * Each non-empty line becomes a step. Used for structured step display.
+ */
+export function parseReasoningContent(content: string): ParsedReasoning {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { paragraphs: [], preview: '', totalSteps: 0 }
+  }
+
+  // Split by single newlines, filter empty lines
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) {
+    return {
+      paragraphs: [trimmed],
+      preview: trimmed.slice(0, 100),
+      totalSteps: 1,
+    }
+  }
+
+  // Build preview: first line + second line (like original getReasoningPreview)
+  const preview =
+    lines.length === 1
+      ? lines[0].slice(0, 100)
+      : `${lines[0]}\n${lines[1]}…`
+
+  return {
+    paragraphs: lines,
+    preview,
+    totalSteps: lines.length,
+  }
+}
+
 export function formatReasoningDuration(durationMs: number) {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
   if (totalSeconds < 60) {
