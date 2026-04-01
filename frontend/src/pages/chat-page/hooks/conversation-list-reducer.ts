@@ -1,12 +1,10 @@
 import type { Conversation } from '../../../types/chat'
 import {
-  applyConversationFilters,
-  dedupeConversations,
-  getAvailableConversationTags,
-  matchesConversationFilters,
-  sortConversations,
-  SIDEBAR_UNFILED_FOLDER_KEY,
-} from '../utils'
+  deriveVisibleConversations,
+  pruneSelectedConversationIds,
+  reconcileConversationFilterState,
+  resolvePageConversations,
+} from './conversation-list/reducer-helpers'
 
 export interface ConversationListState {
   loadedConversations: Conversation[]
@@ -71,26 +69,6 @@ export const initialConversationListState: ConversationListState = {
   isLoadingMoreConversations: false,
 }
 
-function pruneSelectedConversationIds(
-  selectedConversationIds: Conversation['id'][],
-  conversations: Conversation[],
-) {
-  const visibleIds = new Set(conversations.map((conversation) => conversation.id))
-  return selectedConversationIds.filter((conversationId) => visibleIds.has(conversationId))
-}
-
-function deriveVisibleConversations(
-  loadedConversations: Conversation[],
-  state: Pick<ConversationListState, 'showArchived' | 'conversationSearch' | 'selectedFolder' | 'selectedTags'>,
-) {
-  return applyConversationFilters(loadedConversations, {
-    showArchived: state.showArchived,
-    search: state.conversationSearch,
-    selectedFolder: state.selectedFolder,
-    selectedTags: state.selectedTags,
-  })
-}
-
 export function conversationListReducer(
   state: ConversationListState,
   action: ConversationListAction,
@@ -113,12 +91,11 @@ export function conversationListReducer(
         ...state,
         showArchived: action.value,
       }
-      const availableTags = getAvailableConversationTags(
-        state.loadedConversations.filter((conversation) => conversation.isArchived === action.value),
+      const { selectedTags } = reconcileConversationFilterState(
+        state.loadedConversations,
+        action.value,
         nextState.selectedFolder,
-      )
-      const selectedTags = nextState.selectedTags.filter((tag) =>
-        availableTags.some((value) => value.toLowerCase() === tag.toLowerCase()),
+        nextState.selectedTags,
       )
       const withTagsState = {
         ...nextState,
@@ -136,12 +113,11 @@ export function conversationListReducer(
         ...state,
         selectedFolder: action.value,
       }
-      const availableTags = getAvailableConversationTags(
-        state.loadedConversations.filter((conversation) => conversation.isArchived === state.showArchived),
+      const { selectedTags } = reconcileConversationFilterState(
+        state.loadedConversations,
+        state.showArchived,
         action.value,
-      )
-      const selectedTags = nextState.selectedTags.filter((tag) =>
-        availableTags.some((value) => value.toLowerCase() === tag.toLowerCase()),
+        nextState.selectedTags,
       )
       const withTagsState = {
         ...nextState,
@@ -217,9 +193,17 @@ export function conversationListReducer(
       const { append, result, loadedCount, activeConversationId, search, showArchived } = action
 
       if (append) {
-        const loadedConversations = sortConversations(
-          dedupeConversations([...state.loadedConversations, ...result.conversations]),
-        )
+        const loadedConversations = resolvePageConversations({
+          activeConversation: null,
+          activeConversationId,
+          append: true,
+          conversations: [
+            ...state.loadedConversations,
+            ...result.conversations,
+          ],
+          search,
+          showArchived,
+        })
         const conversations = deriveVisibleConversations(loadedConversations, state)
         return {
           ...state,
@@ -237,36 +221,21 @@ export function conversationListReducer(
           (conversation) => conversation.id === activeConversationId,
         ) ?? null
 
-      if (
-        activeConversation &&
-        !nextConversations.some(
-          (conversation) => conversation.id === activeConversation.id,
-        ) &&
-        activeConversation.isArchived === showArchived &&
-        matchesConversationFilters(activeConversation, {
+      const loadedConversations = resolvePageConversations({
+        activeConversation,
+        activeConversationId,
+        append: false,
+        conversations: nextConversations,
+        search,
+        showArchived,
+      })
+      const { selectedFolder, selectedTags } =
+        reconcileConversationFilterState(
+          loadedConversations,
           showArchived,
-          search,
-        })
-      ) {
-        nextConversations.unshift(activeConversation)
-      }
-
-      const loadedConversations = sortConversations(dedupeConversations(nextConversations))
-      const availableTags = getAvailableConversationTags(
-        loadedConversations.filter((conversation) => conversation.isArchived === showArchived),
-        state.selectedFolder,
-      )
-      const selectedFolder =
-        state.selectedFolder === SIDEBAR_UNFILED_FOLDER_KEY ||
-        state.selectedFolder == null ||
-        loadedConversations.some((conversation) => conversation.folder.trim() === state.selectedFolder) ||
-        (state.selectedFolder === SIDEBAR_UNFILED_FOLDER_KEY &&
-          loadedConversations.some((conversation) => conversation.folder.trim() === ''))
-          ? state.selectedFolder
-          : null
-      const selectedTags = state.selectedTags.filter((tag) =>
-        availableTags.some((value) => value.toLowerCase() === tag.toLowerCase()),
-      )
+          state.selectedFolder,
+          state.selectedTags,
+        )
       const nextState = {
         ...state,
         loadedConversations,

@@ -1,17 +1,22 @@
-import {
-  useCallback,
-  useState,
-} from 'react'
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { useAuth } from '../components/auth/use-auth'
 import { useI18n } from '../i18n/use-i18n'
-import type { Conversation } from '../types/chat'
 import { ChatContextBar } from './chat-page/components/chat-context-bar'
 import { ChatOverlays } from './chat-page/components/chat-overlays'
 import { ChatSidebarLayout } from './chat-page/components/chat-sidebar-layout'
 import { ChatToolMenuTrigger } from './chat-page/components/chat-tool-menu-trigger'
 import { ChatWorkspace } from './chat-page/components/chat-workspace'
+import {
+  buildChatOverlaysProps,
+  buildChatPageViewModel,
+  buildComposerProps,
+  buildMessageListProps,
+  buildSidebarProps,
+  buildWorkspaceProps,
+  createChatPageNavigation,
+} from './chat-page/chat-page-composition'
 import { useAgentWorkspace } from './chat-page/hooks/use-agent-workspace'
 import { useChatErrorState } from './chat-page/hooks/use-chat-error-state'
 import { useChatPageActions } from './chat-page/hooks/use-chat-page-actions'
@@ -26,13 +31,9 @@ export function ChatPage() {
   const navigate = useNavigate()
   const params = useParams()
   const activeConversationId = params.conversationId ?? null
-
-  const navigateToConversation = useCallback((conversationId: Conversation['id'], replace = false) => {
-    navigate(`/chat/s/${conversationId}`, { replace })
-  }, [navigate])
-  const navigateHome = useCallback((replace = false) => {
-    navigate('/chat', { replace })
-  }, [navigate])
+  const { navigateToConversation, navigateHome } = createChatPageNavigation({
+    navigate,
+  })
 
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isComposerExpanded, setIsComposerExpanded] = useState(false)
@@ -77,31 +78,17 @@ export function ChatPage() {
     setChatError: chatErrorState.setChatError,
   })
   const interactionDisabled = chatSession.isSending
-  const displayConversation =
-    currentConversation ?? chatSession.pendingConversation
-  const contextBarSettings =
-    activeConversationId && displayConversation
-      ? displayConversation.settings
-      : chatSession.settingsDraft
-  const contextBarKnowledgeSpaceIds =
-    activeConversationId && displayConversation
-      ? displayConversation.knowledgeSpaceIds ?? []
-      : chatSession.knowledgeSpaceIdsDraft
-  const isHeroState =
-    activeConversationId == null &&
-    chatSession.messages.length === 0 &&
-    !chatSession.isLoadingMessages
-  const headerTitle = isHeroState
-    ? ''
-    : displayConversation?.title
-      ?? (activeConversationId ? t('chat.loadingConversation') : '')
-
-  const effectiveComposerExpanded =
-    chatSession.composerValue.trim().length > 0 && isComposerExpanded
+  const viewModel = buildChatPageViewModel({
+    activeConversationId,
+    currentConversation,
+    chatSession,
+    isComposerExpanded,
+    t,
+  })
 
   const actions = useChatPageActions({
     activeConversationId,
-    contextBarSettings,
+    contextBarSettings: viewModel.contextBarSettings,
     interactionDisabled,
     conversationList,
     chatSession,
@@ -117,7 +104,7 @@ export function ChatPage() {
 
   const composerToolTrigger = (
     <ChatToolMenuTrigger
-      knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+      knowledgeSpaceIds={viewModel.contextBarKnowledgeSpaceIds}
       knowledgeSpaces={agentWorkspace.knowledgeSpaces}
       isDisabled={interactionDisabled}
       onOpenKnowledgeSettings={() => actions.handleOpenSettings('knowledge')}
@@ -129,9 +116,9 @@ export function ChatPage() {
       compact
       compactVariant="model"
       chatSettings={chatSession.chatSettingsDraft}
-      settings={contextBarSettings}
+      settings={viewModel.contextBarSettings}
       providerState={providerSettings.providerState}
-      knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
+      knowledgeSpaceIds={viewModel.contextBarKnowledgeSpaceIds}
       knowledgeSpaces={agentWorkspace.knowledgeSpaces}
       isDisabled={interactionDisabled}
       onOpenKnowledgeSettings={() => actions.handleOpenSettings('knowledge')}
@@ -140,84 +127,49 @@ export function ChatPage() {
     />
   )
 
-  const sidebarProps = {
-    actionDisabled: interactionDisabled,
-    conversationNavigationDisabled: false,
-    desktopSidebarToggleDisabled: false,
-    currentConversationId: activeConversationId,
-    conversations: conversationList.conversations,
-    hasMoreConversations: conversationList.hasMoreConversations,
-    searchValue: conversationList.conversationSearch,
-    showArchived: conversationList.showArchived,
-    availableFolders: conversationList.availableFolders,
-    availableTags: conversationList.availableTags,
-    selectedFolder: conversationList.selectedFolder,
-    selectedTags: conversationList.selectedTags,
-    selectionMode: conversationList.selectionMode,
-    selectedConversationIds: conversationList.selectedConversationIds,
-    isLoading: conversationList.isLoadingConversations,
-    isLoadingMore: conversationList.isLoadingMoreConversations,
-    onSearchChange: conversationList.setConversationSearch,
-    onToggleArchived: conversationList.setShowArchived,
-    onSelectFolder: conversationList.setSelectedFolder,
-    onToggleTag: conversationList.toggleSelectedTag,
-    onSetSelectionMode: conversationList.setSelectionMode,
-    onToggleConversationSelection: conversationList.toggleConversationSelection,
-    onMoveConversationToFolder: actions.handleMoveConversationToFolder,
-    onAddConversationTags: actions.handleAddConversationTags,
-    onRemoveConversationTags: actions.handleRemoveConversationTags,
-    onBulkMoveToFolder: actions.handleBulkMoveToFolder,
-    onBulkAddTags: actions.handleBulkAddTags,
-    onBulkRemoveTags: actions.handleBulkRemoveTags,
-    onLoadMore: () => void conversationList.loadConversations({ append: true }),
-    onSelectConversation: (conversationId: Conversation['id']) => {
-      navigateToConversation(conversationId)
-      uiState.setSidebarOpen(false)
-    },
-    onRenameConversation: actions.handleRenameConversation,
-    onTogglePinned: actions.handleTogglePinned,
-    onToggleArchivedConversation: actions.handleToggleArchived,
-    onDeleteConversation: actions.handleDeleteConversation,
-    onCreateChat: actions.handleCreateNewChat,
-    username: user?.username ?? '',
-    onLogout: actions.handleLogout,
-  }
-
-  const messageListProps = {
+  const sidebarProps = buildSidebarProps({
     activeConversationId,
-    hasMoreMessages: chatSession.hasMoreMessages,
-    isLoadingMessages: chatSession.isLoadingMessages,
-    isLoadingOlderMessages: chatSession.isLoadingOlderMessages,
-    messages: chatSession.messages,
-    latestUserMessage: chatSession.latestUserMessage,
-    isSending: chatSession.isSending,
-    editingMessageId: chatSession.editingMessageId,
-    hasConversationShell: displayConversation != null,
-    viewportRef: chatSession.messageViewportRef,
-    onShowToast: uiState.showToast,
-    onEditMessage: chatSession.startEditingMessage,
-    onLoadMore: () => void chatSession.loadOlderMessages(),
-    onRetryMessage: (message: Parameters<typeof chatSession.handleRetryAssistant>[0]) => void chatSession.handleRetryAssistant(message),
-    onRegenerateMessage: (message: Parameters<typeof chatSession.handleRegenerateAssistant>[0]) => void chatSession.handleRegenerateAssistant(message),
-  }
-
-  const composerProps = {
-    composerFormRef: chatSession.composerFormRef,
-    fileInputRef: chatSession.fileInputRef,
-    composerValue: chatSession.composerValue,
-    selectedAttachments: chatSession.selectedAttachments,
-    editingMessageId: chatSession.editingMessageId,
-    hasPendingUploads: chatSession.hasPendingUploads,
-    canSubmitComposer: chatSession.canSubmitComposer,
-    isSending: chatSession.isSending,
-    composerIsComposingRef: chatSession.composerIsComposingRef,
-    onComposerChange: chatSession.setComposerValue,
-    onCancelEdit: chatSession.cancelEditingMessage,
-    onStopGeneration: () => void chatSession.handleStopGeneration(),
-    onSubmit: (event: Parameters<typeof chatSession.handleSubmit>[0]) => void chatSession.handleSubmit(event),
-    onFilesSelected: (files: File[]) => void chatSession.handleFilesSelected(files),
-    onRemoveAttachment: chatSession.removeSelectedAttachment,
-  }
+    interactionDisabled,
+    conversationList,
+    uiState,
+    actions,
+    navigateToConversation,
+    user,
+  })
+  const messageListProps = buildMessageListProps({
+    activeConversationId,
+    displayConversation: viewModel.displayConversation,
+    chatSession,
+    uiState,
+  })
+  const composerProps = buildComposerProps({
+    activeConversationId,
+    chatSession,
+  })
+  const workspaceProps = buildWorkspaceProps({
+    user,
+    t,
+    uiState,
+    chatErrorState,
+    actions,
+    navigateToAdmin: () => navigate('/admin'),
+    setIsComposerExpanded,
+    viewModel,
+    messageListProps,
+    composerProps,
+    composerToolTrigger,
+    modelControl,
+  })
+  const overlayProps = buildChatOverlaysProps({
+    displayConversation: viewModel.displayConversation,
+    chatSession,
+    conversationList,
+    providerSettings,
+    agentWorkspace,
+    uiState,
+    actions,
+    isSavingSettings,
+  })
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--app-bg)] text-[var(--foreground)]">
@@ -232,104 +184,10 @@ export function ChatPage() {
       />
 
       <ChatWorkspace
-        appName={t('app.name')}
-        openSidebarLabel={t('chat.openSidebar')}
-        settingsLabel={t('chat.settings')}
-        adminLabel={t('chat.admin')}
-        headerTitle={headerTitle}
-        isHeroState={isHeroState}
-        isComposerExpanded={effectiveComposerExpanded}
-        chatError={chatErrorState.chatError}
-        showAdminEntry={user?.role === 'admin'}
-        composerToolTrigger={composerToolTrigger}
-        modelControl={modelControl}
-        onDismissChatError={chatErrorState.clearChatError}
-        onOpenSidebar={() => uiState.setSidebarOpen(true)}
-        onOpenSettings={() => actions.handleOpenSettings('chat')}
-        onOpenAdmin={() => navigate('/admin')}
-        onToggleComposerExpanded={setIsComposerExpanded}
-        messageListProps={messageListProps}
-        composerProps={composerProps}
+        {...workspaceProps}
       />
 
-      <ChatOverlays
-        activeTab={uiState.activeSettingsTab}
-        chatSettings={chatSession.chatSettingsDraft}
-        confirmation={uiState.confirmation}
-        conversationFolder={chatSession.conversationFolderDraft}
-        conversationTags={chatSession.conversationTagsDraft}
-        showArchived={conversationList.showArchived}
-        availableFolders={conversationList.availableFolders}
-        availableTags={conversationList.availableTags}
-        selectedFolder={conversationList.selectedFolder}
-        selectedTags={conversationList.selectedTags}
-        knowledgeSpaceIds={chatSession.knowledgeSpaceIdsDraft}
-        pendingKnowledgeSpaceIds={chatSession.pendingKnowledgeSpaceIds}
-        editingProviderId={providerSettings.editingProviderId}
-        isLoadingProviders={providerSettings.isLoadingProviders}
-        isOpen={uiState.isSettingsOpen}
-        isSaving={isSavingSettings}
-        isImporting={chatSession.isImporting}
-        isSavingProvider={providerSettings.isSavingProvider}
-        isTestingProvider={providerSettings.isTestingProvider}
-        messageCount={chatSession.messages.length}
-        selectedConversationIds={conversationList.selectedConversationIds}
-        selectionMode={conversationList.selectionMode}
-        onExport={chatSession.handleExportConversation}
-        onImport={(file) => void actions.handleImportConversation(file)}
-        onActivateProvider={providerSettings.handleActivateProvider}
-        onCreateRAGProvider={agentWorkspace.createRAGProvider}
-        onActivateRAGProvider={agentWorkspace.activateRAGProvider}
-        onLoadKnowledgeDocuments={agentWorkspace.loadKnowledgeDocuments}
-        onToggleKnowledgeSpace={(space) => chatSession.toggleKnowledgeSpace(space.id)}
-        onCreateKnowledgeSpace={agentWorkspace.createKnowledgeSpace}
-        onUpdateKnowledgeSpace={agentWorkspace.updateKnowledgeSpace}
-        onDeleteKnowledgeSpace={agentWorkspace.deleteKnowledgeSpace}
-        onCreateKnowledgeDocument={agentWorkspace.createKnowledgeDocument}
-        onUpdateKnowledgeDocument={agentWorkspace.updateKnowledgeDocument}
-        onDeleteKnowledgeDocument={agentWorkspace.deleteKnowledgeDocument}
-        onUploadKnowledgeDocuments={agentWorkspace.uploadKnowledgeDocuments}
-        onReplaceKnowledgeDocumentFile={agentWorkspace.replaceKnowledgeDocumentFile}
-        onCloseConfirmation={() => uiState.setConfirmation(null)}
-        onClosePrompt={() => uiState.setPromptState(null)}
-        onCloseSettings={() => uiState.setIsSettingsOpen(false)}
-        onDeleteProvider={actions.handleDeleteProvider}
-        onDismissToast={(toastId) =>
-          uiState.dismissToast(toastId)
-        }
-        onPauseToast={uiState.pauseToast}
-        onResumeToast={uiState.resumeToast}
-        onEditProvider={providerSettings.handleEditProvider}
-        onProviderFieldChange={providerSettings.handleProviderFieldChange}
-        onProviderModelsChange={providerSettings.handleProviderModelsChange}
-        onProviderTabChange={uiState.setActiveSettingsTab}
-        onReset={chatSession.resetSettingsDraft}
-        onResetProvider={providerSettings.handleStartNewProvider}
-        onSave={actions.handleSaveSettings}
-        onSaveProvider={providerSettings.handleSaveProvider}
-        onStartNewProvider={providerSettings.handleStartNewProvider}
-        onTestProvider={providerSettings.handleTestProvider}
-        promptState={uiState.promptState}
-        providerForm={providerSettings.providerForm}
-        providerState={providerSettings.providerState}
-        ragProviderState={agentWorkspace.ragProviders}
-        knowledgeSpaces={agentWorkspace.knowledgeSpaces}
-        knowledgeDocuments={agentWorkspace.knowledgeDocuments}
-        transferConversation={displayConversation}
-        settings={chatSession.settingsDraft}
-        setChatSettings={chatSession.setChatSettingsDraft}
-        setConversationFolder={chatSession.setConversationFolderDraft}
-        setConversationTags={chatSession.setConversationTagsDraft}
-        onToggleArchived={conversationList.setShowArchived}
-        onSelectFolder={conversationList.setSelectedFolder}
-        onToggleTag={conversationList.toggleSelectedTag}
-        onSetSelectionMode={conversationList.setSelectionMode}
-        onBulkMoveToFolder={actions.handleBulkMoveToFolder}
-        onBulkAddTags={actions.handleBulkAddTags}
-        onBulkRemoveTags={actions.handleBulkRemoveTags}
-        setSettings={chatSession.setSettingsDraft}
-        toasts={uiState.toasts}
-      />
+      <ChatOverlays {...overlayProps} />
     </div>
   )
 }

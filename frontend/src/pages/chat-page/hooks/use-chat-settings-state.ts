@@ -11,6 +11,16 @@ import {
   defaultChatSettings,
   defaultConversationSettings,
 } from '../types'
+import {
+  buildConversationSettingsPayload,
+} from './chat-settings-state/helpers'
+import {
+  buildConversationDraftSnapshot,
+  buildNewChatDraftSnapshot,
+  buildSaveSettingsPreparation,
+  type ChatSettingsDraftSnapshot,
+  resolveKnowledgeSpaceToggle,
+} from './chat-settings-state/operations'
 
 interface UseChatSettingsStateOptions {
   activeConversationId: Conversation['id'] | null
@@ -49,6 +59,13 @@ export function useChatSettingsState({
   const [knowledgeSpaceIdsDraft, setKnowledgeSpaceIdsDraft] = useState<number[]>([])
   const [pendingKnowledgeSpaceIds, setPendingKnowledgeSpaceIds] = useState<number[]>([])
 
+  const applyDraftSnapshot = useCallback((snapshot: ChatSettingsDraftSnapshot) => {
+    setSettingsDraft(snapshot.settingsDraft)
+    setConversationFolderDraft(snapshot.conversationFolderDraft)
+    setConversationTagsDraft(snapshot.conversationTagsDraft)
+    setKnowledgeSpaceIdsDraft(snapshot.knowledgeSpaceIdsDraft)
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
@@ -80,15 +97,13 @@ export function useChatSettingsState({
 
   const handleSaveSettings = useCallback(async (onSaved: () => void) => {
     setChatError(null)
-    const nextFolder = sanitizeConversationFolder(conversationFolderDraft)
-    const nextTags = parseConversationTags(conversationTagsDraft)
-    const metadataUpdate = buildConversationMetadataUpdate(
-      nextFolder,
-      nextTags,
-      knowledgeSpaceIdsDraft,
-      currentConversation,
-      false,
-    )
+    const { metadataUpdate, nextFolder, nextTagsInput } =
+      buildSaveSettingsPreparation({
+        conversationFolderDraft,
+        conversationTagsDraft,
+        currentConversation,
+        knowledgeSpaceIdsDraft,
+      })
     const previousChatSettings = chatSettings
     const previousConversation = currentConversation
     let globalSettingsSaved = false
@@ -103,18 +118,15 @@ export function useChatSettingsState({
       if (!activeConversationId) {
         setNewChatSystemPrompt(settingsDraft.systemPrompt)
         setNewConversationFolder(nextFolder)
-        setNewConversationTagsInput(
-          nextTags.join(', '),
+        setNewConversationTagsInput(nextTagsInput)
+        applyDraftSnapshot(
+          buildNewChatDraftSnapshot({
+            chatSettings: updatedChatSettings,
+            systemPrompt: settingsDraft.systemPrompt,
+            conversationFolderDraft: nextFolder,
+            conversationTagsDraft: nextTagsInput,
+          }),
         )
-        setSettingsDraft(
-          buildDraftConversationSettings(
-            updatedChatSettings,
-            settingsDraft.systemPrompt,
-          ),
-        )
-        setConversationFolderDraft(nextFolder)
-        setConversationTagsDraft(nextTags.join(', '))
-        setKnowledgeSpaceIdsDraft(knowledgeSpaceIdsDraft)
         onSaved()
         return
       }
@@ -123,22 +135,12 @@ export function useChatSettingsState({
         activeConversationId,
         {
           ...metadataUpdate,
-          settings: {
-            systemPrompt: settingsDraft.systemPrompt,
-            providerPresetId: settingsDraft.providerPresetId ?? null,
-            model: settingsDraft.model,
-            temperature: settingsDraft.temperature,
-            maxTokens: settingsDraft.maxTokens,
-            contextWindowTurns: settingsDraft.contextWindowTurns,
-          },
+          settings: buildConversationSettingsPayload(settingsDraft),
         },
       )
       syncConversationIntoList(updatedConversation)
       setPendingConversation(updatedConversation)
-      setSettingsDraft(updatedConversation.settings)
-      setConversationFolderDraft(updatedConversation.folder)
-      setConversationTagsDraft(updatedConversation.tags.join(', '))
-      setKnowledgeSpaceIdsDraft(updatedConversation.knowledgeSpaceIds ?? [])
+      applyDraftSnapshot(buildConversationDraftSnapshot(updatedConversation))
       onSaved()
     } catch (error) {
       if (activeConversationId && globalSettingsSaved) {
@@ -154,10 +156,7 @@ export function useChatSettingsState({
 
         if (previousConversation) {
           setPendingConversation(previousConversation)
-          setSettingsDraft(previousConversation.settings)
-          setConversationFolderDraft(previousConversation.folder)
-          setConversationTagsDraft(previousConversation.tags.join(', '))
-          setKnowledgeSpaceIdsDraft(previousConversation.knowledgeSpaceIds ?? [])
+          applyDraftSnapshot(buildConversationDraftSnapshot(previousConversation))
         }
       }
 
@@ -174,6 +173,7 @@ export function useChatSettingsState({
     knowledgeSpaceIdsDraft,
     currentConversation,
     settingsDraft,
+    applyDraftSnapshot,
     setChatError,
     syncConversationIntoList,
     t,
@@ -183,25 +183,25 @@ export function useChatSettingsState({
     setChatSettingsDraft(chatSettings)
 
     if (currentConversation) {
-      setSettingsDraft(currentConversation.settings)
-      setConversationFolderDraft(currentConversation.folder)
-      setConversationTagsDraft(currentConversation.tags.join(', '))
-      setKnowledgeSpaceIdsDraft(currentConversation.knowledgeSpaceIds ?? [])
+      applyDraftSnapshot(buildConversationDraftSnapshot(currentConversation))
       return
     }
 
-    setSettingsDraft(
-      buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
+    applyDraftSnapshot(
+      buildNewChatDraftSnapshot({
+        chatSettings,
+        systemPrompt: newChatSystemPrompt,
+        conversationFolderDraft: newConversationFolder,
+        conversationTagsDraft: newConversationTagsInput,
+      }),
     )
-    setConversationFolderDraft(newConversationFolder)
-    setConversationTagsDraft(newConversationTagsInput)
-    setKnowledgeSpaceIdsDraft([])
   }, [
     chatSettings,
     currentConversation,
     newChatSystemPrompt,
     newConversationFolder,
     newConversationTagsInput,
+    applyDraftSnapshot,
   ])
 
   const resetSettingsDraft = useCallback(() => {
@@ -217,35 +217,48 @@ export function useChatSettingsState({
     setChatSettingsDraft(nextChatSettings)
 
     if (!currentConversation && !activeConversationId) {
-      setSettingsDraft(
-        buildDraftConversationSettings(nextChatSettings, newChatSystemPrompt),
+      applyDraftSnapshot(
+        buildNewChatDraftSnapshot({
+          chatSettings: nextChatSettings,
+          systemPrompt: newChatSystemPrompt,
+          conversationFolderDraft: newConversationFolder,
+          conversationTagsDraft: newConversationTagsInput,
+        }),
       )
     }
-  }, [activeConversationId, currentConversation, newChatSystemPrompt])
+  }, [
+    activeConversationId,
+    currentConversation,
+    newChatSystemPrompt,
+    newConversationFolder,
+    newConversationTagsInput,
+    applyDraftSnapshot,
+  ])
 
   const resetForNewChatSettings = useCallback(() => {
     setPendingConversation(null)
-    setSettingsDraft(
-      buildDraftConversationSettings(chatSettings, newChatSystemPrompt),
+    applyDraftSnapshot(
+      buildNewChatDraftSnapshot({
+        chatSettings,
+        systemPrompt: newChatSystemPrompt,
+        conversationFolderDraft: newConversationFolder,
+        conversationTagsDraft: newConversationTagsInput,
+      }),
     )
-    setConversationFolderDraft(newConversationFolder)
-    setConversationTagsDraft(newConversationTagsInput)
-    setKnowledgeSpaceIdsDraft([])
     setPendingKnowledgeSpaceIds([])
   }, [
     chatSettings,
     newChatSystemPrompt,
     newConversationFolder,
     newConversationTagsInput,
+    applyDraftSnapshot,
   ])
 
   const toggleKnowledgeSpace = useCallback(async (spaceId: number) => {
     setChatError(null)
 
     const previousIds = currentConversation?.knowledgeSpaceIds ?? knowledgeSpaceIdsDraft
-    const nextIds = previousIds.includes(spaceId)
-      ? previousIds.filter((id) => id !== spaceId)
-      : [...previousIds, spaceId]
+    const nextIds = resolveKnowledgeSpaceToggle(previousIds, spaceId)
 
     setKnowledgeSpaceIdsDraft(nextIds)
 
@@ -263,7 +276,9 @@ export function useChatSettingsState({
       })
       syncConversationIntoList(updatedConversation)
       setPendingConversation(updatedConversation)
-      setKnowledgeSpaceIdsDraft(updatedConversation.knowledgeSpaceIds ?? [])
+      setKnowledgeSpaceIdsDraft(
+        buildConversationDraftSnapshot(updatedConversation).knowledgeSpaceIdsDraft,
+      )
     } catch (error) {
       setKnowledgeSpaceIdsDraft(previousIds)
       setChatError(
@@ -302,67 +317,5 @@ export function useChatSettingsState({
     resetPendingConversation,
     resetSettingsDraft,
     syncSettingsDraft,
-  }
-}
-
-function sanitizeConversationFolder(value: string) {
-  return value.trim()
-}
-
-function parseConversationTags(value: string) {
-  const seen = new Set<string>()
-  const tags: string[] = []
-
-  for (const item of value.split(',')) {
-    const tag = item.trim()
-    const normalizedTag = tag.toLowerCase()
-    if (!tag || seen.has(normalizedTag)) {
-      continue
-    }
-
-    seen.add(normalizedTag)
-    tags.push(tag)
-  }
-
-  return tags
-}
-
-function buildConversationMetadataUpdate(
-  folder: string,
-  tags: string[],
-  knowledgeSpaceIds: number[],
-  currentConversation: Conversation | null,
-  includeKnowledge = true,
-) {
-  if (!currentConversation) {
-    return {}
-  }
-
-  const folderChanged = folder !== currentConversation.folder
-  const tagsChanged =
-    tags.length !== currentConversation.tags.length ||
-    tags.some((tag, index) => tag !== currentConversation.tags[index])
-  const knowledgeChanged =
-    knowledgeSpaceIds.length !== (currentConversation.knowledgeSpaceIds ?? []).length ||
-    knowledgeSpaceIds.some((id, index) => id !== (currentConversation.knowledgeSpaceIds ?? [])[index])
-
-  return {
-    ...(folderChanged ? { folder } : {}),
-    ...(tagsChanged ? { tags } : {}),
-    ...(includeKnowledge && knowledgeChanged ? { knowledgeSpaceIds } : {}),
-  }
-}
-
-function buildDraftConversationSettings(
-  chatSettings: ChatSettings,
-  systemPrompt: string,
-): ConversationSettings {
-  return {
-    systemPrompt,
-    providerPresetId: chatSettings.providerPresetId ?? null,
-    model: chatSettings.model,
-    temperature: chatSettings.temperature,
-    maxTokens: chatSettings.maxTokens,
-    contextWindowTurns: chatSettings.contextWindowTurns,
   }
 }

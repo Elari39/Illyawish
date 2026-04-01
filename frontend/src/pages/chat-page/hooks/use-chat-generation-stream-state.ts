@@ -15,18 +15,19 @@ import type {
 import {
   appendToStreamingMessage,
   isSameMessage,
-  updateStreamingAssistantMessage,
   upsertMessage,
 } from '../utils'
 import { readLastEventSeq, writeLastEventSeq } from '../stream-seq-storage'
 import type { ActiveGenerationState } from './chat-generation-types'
 import { syncGenerationMessageId } from './chat-generation-lifecycle'
-
-interface MessageTarget {
-  conversationId: Conversation['id']
-  placeholderId: number
-  messageId: number | null
-}
+import {
+  buildMessageTarget,
+  markReasoningStarted as applyReasoningStartedTimestamp,
+  markReasoningCompleted,
+  type BufferedMessageDelta,
+  type MessageTarget,
+  syncStreamEventSequence,
+} from './chat-generation-stream/helpers'
 
 interface UseChatGenerationStreamStateOptions {
   activeConversationId: Conversation['id'] | null
@@ -45,36 +46,8 @@ export function useChatGenerationStreamState({
   setChatError,
   t,
 }: UseChatGenerationStreamStateOptions) {
-  const bufferedDeltaRef = useRef<{
-    conversationId: Conversation['id']
-    placeholderId: number
-    content: string
-    reasoningContent: string
-  } | null>(null)
+  const bufferedDeltaRef = useRef<BufferedMessageDelta | null>(null)
   const bufferedDeltaFrameRef = useRef<number | null>(null)
-
-  function buildMessageTarget(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ): MessageTarget {
-    const activeGeneration = activeGenerationRef.current
-    return {
-      conversationId,
-      placeholderId,
-      messageId:
-        activeGeneration?.conversationId === conversationId
-          ? activeGeneration.messageId
-          : null,
-    }
-  }
-
-  function syncEventSequence(conversationId: Conversation['id'], event: StreamEvent) {
-    if (typeof event.seq !== 'number' || event.seq <= 0) {
-      return
-    }
-
-    writeLastEventSeq(conversationId, event.seq)
-  }
 
   function flushBufferedMessageDelta() {
     const bufferedDelta = bufferedDeltaRef.current
@@ -87,6 +60,7 @@ export function useChatGenerationStreamState({
       appendToStreamingMessage(
         previous,
         buildMessageTarget(
+          activeGenerationRef.current,
           bufferedDelta.conversationId,
           bufferedDelta.placeholderId,
         ),
@@ -156,37 +130,8 @@ export function useChatGenerationStreamState({
 
   function markReasoningStarted(target: MessageTarget, observedAt = Date.now()) {
     setMessages((previous) =>
-      updateStreamingAssistantMessage(previous, target, (message) => {
-        if (message.localReasoningStartedAt != null) {
-          return message
-        }
-
-        return {
-          ...message,
-          localReasoningStartedAt: observedAt,
-        }
-      }),
+      applyReasoningStartedTimestamp(previous, target, observedAt),
     )
-  }
-
-  function markReasoningCompleted(
-    previous: Message[],
-    target: MessageTarget,
-    observedAt = Date.now(),
-  ) {
-    return updateStreamingAssistantMessage(previous, target, (message) => {
-      if (
-        message.localReasoningStartedAt == null ||
-        message.localReasoningCompletedAt != null
-      ) {
-        return message
-      }
-
-      return {
-        ...message,
-        localReasoningCompletedAt: observedAt,
-      }
-    })
   }
 
   useEffect(() => {
@@ -212,13 +157,17 @@ export function useChatGenerationStreamState({
 
     const eventMessage = event.message
     syncGenerationMessageId(activeGenerationRef, placeholderId, eventMessage)
-    syncEventSequence(conversationId, event)
+    syncStreamEventSequence(conversationId, event)
 
     if (activeConversationIdRef.current !== conversationId) {
       return
     }
 
-    const target = buildMessageTarget(conversationId, placeholderId)
+    const target = buildMessageTarget(
+      activeGenerationRef.current,
+      conversationId,
+      placeholderId,
+    )
 
     if (event.type === 'message_start' && eventMessage) {
       setMessages((previous) => upsertMessage(previous, eventMessage, target))

@@ -1,5 +1,4 @@
 import {
-  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -11,25 +10,18 @@ import {
 } from 'react'
 import {
   AlertCircle,
-  FileText,
-  Maximize2,
-  Minimize2,
-  Paperclip,
-  SendHorizonal,
-  Square,
   X,
 } from 'lucide-react'
 
-import { Button } from '../../../components/ui/button'
 import { Textarea } from '../../../components/ui/textarea'
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
 import type { ChatErrorState, ComposerAttachment } from '../types'
-import {
-  ATTACHMENT_INPUT_ACCEPT,
-  formatAttachmentSize,
-  isImageAttachment,
-} from '../utils'
+import { ATTACHMENT_INPUT_ACCEPT } from '../utils'
+import { ChatComposerActionRow } from './chat-composer/action-row'
+import { AttachmentStrip } from './chat-composer/attachment-strip'
+import { EditingBanner } from './chat-composer/editing-banner'
+import { useTextareaSizing } from './chat-composer/use-textarea-sizing'
 
 interface ChatComposerProps {
   composerFormRef: RefObject<HTMLFormElement | null>
@@ -88,51 +80,18 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const { t } = useI18n()
   const [isDragActive, setIsDragActive] = useState(false)
-  const [isComposerOverflowing, setIsComposerOverflowing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const compactMinHeight =
     layoutMode === 'hero' ? COMPACT_HERO_MIN_HEIGHT : COMPACT_DOCKED_MIN_HEIGHT
-  const showExpandToggle = Boolean(onToggleExpanded) && (isExpanded || isComposerOverflowing)
-  const expandButtonLabel = isExpanded
-    ? t('chat.collapseComposer')
-    : t('chat.expandComposer')
-
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) {
-      return
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      if (isExpanded) {
-        textarea.style.height = '100%'
-        textarea.style.overflowY = 'auto'
-        setIsComposerOverflowing(Boolean(onToggleExpanded))
-        return
-      }
-
-      textarea.style.height = '0px'
-      const nextScrollHeight = textarea.scrollHeight
-      const nextHeight = Math.max(
-        compactMinHeight,
-        Math.min(nextScrollHeight, textareaMaxHeight),
-      )
-
-      textarea.style.height = `${nextHeight}px`
-      textarea.style.overflowY = nextScrollHeight > textareaMaxHeight ? 'auto' : 'hidden'
-      setIsComposerOverflowing(nextScrollHeight > textareaMaxHeight)
-    })
-
-    return () => {
-      window.cancelAnimationFrame(frameId)
-    }
-  }, [
-    compactMinHeight,
+  const { isComposerOverflowing } = useTextareaSizing({
+    textareaRef,
     composerValue,
+    compactMinHeight,
     isExpanded,
-    onToggleExpanded,
     textareaMaxHeight,
-  ])
+    onToggleExpanded,
+  })
+  const showExpandToggle = Boolean(onToggleExpanded) && (isExpanded || isComposerOverflowing)
 
   function handleOpenImagePicker() {
     fileInputRef.current?.click()
@@ -197,66 +156,13 @@ export function ChatComposer({
         )}
       >
         {editingMessageId ? (
-          <div className="flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--surface-strong)] px-4 py-3 text-sm text-[var(--muted-foreground)]">
-            <span>{t('chat.editingBanner')}</span>
-            <Button onClick={onCancelEdit} variant="ghost">
-              {t('common.cancel')}
-            </Button>
-          </div>
+          <EditingBanner onCancelEdit={onCancelEdit} />
         ) : null}
 
-        {selectedAttachments.length > 0 ? (
-          <div className="flex flex-wrap gap-3">
-            {selectedAttachments.map((attachment) => (
-              <div
-                key={attachment.id}
-                className={cn(
-                  'relative overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-strong)]',
-                  isImageAttachment(attachment)
-                    ? 'p-1'
-                    : 'flex w-full max-w-xs items-center gap-3 px-4 py-3',
-                )}
-              >
-                {isImageAttachment(attachment) && attachment.previewUrl ? (
-                  <img
-                    alt={attachment.name}
-                    className="h-20 w-20 rounded-lg object-cover"
-                    src={attachment.previewUrl}
-                  />
-                ) : (
-                  <>
-                    <div className="rounded-lg bg-[var(--sidebar-bg)] p-2 text-[var(--muted-foreground)]">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 pr-6">
-                      <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                        {attachment.name}
-                      </p>
-                      <p className="text-xs text-[var(--muted-foreground)]">
-                        {attachment.mimeType || 'application/octet-stream'} ·{' '}
-                        {formatAttachmentSize(attachment.size)}
-                      </p>
-                    </div>
-                  </>
-                )}
-                {attachment.isUploading ? (
-                  <div className="absolute inset-x-1 bottom-1 rounded-lg bg-black/70 px-2 py-1 text-center text-[11px] text-white">
-                    {t('common.loading')}
-                  </div>
-                ) : null}
-                <button
-                  className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white"
-                  disabled={attachment.isUploading}
-                  onClick={() => onRemoveAttachment(attachment.id)}
-                  type="button"
-                  aria-label={t('chat.removeAttachment', { name: attachment.name })}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        <AttachmentStrip
+          attachments={selectedAttachments}
+          onRemoveAttachment={onRemoveAttachment}
+        />
 
         <form
           className={cn(
@@ -297,23 +203,6 @@ export function ChatComposer({
           onSubmit={onSubmit}
         >
           <div className={cn('relative', isExpanded && 'flex min-h-0 flex-1 flex-col')}>
-            {showExpandToggle ? (
-              <button
-                aria-expanded={isExpanded}
-                aria-label={expandButtonLabel}
-                className="absolute right-0.5 top-0.5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-                onClick={() => onToggleExpanded?.(!isExpanded)}
-                title={expandButtonLabel}
-                type="button"
-              >
-                {isExpanded ? (
-                  <Minimize2 className="h-4 w-4" />
-                ) : (
-                  <Maximize2 className="h-4 w-4" />
-                )}
-              </button>
-            ) : null}
-
           <Textarea
             className={cn(
               'px-2 py-1.5 text-[15px]',
@@ -347,55 +236,19 @@ export function ChatComposer({
             value={composerValue}
           />
           </div>
-          <div
-            className={cn(
-              'flex items-center justify-between gap-3 border-t border-[var(--line)] px-1 pt-1.5',
-              layoutMode === 'hero' && 'pt-3',
-              isExpanded && 'pt-4',
-            )}
-          >
-            <div className="flex items-center gap-0.5">
-              <button
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition hover:bg-[var(--hover-bg)] hover:text-[var(--foreground)]"
-                onClick={handleOpenImagePicker}
-                type="button"
-                title={t('chat.attachFile')}
-                aria-label={t('chat.attachFile')}
-              >
-                <Paperclip className="h-4 w-4" />
-              </button>
-              {leftContextBar}
-            </div>
-
-            <p className="hidden px-3 text-xs text-[var(--muted-foreground)] md:block">
-              {hasPendingUploads ? t('common.loading') : t('chat.shortcutHint')}
-            </p>
-
-            <div className="flex items-center gap-2">
-              {modelControl}
-              {isSending ? (
-                <button
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--danger)] text-white transition hover:opacity-90 active:scale-[0.96]"
-                  onClick={onStopGeneration}
-                  type="button"
-                  aria-label={t('chat.stop')}
-                  title={t('chat.stop')}
-                >
-                  <Square className="h-3.5 w-3.5 fill-current" />
-                </button>
-              ) : (
-                <button
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--brand)] text-white transition hover:bg-[var(--brand-strong)] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!canSubmitComposer}
-                  type="submit"
-                  aria-label={t('chat.sendMessage')}
-                  title={t('chat.sendMessage')}
-                >
-                  <SendHorizonal className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
+          <ChatComposerActionRow
+            canSubmitComposer={canSubmitComposer}
+            hasPendingUploads={hasPendingUploads}
+            isExpanded={isExpanded}
+            isSending={isSending}
+            layoutMode={layoutMode}
+            leftContextBar={leftContextBar}
+            modelControl={modelControl}
+            showExpandToggle={showExpandToggle}
+            onOpenImagePicker={handleOpenImagePicker}
+            onStopGeneration={onStopGeneration}
+            onToggleExpanded={onToggleExpanded}
+          />
         </form>
 
         <input
