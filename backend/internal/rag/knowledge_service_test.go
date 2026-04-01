@@ -245,16 +245,6 @@ func TestKnowledgeSpaceServiceDeletesSpaceAndCleansReferences(t *testing.T) {
 	if err := db.Create(conversation).Error; err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	preset := &models.WorkflowPreset{
-		UserID:            3,
-		Name:              "Preset",
-		TemplateKey:       "knowledge_qa",
-		KnowledgeSpaceIDs: []uint{space.ID, 77},
-		ToolEnablements:   map[string]bool{"knowledge_search": true},
-	}
-	if err := db.Create(preset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
 
 	if err := spaceService.DeleteSpace(3, space.ID); err != nil {
 		t.Fatalf("DeleteSpace() error = %v", err)
@@ -282,14 +272,6 @@ func TestKnowledgeSpaceServiceDeletesSpaceAndCleansReferences(t *testing.T) {
 	}
 	if len(reloadedConversation.KnowledgeSpaceIDs) != 1 || reloadedConversation.KnowledgeSpaceIDs[0] != 99 {
 		t.Fatalf("expected deleted space removed from conversation, got %#v", reloadedConversation.KnowledgeSpaceIDs)
-	}
-
-	var reloadedPreset models.WorkflowPreset
-	if err := db.First(&reloadedPreset, preset.ID).Error; err != nil {
-		t.Fatalf("reload preset: %v", err)
-	}
-	if len(reloadedPreset.KnowledgeSpaceIDs) != 1 || reloadedPreset.KnowledgeSpaceIDs[0] != 77 {
-		t.Fatalf("expected deleted space removed from preset, got %#v", reloadedPreset.KnowledgeSpaceIDs)
 	}
 }
 
@@ -423,7 +405,6 @@ func newKnowledgeTestDB(t *testing.T) *gorm.DB {
 	}
 	if err := db.AutoMigrate(
 		&models.Conversation{},
-		&models.WorkflowPreset{},
 		&models.KnowledgeSpace{},
 		&models.KnowledgeDocument{},
 		&models.KnowledgeChunk{},

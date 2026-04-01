@@ -1,4 +1,4 @@
-import type { Conversation, ConversationSettings } from '../types/chat'
+import type { Conversation, ConversationSettings, Message } from '../types/chat'
 
 const defaultConversationSettings: ConversationSettings = {
   systemPrompt: '',
@@ -48,15 +48,22 @@ export function normalizeConversation(conversation: Conversation): Conversation 
     tags: Array.isArray(conversation.tags)
       ? conversation.tags.filter((tag): tag is string => typeof tag === 'string')
       : [],
-    workflowPresetId:
-      typeof conversation.workflowPresetId === 'number'
-        ? conversation.workflowPresetId
-        : null,
     knowledgeSpaceIds: Array.isArray(conversation.knowledgeSpaceIds)
       ? conversation.knowledgeSpaceIds.filter(
           (id): id is number => typeof id === 'number' && Number.isFinite(id),
         )
       : [],
     settings: normalizeConversationSettings(conversation.settings),
+  }
+}
+
+export function normalizeMessage(message: Message): Message {
+  return {
+    ...message,
+    conversationId: String(message.conversationId),
+    reasoningContent:
+      typeof message.reasoningContent === 'string'
+        ? message.reasoningContent
+        : '',
   }
 }

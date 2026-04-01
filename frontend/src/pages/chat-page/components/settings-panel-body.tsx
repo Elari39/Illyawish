@@ -8,7 +8,6 @@ import { ProviderSettingsTab } from './provider-settings-tab'
 import { RAGProviderSettingsTab } from './rag-provider-settings-tab'
 import { SecuritySettingsTab } from './security-settings-tab'
 import { TransferSettingsTab } from './transfer-settings-tab'
-import { WorkflowSettingsTab } from './workflow-settings-tab'
 import type { SettingsPanelProps } from './settings-panel-types'
 
 type SettingsPanelBodyProps = Pick<
@@ -35,11 +34,9 @@ type SettingsPanelBodyProps = Pick<
   | 'onCreateKnowledgeDocument'
   | 'onCreateKnowledgeSpace'
   | 'onCreateRAGProvider'
-  | 'onCreateWorkflowPreset'
   | 'onDeleteKnowledgeDocument'
   | 'onDeleteKnowledgeSpace'
   | 'onDeleteProvider'
-  | 'onDeleteWorkflowPreset'
   | 'onEditProvider'
   | 'onExport'
   | 'onImport'
@@ -55,7 +52,6 @@ type SettingsPanelBodyProps = Pick<
   | 'onToggleTag'
   | 'onUpdateKnowledgeDocument'
   | 'onUpdateKnowledgeSpace'
-  | 'onUpdateWorkflowPreset'
   | 'onUploadKnowledgeDocuments'
   | 'onReplaceKnowledgeDocumentFile'
   | 'pendingKnowledgeSpaceIds'
@@ -70,13 +66,9 @@ type SettingsPanelBodyProps = Pick<
   | 'setConversationFolder'
   | 'setConversationTags'
   | 'setSettings'
-  | 'setWorkflowPresetId'
   | 'settings'
   | 'showArchived'
   | 'transferConversation'
-  | 'workflowPresetId'
-  | 'workflowPresets'
-  | 'workflowTemplates'
 >
 
 export function SettingsPanelBody({
@@ -102,11 +94,9 @@ export function SettingsPanelBody({
   onCreateKnowledgeDocument = async () => null,
   onCreateKnowledgeSpace = async () => null,
   onCreateRAGProvider = async () => undefined,
-  onCreateWorkflowPreset = async () => null,
   onDeleteKnowledgeDocument = async () => false,
   onDeleteKnowledgeSpace = async () => false,
   onDeleteProvider,
-  onDeleteWorkflowPreset = async () => false,
   onEditProvider,
   onExport,
   onImport,
@@ -122,7 +112,6 @@ export function SettingsPanelBody({
   onToggleTag,
   onUpdateKnowledgeDocument = async () => null,
   onUpdateKnowledgeSpace = async () => null,
-  onUpdateWorkflowPreset = async () => null,
   onUploadKnowledgeDocuments = async () => null,
   onReplaceKnowledgeDocumentFile = async () => null,
   pendingKnowledgeSpaceIds = [],
@@ -137,13 +126,9 @@ export function SettingsPanelBody({
   setConversationFolder,
   setConversationTags,
   setSettings,
-  setWorkflowPresetId = () => undefined,
   settings,
   showArchived,
   transferConversation,
-  workflowPresetId = null,
-  workflowPresets = [],
-  workflowTemplates = [],
 }: SettingsPanelBodyProps) {
   const { t } = useI18n()
   const canReuseActiveAPIKey =
@@ -224,22 +209,6 @@ export function SettingsPanelBody({
           uploadKnowledgeDocuments={onUploadKnowledgeDocuments}
           updateKnowledgeDocument={onUpdateKnowledgeDocument}
           updateKnowledgeSpace={onUpdateKnowledgeSpace}
-        />
-      </div>
-    )
-  }
-
-  if (activeTab === 'workflow') {
-    return (
-      <div className={bodyClassName} data-testid="settings-panel-body">
-        <WorkflowSettingsTab
-          createWorkflowPreset={onCreateWorkflowPreset}
-          deleteWorkflowPreset={onDeleteWorkflowPreset}
-          selectedWorkflowPresetId={workflowPresetId}
-          setSelectedWorkflowPresetId={setWorkflowPresetId}
-          updateWorkflowPreset={onUpdateWorkflowPreset}
-          workflowPresets={workflowPresets}
-          workflowTemplates={workflowTemplates}
         />
       </div>
     )

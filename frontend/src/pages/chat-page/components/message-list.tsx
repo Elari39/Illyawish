@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { Button } from '../../../components/ui/button'
 import { useI18n } from '../../../i18n/use-i18n'
 import type { Conversation, Message } from '../../../types/chat'
-import type { ExecutionPanelModel } from './execution-panel-model'
 import { EmptyState } from './empty-state'
 import { MessageBubble } from './message-bubble'
 
@@ -15,15 +14,12 @@ interface MessageListProps {
   isLoadingOlderMessages: boolean
   messages: Message[]
   latestUserMessage: Message | null
-  latestAssistantMessage: Message | null
   isSending: boolean
   editingMessageId: number | null
-  executionPanelModel: ExecutionPanelModel | null
   viewportRef: RefObject<HTMLDivElement | null>
   onShowToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   onEditMessage: (message: Message) => void
   onLoadMore: () => void
-  onConfirmToolCall: (approved: boolean) => Promise<void>
   onRetryMessage: (message: Message) => void
   onRegenerateMessage: (message: Message) => void
 }
@@ -36,15 +32,12 @@ export function MessageList({
   isLoadingOlderMessages,
   messages,
   latestUserMessage,
-  latestAssistantMessage,
   isSending,
   editingMessageId,
-  executionPanelModel,
   viewportRef,
   onShowToast,
   onEditMessage,
   onLoadMore,
-  onConfirmToolCall,
   onRetryMessage,
   onRegenerateMessage,
 }: MessageListProps) {
@@ -53,7 +46,6 @@ export function MessageList({
     onEditMessage,
     onRetryMessage,
     onRegenerateMessage,
-    onConfirmToolCall,
     onShowToast,
   })
 
@@ -62,11 +54,9 @@ export function MessageList({
       onEditMessage,
       onRetryMessage,
       onRegenerateMessage,
-      onConfirmToolCall,
       onShowToast,
     }
   }, [
-    onConfirmToolCall,
     onEditMessage,
     onRegenerateMessage,
     onRetryMessage,
@@ -83,10 +73,6 @@ export function MessageList({
 
   const handleRegenerateMessage = useCallback((message: Message) => {
     actionHandlersRef.current.onRegenerateMessage(message)
-  }, [])
-
-  const handleConfirmToolCall = useCallback((approved: boolean) => {
-    return actionHandlersRef.current.onConfirmToolCall(approved)
   }, [])
 
   const handleCopySuccessToast = useCallback((message: string, variant?: 'success' | 'error' | 'info') => {
@@ -136,14 +122,8 @@ export function MessageList({
                 message.role === 'assistant' &&
                 message.status === 'completed'
               }
-              executionPanelModel={
-                message.role === 'assistant' && latestAssistantMessage?.id === message.id
-                  ? executionPanelModel
-                  : null
-              }
               isEditing={editingMessageId === message.id}
               message={message}
-              onConfirmToolCall={handleConfirmToolCall}
               onCopySuccessToast={handleCopySuccessToast}
               onEditMessage={handleEditMessage}
               onRegenerateMessage={handleRegenerateMessage}

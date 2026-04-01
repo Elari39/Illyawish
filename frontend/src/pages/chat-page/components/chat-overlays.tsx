@@ -10,8 +10,6 @@ import type {
   ProviderPreset,
   ProviderState,
   RAGProviderState,
-  WorkflowPreset,
-  WorkflowTemplate,
 } from '../../../types/chat'
 import type {
   ConfirmationState,
@@ -46,7 +44,6 @@ interface ChatOverlaysProps {
   availableTags: string[]
   selectedFolder: string | null
   selectedTags: string[]
-  workflowPresetId: number | null
   knowledgeSpaceIds: number[]
   pendingKnowledgeSpaceIds: number[]
   isLoadingProviders: boolean
@@ -64,8 +61,6 @@ interface ChatOverlaysProps {
   ragProviderState: RAGProviderState | null
   knowledgeSpaces: KnowledgeSpace[]
   knowledgeDocuments: Record<number, KnowledgeDocument[]>
-  workflowTemplates: WorkflowTemplate[]
-  workflowPresets: WorkflowPreset[]
   settings: ConversationSettings
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
@@ -77,7 +72,6 @@ interface ChatOverlaysProps {
   onBulkMoveToFolder: () => void
   onBulkAddTags: () => void
   onBulkRemoveTags: () => void
-  setWorkflowPresetId: Dispatch<SetStateAction<number | null>>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   transferConversation: Conversation | null
   toasts: ToastState[]
@@ -146,23 +140,6 @@ interface ChatOverlaysProps {
     file: File,
     title?: string,
   ) => Promise<KnowledgeDocument | null>
-  onCreateWorkflowPreset: (payload: {
-    name: string
-    templateKey: string
-    defaultInputs?: Record<string, unknown>
-    knowledgeSpaceIds?: number[]
-    toolEnablements?: Record<string, boolean>
-    outputMode?: string
-  }) => Promise<WorkflowPreset | null>
-  onUpdateWorkflowPreset: (presetId: number, payload: {
-    name?: string
-    templateKey?: string
-    defaultInputs?: Record<string, unknown>
-    knowledgeSpaceIds?: number[]
-    toolEnablements?: Record<string, boolean>
-    outputMode?: string
-  }) => Promise<WorkflowPreset | null>
-  onDeleteWorkflowPreset: (presetId: number) => Promise<boolean>
   onReset: () => void
   onResetProvider: () => void
   onSave: () => void
@@ -183,7 +160,6 @@ export function ChatOverlays({
   availableTags,
   selectedFolder,
   selectedTags,
-  workflowPresetId,
   knowledgeSpaceIds,
   pendingKnowledgeSpaceIds,
   isLoadingProviders,
@@ -201,8 +177,6 @@ export function ChatOverlays({
   ragProviderState,
   knowledgeSpaces,
   knowledgeDocuments,
-  workflowTemplates,
-  workflowPresets,
   settings,
   setChatSettings,
   setConversationFolder,
@@ -214,7 +188,6 @@ export function ChatOverlays({
   onBulkMoveToFolder,
   onBulkAddTags,
   onBulkRemoveTags,
-  setWorkflowPresetId,
   setSettings,
   transferConversation,
   toasts,
@@ -244,9 +217,6 @@ export function ChatOverlays({
   onDeleteKnowledgeDocument,
   onUploadKnowledgeDocuments,
   onReplaceKnowledgeDocumentFile,
-  onCreateWorkflowPreset,
-  onUpdateWorkflowPreset,
-  onDeleteWorkflowPreset,
   onReset,
   onResetProvider,
   onSave,
@@ -266,7 +236,6 @@ export function ChatOverlays({
         availableTags={availableTags}
         selectedFolder={selectedFolder}
         selectedTags={selectedTags}
-        workflowPresetId={workflowPresetId}
         knowledgeSpaceIds={knowledgeSpaceIds}
         pendingKnowledgeSpaceIds={pendingKnowledgeSpaceIds}
         editingProviderId={editingProviderId}
@@ -299,8 +268,6 @@ export function ChatOverlays({
         ragProviderState={ragProviderState}
         knowledgeSpaces={knowledgeSpaces}
         knowledgeDocuments={knowledgeDocuments}
-        workflowTemplates={workflowTemplates}
-        workflowPresets={workflowPresets}
         settings={settings}
         setChatSettings={setChatSettings}
         setConversationFolder={setConversationFolder}
@@ -312,7 +279,6 @@ export function ChatOverlays({
         onBulkMoveToFolder={onBulkMoveToFolder}
         onBulkAddTags={onBulkAddTags}
         onBulkRemoveTags={onBulkRemoveTags}
-        setWorkflowPresetId={setWorkflowPresetId}
         onToggleKnowledgeSpace={onToggleKnowledgeSpace}
         setSettings={setSettings}
         transferConversation={transferConversation}
@@ -327,9 +293,6 @@ export function ChatOverlays({
         onDeleteKnowledgeDocument={onDeleteKnowledgeDocument}
         onUploadKnowledgeDocuments={onUploadKnowledgeDocuments}
         onReplaceKnowledgeDocumentFile={onReplaceKnowledgeDocumentFile}
-        onCreateWorkflowPreset={onCreateWorkflowPreset}
-        onUpdateWorkflowPreset={onUpdateWorkflowPreset}
-        onDeleteWorkflowPreset={onDeleteWorkflowPreset}
       />
       <ConfirmationDialog
         confirmation={confirmation}

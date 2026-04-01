@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"backend/internal/agent"
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
-	"backend/internal/workflow"
+	"backend/internal/rag"
 
 	"github.com/google/uuid"
 	"gorm.io/driver/sqlite"
@@ -93,6 +92,33 @@ func (m *delayedChatModel) Stream(
 		Content:          "answer",
 		ReasoningContent: "step 1",
 		FinishReason:     "stop",
+	}, nil
+}
+
+type pauseAfterDeltaModel struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (m *pauseAfterDeltaModel) Stream(
+	_ context.Context,
+	_ llm.ProviderConfig,
+	_ []llm.ChatMessage,
+	_ llm.RequestOptions,
+	onDelta func(llm.StreamDelta),
+) (llm.StreamResult, error) {
+	if onDelta != nil {
+		onDelta(llm.StreamDelta{Content: "answer"})
+	}
+	select {
+	case <-m.started:
+	default:
+		close(m.started)
+	}
+	<-m.release
+	return llm.StreamResult{
+		Content:      "answer",
+		FinishReason: "stop",
 	}, nil
 }
 
@@ -199,36 +225,21 @@ func (f *fakeAttachmentStore) CleanupUnreferenced(attachments []models.Attachmen
 	return nil
 }
 
-type fakeAgentRunner struct {
-	result    *agent.RunResult
-	events    []agent.Event
+type fakeKnowledgeSearcher struct {
+	result    *rag.SearchResult
 	err       error
-	lastInput agent.RunInput
+	lastInput rag.SearchInput
 }
 
-func (f *fakeAgentRunner) Execute(_ context.Context, input agent.RunInput, emit func(agent.Event) error) (*agent.RunResult, error) {
+func (f *fakeKnowledgeSearcher) Search(_ context.Context, _ uint, input rag.SearchInput, _ rag.ProviderConfig) (*rag.SearchResult, error) {
 	f.lastInput = input
-	for _, event := range f.events {
-		if err := emit(event); err != nil {
-			return nil, err
-		}
-	}
 	if f.err != nil {
 		return nil, f.err
+	}
+	if f.result == nil {
+		return &rag.SearchResult{}, nil
 	}
 	return f.result, nil
-}
-
-type fakeWorkflowPresetResolver struct {
-	preset *models.WorkflowPreset
-	err    error
-}
-
-func (f *fakeWorkflowPresetResolver) GetPreset(_ uint, _ uint) (*models.WorkflowPreset, error) {
-	if f.err != nil {
-		return nil, f.err
-	}
-	return f.preset, nil
 }
 
 func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
@@ -271,14 +282,25 @@ func TestStreamAssistantReplyMarksFailedMessages(t *testing.T) {
 	}
 }
 
-func TestStreamAssistantReplyUsesAgentRuntimeWhenKnowledgeSpacesSelected(t *testing.T) {
+func TestStreamAssistantReplyUsesKnowledgeContextWhenKnowledgeSpacesSelected(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	conversation.KnowledgeSpaceIDs = []uint{9}
 	if err := db.Save(&conversation).Error; err != nil {
 		t.Fatalf("save conversation defaults: %v", err)
 	}
 
-	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+	model := &fakeChatModel{
+		chunks: []string{"knowledge answer"},
+	}
+	searcher := &fakeKnowledgeSearcher{
+		result: &rag.SearchResult{
+			Citations: []models.AgentCitation{
+				{DocumentID: 1, DocumentName: "Spec", ChunkID: 7, Snippet: "retrieved"},
+			},
+			ContextBlocks: []string{"Stored answer from docs"},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
 		resolved: &provider.ResolvedProvider{
 			Config: llm.ProviderConfig{
 				BaseURL:      "https://example.com/v1",
@@ -286,38 +308,27 @@ func TestStreamAssistantReplyUsesAgentRuntimeWhenKnowledgeSpacesSelected(t *test
 				DefaultModel: "provider-model",
 			},
 		},
-	}, &fakeAttachmentStore{}).WithAgentRuntime(&fakeAgentRunner{
-		events: []agent.Event{
-			{Type: agent.EventTypeRunStarted},
-			{Type: agent.EventTypeMessageDelta, Content: "agent answer"},
-			{Type: agent.EventTypeRunCompleted},
-		},
-		result: &agent.RunResult{
-			Content: "agent answer",
-			RunSummary: models.AgentRunSummary{
-				WorkflowTemplateKey: "knowledge_qa",
-				KnowledgeSpaceIDs:   []uint{9},
-				Citations: []models.AgentCitation{
-					{DocumentID: 1, DocumentName: "Spec", ChunkID: 7, Snippet: "retrieved"},
-				},
-			},
-		},
-	})
+	}, &fakeAttachmentStore{}).WithKnowledgeSearcher(searcher)
 
-	var seenRunEvent bool
 	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
 		Content: "what is stored",
 	}, func(event StreamEvent) error {
-		if event.Type == agent.EventTypeRunStarted {
-			seenRunEvent = true
-		}
 		return nil
 	}); err != nil {
 		t.Fatalf("StreamAssistantReply() error = %v", err)
 	}
 
-	if !seenRunEvent {
-		t.Fatal("expected agent runtime events to be forwarded")
+	if searcher.lastInput.Query != "what is stored" {
+		t.Fatalf("expected search query to use message content, got %#v", searcher.lastInput)
+	}
+	if len(searcher.lastInput.KnowledgeSpaceIDs) != 1 || searcher.lastInput.KnowledgeSpaceIDs[0] != 9 {
+		t.Fatalf("expected conversation knowledge spaces to drive search, got %#v", searcher.lastInput.KnowledgeSpaceIDs)
+	}
+	if len(model.lastHistory) == 0 || model.lastHistory[0].Role != models.RoleSystem {
+		t.Fatalf("expected system prompt with knowledge context, got %#v", model.lastHistory)
+	}
+	if !strings.Contains(model.lastHistory[0].Content, "Stored answer from docs") {
+		t.Fatalf("expected retrieved context in system prompt, got %q", model.lastHistory[0].Content)
 	}
 
 	var messages []models.Message
@@ -327,22 +338,29 @@ func TestStreamAssistantReplyUsesAgentRuntimeWhenKnowledgeSpacesSelected(t *test
 	if len(messages) != 2 {
 		t.Fatalf("expected 2 messages, got %d", len(messages))
 	}
-	if messages[1].Content != "agent answer" {
-		t.Fatalf("expected agent response to persist, got %q", messages[1].Content)
+	if messages[1].Content != "knowledge answer" {
+		t.Fatalf("expected knowledge answer to persist, got %q", messages[1].Content)
 	}
 	if len(messages[1].RunSummary.Citations) != 1 {
 		t.Fatalf("expected run summary to persist, got %#v", messages[1].RunSummary)
 	}
 }
 
-func TestStreamAssistantReplyPersistsOnlyFinalAgentDeltasOnFailure(t *testing.T) {
+func TestStreamAssistantReplyUsesExplicitKnowledgeSpacesForSearch(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	conversation.KnowledgeSpaceIDs = []uint{9}
 	if err := db.Save(&conversation).Error; err != nil {
 		t.Fatalf("save conversation defaults: %v", err)
 	}
 
-	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
+	searcher := &fakeKnowledgeSearcher{
+		result: &rag.SearchResult{
+			ContextBlocks: []string{"override space"},
+		},
+	}
+	service := NewService(db, &fakeChatModel{
+		chunks: []string{"ok"},
+	}, &fakeProviderResolver{
 		resolved: &provider.ResolvedProvider{
 			Config: llm.ProviderConfig{
 				BaseURL:      "https://example.com/v1",
@@ -350,101 +368,19 @@ func TestStreamAssistantReplyPersistsOnlyFinalAgentDeltasOnFailure(t *testing.T)
 				DefaultModel: "provider-model",
 			},
 		},
-	}, &fakeAttachmentStore{}).WithAgentRuntime(&fakeAgentRunner{
-		events: []agent.Event{
-			{Type: agent.EventTypeRunStarted},
-			{Type: agent.EventTypeMessageDelta, StepName: "compose_answer", Content: "draft step output"},
-			{Type: agent.EventTypeReasoningDelta, StepName: "compose_answer", Content: "draft step reasoning"},
-			{Type: agent.EventTypeReasoningDelta, Content: "final think"},
-			{Type: agent.EventTypeReasoningDelta, Content: "ing"},
-			{Type: agent.EventTypeMessageDelta, Content: "partial "},
-			{Type: agent.EventTypeMessageDelta, Content: "answer"},
-		},
-		err: errors.New("agent exploded"),
-	})
-
-	err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
-		Content: "what is stored",
-	}, func(StreamEvent) error {
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("expected async agent runtime failure to stay in stream state, got %v", err)
-	}
-
-	var messages []models.Message
-	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
-		t.Fatalf("query messages: %v", err)
-	}
-	if len(messages) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(messages))
-	}
-	if messages[1].Status != models.MessageStatusFailed {
-		t.Fatalf("expected failed assistant message, got %q", messages[1].Status)
-	}
-	if messages[1].Content != "partial answer" {
-		t.Fatalf("expected only final partial content to persist, got %q", messages[1].Content)
-	}
-	if messages[1].ReasoningContent != "final thinking" {
-		t.Fatalf("expected only final partial reasoning to persist, got %q", messages[1].ReasoningContent)
-	}
-}
-
-func TestStreamAssistantReplyResolvesWorkflowPresetDefaultsForAgentRuntime(t *testing.T) {
-	db, user, conversation := newChatTestContext(t)
-	presetID := uint(11)
-	runner := &fakeAgentRunner{
-		result: &agent.RunResult{
-			Content: "agent answer",
-			RunSummary: models.AgentRunSummary{
-				WorkflowTemplateKey: workflow.TemplateWebpageDigest,
-				WorkflowPresetID:    &presetID,
-				KnowledgeSpaceIDs:   []uint{3, 5},
-			},
-		},
-	}
-
-	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{
-		resolved: &provider.ResolvedProvider{
-			Config: llm.ProviderConfig{
-				BaseURL:      "https://example.com/v1",
-				APIKey:       "test-key",
-				DefaultModel: "provider-model",
-			},
-		},
-	}, &fakeAttachmentStore{}).
-		WithAgentRuntime(runner).
-		WithWorkflowPresets(&fakeWorkflowPresetResolver{
-			preset: &models.WorkflowPreset{
-				ID:                presetID,
-				UserID:            user.ID,
-				Name:              "Digest",
-				TemplateKey:       workflow.TemplateWebpageDigest,
-				DefaultInputs:     map[string]any{"url": "https://default.example"},
-				KnowledgeSpaceIDs: []uint{3, 5},
-			},
-		})
+	}, &fakeAttachmentStore{}).WithKnowledgeSearcher(searcher)
 
 	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
-		Content:          "Summarize this page",
-		WorkflowPresetID: &presetID,
-		WorkflowInputs: map[string]any{
-			"url": "https://override.example",
-		},
+		Content:           "what is stored",
+		KnowledgeSpaceIDs: []uint{3, 5},
 	}, func(StreamEvent) error {
 		return nil
 	}); err != nil {
 		t.Fatalf("StreamAssistantReply() error = %v", err)
 	}
 
-	if runner.lastInput.WorkflowTemplateKey != workflow.TemplateWebpageDigest {
-		t.Fatalf("expected workflow template key from preset, got %q", runner.lastInput.WorkflowTemplateKey)
-	}
-	if len(runner.lastInput.KnowledgeSpaceIDs) != 2 || runner.lastInput.KnowledgeSpaceIDs[0] != 3 || runner.lastInput.KnowledgeSpaceIDs[1] != 5 {
-		t.Fatalf("expected preset knowledge spaces, got %#v", runner.lastInput.KnowledgeSpaceIDs)
-	}
-	if got := runner.lastInput.WorkflowInputs["url"]; got != "https://override.example" {
-		t.Fatalf("expected workflow input override to win, got %#v", got)
+	if len(searcher.lastInput.KnowledgeSpaceIDs) != 2 || searcher.lastInput.KnowledgeSpaceIDs[0] != 3 || searcher.lastInput.KnowledgeSpaceIDs[1] != 5 {
+		t.Fatalf("expected explicit knowledge space override, got %#v", searcher.lastInput.KnowledgeSpaceIDs)
 	}
 }
 
@@ -558,7 +494,7 @@ func TestStreamAssistantReplyAutoContinuesRecoverablePartialError(t *testing.T) 
 	}
 }
 
-func TestStreamAssistantReplyPersistsReasoningContentAndEmitsReasoningEvents(t *testing.T) {
+func TestStreamAssistantReplyStreamsFinalContentOnly(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 
 	model := &fakeChatModel{
@@ -598,6 +534,9 @@ func TestStreamAssistantReplyPersistsReasoningContentAndEmitsReasoningEvents(t *
 		t.Fatalf("query messages: %v", err)
 	}
 
+	if messages[1].Content != "final answer" {
+		t.Fatalf("expected final content to persist, got %q", messages[1].Content)
+	}
 	if messages[1].ReasoningContent != "step 1 -> step 2" {
 		t.Fatalf("expected reasoning content to persist, got %q", messages[1].ReasoningContent)
 	}
@@ -607,16 +546,22 @@ func TestStreamAssistantReplyPersistsReasoningContentAndEmitsReasoningEvents(t *
 	if countStreamEventType(events, "reasoning_delta") != 2 {
 		t.Fatalf("expected 2 reasoning_delta events, got %#v", events)
 	}
+	if !containsStreamEventType(events, "reasoning_done") {
+		t.Fatalf("expected reasoning_done event, got %#v", events)
+	}
 	doneEvent := findStreamEventByType(events, "done")
 	if doneEvent == nil || doneEvent.Message == nil {
 		t.Fatalf("expected done event with message, got %#v", events)
+	}
+	if doneEvent.Message.Content != "final answer" {
+		t.Fatalf("expected done event message content, got %#v", doneEvent.Message)
 	}
 	if doneEvent.Message.ReasoningContent != "step 1 -> step 2" {
 		t.Fatalf("expected done event message reasoning content, got %#v", doneEvent.Message)
 	}
 }
 
-func TestStreamAssistantReplyPersistsReasoningContentWhenStreamingFails(t *testing.T) {
+func TestStreamAssistantReplyKeepsReasoningContentWhenStreamingFails(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 
 	model := &fakeChatModel{
@@ -656,14 +601,80 @@ func TestStreamAssistantReplyPersistsReasoningContentWhenStreamingFails(t *testi
 	}
 
 	if messages[1].ReasoningContent != "partial thinking" {
-		t.Fatalf("expected reasoning content to persist on failure, got %q", messages[1].ReasoningContent)
+		t.Fatalf("expected reasoning content to be preserved on failure, got %q", messages[1].ReasoningContent)
 	}
 	errorEvent := findStreamEventByType(events, "error")
 	if errorEvent == nil || errorEvent.Message == nil {
 		t.Fatalf("expected error event with message, got %#v", events)
 	}
+	if errorEvent.Message.Content != "partial answer" {
+		t.Fatalf("expected error event message content, got %#v", errorEvent.Message)
+	}
 	if errorEvent.Message.ReasoningContent != "partial thinking" {
 		t.Fatalf("expected error event message reasoning content, got %#v", errorEvent.Message)
+	}
+}
+
+func TestStreamAssistantReplySplitsLeadingThinkBlocksFromContent(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+
+	model := &fakeChatModel{
+		responses: []fakeStreamResponse{
+			{
+				deltas: []llm.StreamDelta{
+					{Content: "<thi"},
+					{Content: "nk>step 1"},
+					{Content: "</thin"},
+					{Content: "k><think>step 2</think>Final"},
+					{Content: " answer<think>kept</think>"},
+				},
+				finishReason: "stop",
+			},
+		},
+	}
+	service := NewService(db, model, &fakeProviderResolver{
+		resolved: &provider.ResolvedProvider{
+			Config: llm.ProviderConfig{
+				BaseURL:      "https://example.com/v1",
+				APIKey:       "test-key",
+				DefaultModel: "provider-model",
+			},
+		},
+	}, &fakeAttachmentStore{})
+
+	var events []StreamEvent
+	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
+		Content: "hello",
+	}, func(event StreamEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamAssistantReply() error = %v", err)
+	}
+
+	var messages []models.Message
+	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
+		t.Fatalf("query messages: %v", err)
+	}
+
+	if messages[1].ReasoningContent != "step 1step 2" {
+		t.Fatalf("expected leading think blocks in reasoning content, got %q", messages[1].ReasoningContent)
+	}
+	if messages[1].Content != "Final answer<think>kept</think>" {
+		t.Fatalf("expected non-leading think blocks to remain in content, got %q", messages[1].Content)
+	}
+	if countStreamEventType(events, "reasoning_delta") == 0 {
+		t.Fatalf("expected reasoning delta events, got %#v", events)
+	}
+	doneEvent := findStreamEventByType(events, "done")
+	if doneEvent == nil || doneEvent.Message == nil {
+		t.Fatalf("expected done event with final message, got %#v", events)
+	}
+	if doneEvent.Message.ReasoningContent != "step 1step 2" {
+		t.Fatalf("expected done event reasoning content, got %#v", doneEvent.Message)
+	}
+	if doneEvent.Message.Content != "Final answer<think>kept</think>" {
+		t.Fatalf("expected done event content to exclude leading think blocks only, got %#v", doneEvent.Message)
 	}
 }
 
@@ -687,7 +698,7 @@ func TestStreamAssistantReplyContinuesAfterSubscriberDisconnect(t *testing.T) {
 		Content: "hello",
 	}, func(event StreamEvent) error {
 		emitted = append(emitted, event)
-		if event.Type == "reasoning_delta" {
+		if event.Type == "delta" {
 			var err error
 			once.Do(func() {
 				err = disconnectErr
@@ -755,6 +766,12 @@ func TestStreamAssistantReplyCancelsAfterDetachTimeout(t *testing.T) {
 		t.Fatal("expected model stream to be cancelled after detach timeout")
 	}
 
+	waitCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if !service.waitForActiveRunCompletion(waitCtx, conversation.ID) {
+		t.Fatal("expected detached run to finish cleanup")
+	}
+
 	var messages []models.Message
 	if err := db.Where("conversation_id = ?", conversation.ID).Order("id asc").Find(&messages).Error; err != nil {
 		t.Fatalf("query messages: %v", err)
@@ -766,12 +783,19 @@ func TestStreamAssistantReplyCancelsAfterDetachTimeout(t *testing.T) {
 	if messages[1].Status != models.MessageStatusCancelled {
 		t.Fatalf("expected detached stream to become cancelled, got %q", messages[1].Status)
 	}
+	if messages[1].ReasoningContent != "thinking" {
+		t.Fatalf("expected cancelled stream to preserve reasoning content, got %q", messages[1].ReasoningContent)
+	}
 }
 
 func TestResumeActiveStreamReplaysEventsAfterSequence(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 
-	service := NewService(db, &delayedChatModel{delay: 40 * time.Millisecond}, &fakeProviderResolver{
+	model := &pauseAfterDeltaModel{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	service := NewService(db, model, &fakeProviderResolver{
 		resolved: &provider.ResolvedProvider{
 			Config: llm.ProviderConfig{
 				BaseURL:      "https://example.com/v1",
@@ -785,7 +809,7 @@ func TestResumeActiveStreamReplaysEventsAfterSequence(t *testing.T) {
 	if err := service.StreamAssistantReply(context.Background(), user.ID, conversation.ID, SendMessageInput{
 		Content: "hello",
 	}, func(event StreamEvent) error {
-		if event.Type == "reasoning_delta" {
+		if event.Type == "delta" {
 			lastSeenSeq = event.Seq
 			return errors.New("client disconnected")
 		}
@@ -794,8 +818,12 @@ func TestResumeActiveStreamReplaysEventsAfterSequence(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("StreamAssistantReply() error = %v", err)
 	}
+	<-model.started
 
 	var resumed []StreamEvent
+	go func() {
+		close(model.release)
+	}()
 	if err := service.ResumeActiveStream(context.Background(), user.ID, conversation.ID, lastSeenSeq, func(event StreamEvent) error {
 		resumed = append(resumed, event)
 		return nil
@@ -803,11 +831,8 @@ func TestResumeActiveStreamReplaysEventsAfterSequence(t *testing.T) {
 		t.Fatalf("ResumeActiveStream() error = %v", err)
 	}
 
-	if len(resumed) < 2 {
-		t.Fatalf("expected replayed delta and done events, got %#v", resumed)
-	}
-	if resumed[0].Type != "delta" {
-		t.Fatalf("expected first resumed event to be delta, got %#v", resumed)
+	if len(resumed) == 0 {
+		t.Fatalf("expected replayed events, got %#v", resumed)
 	}
 	if resumed[len(resumed)-1].Type != "done" {
 		t.Fatalf("expected final resumed event to be done, got %#v", resumed)
@@ -1122,18 +1147,10 @@ func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
 	}
 }
 
-func TestUpdateConversationPersistsWorkflowPresetAndKnowledgeSpaces(t *testing.T) {
+func TestUpdateConversationPersistsKnowledgeSpaces(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
 
-	workflowPreset := models.WorkflowPreset{
-		UserID:      user.ID,
-		Name:        "Knowledge QA",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&workflowPreset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
 	knowledgeSpaces := []models.KnowledgeSpace{
 		{UserID: user.ID, Name: "Docs"},
 		{UserID: user.ID, Name: "Runbooks"},
@@ -1143,52 +1160,16 @@ func TestUpdateConversationPersistsWorkflowPresetAndKnowledgeSpaces(t *testing.T
 	}
 
 	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
-		WorkflowPresetID:  nullableUintValue(workflowPreset.ID),
 		KnowledgeSpaceIDs: &[]uint{knowledgeSpaces[0].ID, knowledgeSpaces[1].ID},
 	})
 	if err != nil {
 		t.Fatalf("UpdateConversation() error = %v", err)
 	}
 
-	if updatedConversation.WorkflowPresetID == nil || *updatedConversation.WorkflowPresetID != workflowPreset.ID {
-		t.Fatalf("expected workflow preset id to update, got %#v", updatedConversation.WorkflowPresetID)
-	}
 	if len(updatedConversation.KnowledgeSpaceIDs) != 2 ||
 		updatedConversation.KnowledgeSpaceIDs[0] != knowledgeSpaces[0].ID ||
 		updatedConversation.KnowledgeSpaceIDs[1] != knowledgeSpaces[1].ID {
 		t.Fatalf("expected knowledge space ids to update, got %#v", updatedConversation.KnowledgeSpaceIDs)
-	}
-}
-
-func TestCreateConversationRejectsWorkflowPresetFromAnotherUser(t *testing.T) {
-	db, user, _ := newChatTestContext(t)
-	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
-
-	foreignPreset := models.WorkflowPreset{
-		UserID:      user.ID + 99,
-		Name:        "Foreign preset",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&foreignPreset).Error; err != nil {
-		t.Fatalf("create foreign workflow preset: %v", err)
-	}
-
-	_, err := service.CreateConversation(user.ID, CreateConversationInput{
-		WorkflowPresetID: &foreignPreset.ID,
-	})
-	if err == nil {
-		t.Fatal("expected workflow preset ownership validation error")
-	}
-	if !isRequestError(err) || err.Error() != "workflow preset not found" {
-		t.Fatalf("expected workflow preset not found request error, got %v", err)
-	}
-
-	var count int64
-	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
-		t.Fatalf("count conversations: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected no extra conversation to be created, got %d", count)
 	}
 }
 
@@ -1302,43 +1283,6 @@ func TestImportConversationGeneratesConversationPublicID(t *testing.T) {
 	}
 }
 
-func TestImportConversationRejectsWorkflowPresetFromAnotherUser(t *testing.T) {
-	db, user, _ := newChatTestContext(t)
-	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
-
-	foreignPreset := models.WorkflowPreset{
-		UserID:      user.ID + 99,
-		Name:        "Foreign preset",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&foreignPreset).Error; err != nil {
-		t.Fatalf("create foreign workflow preset: %v", err)
-	}
-
-	_, err := service.ImportConversation(user.ID, ImportConversationInput{
-		Title:            "Imported chat",
-		WorkflowPresetID: &foreignPreset.ID,
-		Messages: []ImportMessageInput{
-			{Role: models.RoleUser, Content: "Hello"},
-			{Role: models.RoleAssistant, Content: "Hi"},
-		},
-	})
-	if err == nil {
-		t.Fatal("expected workflow preset ownership validation error")
-	}
-	if !isRequestError(err) || err.Error() != "workflow preset not found" {
-		t.Fatalf("expected workflow preset not found request error, got %v", err)
-	}
-
-	var count int64
-	if err := db.Model(&models.Conversation{}).Where("user_id = ?", user.ID).Count(&count).Error; err != nil {
-		t.Fatalf("count conversations: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected no extra conversation to be created, got %d", count)
-	}
-}
-
 func TestImportConversationRejectsKnowledgeSpaceFromAnotherUser(t *testing.T) {
 	db, user, _ := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
@@ -1396,14 +1340,6 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	if err := db.Create(&providerPreset).Error; err != nil {
 		t.Fatalf("create provider preset: %v", err)
 	}
-	workflowPreset := models.WorkflowPreset{
-		UserID:      user.ID,
-		Name:        "Knowledge QA",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&workflowPreset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
 	knowledgeSpaces := []models.KnowledgeSpace{
 		{UserID: user.ID, Name: "Docs"},
 		{UserID: user.ID, Name: "Runbooks"},
@@ -1415,7 +1351,6 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	createdConversation, err := service.CreateConversation(user.ID, CreateConversationInput{
 		Folder:            ptrString("  Work  "),
 		Tags:              &[]string{" urgent ", "backend", "URGENT"},
-		WorkflowPresetID:  &workflowPreset.ID,
 		KnowledgeSpaceIDs: &[]uint{knowledgeSpaces[0].ID, knowledgeSpaces[1].ID},
 		Settings: &ConversationSettings{
 			ProviderPresetID:   &providerPresetID,
@@ -1438,9 +1373,6 @@ func TestCreateConversationPersistsInitialMetadataAndSettings(t *testing.T) {
 	}
 	if len(createdConversation.Tags) != 3 || createdConversation.Tags[0] != "urgent" || createdConversation.Tags[1] != "backend" || createdConversation.Tags[2] != "URGENT" {
 		t.Fatalf("expected tags to be sanitized, got %#v", createdConversation.Tags)
-	}
-	if createdConversation.WorkflowPresetID == nil || *createdConversation.WorkflowPresetID != workflowPreset.ID {
-		t.Fatalf("expected workflow preset id to persist, got %#v", createdConversation.WorkflowPresetID)
 	}
 	if createdConversation.ProviderPresetID == nil || *createdConversation.ProviderPresetID != providerPresetID {
 		t.Fatalf("expected provider preset id to persist, got %#v", createdConversation.ProviderPresetID)
@@ -2085,7 +2017,11 @@ func TestRetryAssistantMessageRejectsCompletedAssistant(t *testing.T) {
 func newChatTestContext(t *testing.T) (*gorm.DB, models.User, models.Conversation) {
 	t.Helper()
 
-	dsn := fmt.Sprintf("file:chat-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	dsn := fmt.Sprintf(
+		"file:chat-%d?mode=memory&cache=shared&_busy_timeout=%d",
+		time.Now().UnixNano(),
+		5000,
+	)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -2097,7 +2033,6 @@ func newChatTestContext(t *testing.T) (*gorm.DB, models.User, models.Conversatio
 		&models.MessageAttachment{},
 		&models.StoredAttachment{},
 		&models.LLMProviderPreset{},
-		&models.WorkflowPreset{},
 		&models.KnowledgeSpace{},
 	); err != nil {
 		t.Fatalf("migrate db: %v", err)

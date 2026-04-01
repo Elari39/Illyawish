@@ -10,7 +10,7 @@ import type {
   UpdateConversationPayload,
 } from '../types/chat'
 import { apiRequest, streamChatRequest } from './api-client'
-import { normalizeConversation } from './api-normalizers'
+import { normalizeConversation, normalizeMessage } from './api-normalizers'
 
 function buildConversationListQuery(params?: {
   search?: string
@@ -125,6 +125,7 @@ export const chatApi = {
     return {
       ...response,
       conversation: normalizeConversation(response.conversation),
+      messages: response.messages.map(normalizeMessage),
     }
   },
   async deleteConversation(conversationId: string) {

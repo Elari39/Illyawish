@@ -1,4 +1,4 @@
-import { Cpu, Database, GitBranch, Sparkles } from 'lucide-react'
+import { Cpu, Database, Sparkles } from 'lucide-react'
 
 import { Button } from '../../../components/ui/button'
 import { Select } from '../../../components/ui/select'
@@ -8,7 +8,6 @@ import type {
   ConversationSettings,
   KnowledgeSpace,
   ProviderState,
-  WorkflowPreset,
 } from '../../../types/chat'
 import {
   buildProviderModelOptions,
@@ -20,14 +19,11 @@ interface ChatContextBarProps {
   settings: ConversationSettings
   providerState: ProviderState | null
   knowledgeSpaceIds: number[]
-  workflowPresetId: number | null
-  workflowPresets: WorkflowPreset[]
   knowledgeSpaces: KnowledgeSpace[]
   compact?: boolean
   compactVariant?: 'all' | 'model' | 'secondary'
   isDisabled?: boolean
   onOpenKnowledgeSettings: () => void
-  onOpenWorkflowSettings: () => void
   onProviderModelChange: (value: string) => void
   onSetAsDefault: () => void
 }
@@ -37,14 +33,11 @@ export function ChatContextBar({
   settings,
   providerState,
   knowledgeSpaceIds,
-  workflowPresetId,
-  workflowPresets,
   knowledgeSpaces,
   compact = false,
   compactVariant = 'model',
   isDisabled = false,
   onOpenKnowledgeSettings,
-  onOpenWorkflowSettings,
   onProviderModelChange,
   onSetAsDefault,
 }: ChatContextBarProps) {
@@ -63,8 +56,6 @@ export function ChatContextBar({
     },
     chatSettings,
   )
-  const selectedWorkflowPreset =
-    workflowPresets.find((preset) => preset.id === workflowPresetId) ?? null
   const selectedKnowledgeSpaces = knowledgeSpaces.filter((space) =>
     knowledgeSpaceIds.includes(space.id),
   )
@@ -144,18 +135,6 @@ export function ChatContextBar({
                 : t('chatContext.knowledgeDisabled')
             }
             onClick={onOpenKnowledgeSettings}
-          />
-
-          <StatusChip
-            icon={GitBranch}
-            label={
-              selectedWorkflowPreset
-                ? t('chatContext.workflowEnabled', {
-                    name: selectedWorkflowPreset.name,
-                  })
-                : t('chatContext.workflowDisabled')
-            }
-            onClick={onOpenWorkflowSettings}
           />
         </div>
 

@@ -9,7 +9,6 @@ type ConversationDTO struct {
 	IsArchived        bool                    `json:"isArchived"`
 	Folder            string                  `json:"folder"`
 	Tags              []string                `json:"tags"`
-	WorkflowPresetID  *uint                   `json:"workflowPresetId,omitempty"`
 	KnowledgeSpaceIDs []uint                  `json:"knowledgeSpaceIds"`
 	Settings          ConversationSettingsDTO `json:"settings"`
 	CreatedAt         string                  `json:"createdAt"`
@@ -75,7 +74,6 @@ func ToConversationDTO(
 		IsArchived:        conversation.IsArchived,
 		Folder:            conversation.Folder,
 		Tags:              tags,
-		WorkflowPresetID:  conversation.WorkflowPresetID,
 		KnowledgeSpaceIDs: cloneUintSlice(conversation.KnowledgeSpaceIDs),
 		Settings: ConversationSettingsDTO{
 			SystemPrompt:       settings.SystemPrompt,

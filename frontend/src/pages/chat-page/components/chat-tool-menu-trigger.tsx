@@ -1,28 +1,22 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Database, GitBranch, SlidersHorizontal } from 'lucide-react'
+import { Database, SlidersHorizontal } from 'lucide-react'
 
 import { useI18n } from '../../../i18n/use-i18n'
 import { cn } from '../../../lib/utils'
-import type { KnowledgeSpace, WorkflowPreset } from '../../../types/chat'
+import type { KnowledgeSpace } from '../../../types/chat'
 
 interface ChatToolMenuTriggerProps {
   knowledgeSpaceIds: number[]
-  workflowPresetId: number | null
-  workflowPresets: WorkflowPreset[]
   knowledgeSpaces: KnowledgeSpace[]
   isDisabled?: boolean
   onOpenKnowledgeSettings: () => void
-  onOpenWorkflowSettings: () => void
 }
 
 export function ChatToolMenuTrigger({
   knowledgeSpaceIds,
-  workflowPresetId,
-  workflowPresets,
   knowledgeSpaces,
   isDisabled = false,
   onOpenKnowledgeSettings,
-  onOpenWorkflowSettings,
 }: ChatToolMenuTriggerProps) {
   const { t } = useI18n()
   const menuId = useId()
@@ -34,20 +28,12 @@ export function ChatToolMenuTrigger({
     () => knowledgeSpaces.filter((space) => knowledgeSpaceIds.includes(space.id)),
     [knowledgeSpaceIds, knowledgeSpaces],
   )
-  const selectedWorkflowPreset = useMemo(
-    () => workflowPresets.find((preset) => preset.id === workflowPresetId) ?? null,
-    [workflowPresetId, workflowPresets],
-  )
 
   const knowledgeSummary =
     selectedKnowledgeSpaces.length > 0
       ? t('chatContext.knowledgeEnabled', { count: selectedKnowledgeSpaces.length })
       : t('chatContext.knowledgeDisabled')
-  const workflowSummary =
-    selectedWorkflowPreset != null
-      ? t('chatContext.workflowEnabled', { name: selectedWorkflowPreset.name })
-      : t('chatContext.workflowDisabled')
-  const hasActiveTools = selectedKnowledgeSpaces.length > 0 || selectedWorkflowPreset != null
+  const hasActiveTools = selectedKnowledgeSpaces.length > 0
 
   useEffect(() => {
     if (!isOpen) {
@@ -89,11 +75,6 @@ export function ChatToolMenuTrigger({
   function handleOpenKnowledge() {
     setIsOpen(false)
     onOpenKnowledgeSettings()
-  }
-
-  function handleOpenWorkflow() {
-    setIsOpen(false)
-    onOpenWorkflowSettings()
   }
 
   return (
@@ -145,25 +126,6 @@ export function ChatToolMenuTrigger({
               </span>
               <span className="block text-xs text-[var(--muted-foreground)]">
                 {knowledgeSummary}
-              </span>
-            </span>
-          </button>
-
-          <button
-            className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-[var(--hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]/30"
-            onClick={handleOpenWorkflow}
-            role="menuitem"
-            type="button"
-          >
-            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--app-bg)] text-[var(--muted-foreground)]">
-              <GitBranch className="h-4 w-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-[var(--foreground)]">
-                {t('settings.workflowTab')}
-              </span>
-              <span className="block text-xs text-[var(--muted-foreground)]">
-                {workflowSummary}
               </span>
             </span>
           </button>

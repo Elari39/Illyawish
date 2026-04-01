@@ -7,7 +7,6 @@ import type {
   ConversationSettings,
   KnowledgeSpace,
   ProviderState,
-  WorkflowPreset,
 } from '../../../types/chat'
 import { ChatContextBar } from './chat-context-bar'
 
@@ -42,7 +41,6 @@ const providerState: ProviderState = {
 }
 
 const knowledgeSpaces: KnowledgeSpace[] = []
-const workflowPresets: WorkflowPreset[] = []
 
 describe('ChatContextBar', () => {
   it('renders only the model selector in compact mode', () => {
@@ -54,11 +52,8 @@ describe('ChatContextBar', () => {
           settings={settings}
           providerState={providerState}
           knowledgeSpaceIds={[]}
-          workflowPresetId={null}
-          workflowPresets={workflowPresets}
           knowledgeSpaces={knowledgeSpaces}
           onOpenKnowledgeSettings={vi.fn()}
-          onOpenWorkflowSettings={vi.fn()}
           onProviderModelChange={vi.fn()}
           onSetAsDefault={vi.fn()}
         />
@@ -67,6 +62,5 @@ describe('ChatContextBar', () => {
 
     expect(screen.getByLabelText('Provider and model')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Knowledge disabled' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Workflow disabled' })).not.toBeInTheDocument()
   })
 })

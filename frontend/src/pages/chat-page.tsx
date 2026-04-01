@@ -12,7 +12,6 @@ import { ChatOverlays } from './chat-page/components/chat-overlays'
 import { ChatSidebarLayout } from './chat-page/components/chat-sidebar-layout'
 import { ChatToolMenuTrigger } from './chat-page/components/chat-tool-menu-trigger'
 import { ChatWorkspace } from './chat-page/components/chat-workspace'
-import { buildExecutionPanelModel } from './chat-page/components/execution-panel-model'
 import { useAgentWorkspace } from './chat-page/hooks/use-agent-workspace'
 import { useChatErrorState } from './chat-page/hooks/use-chat-error-state'
 import { useChatPageActions } from './chat-page/hooks/use-chat-page-actions'
@@ -84,18 +83,10 @@ export function ChatPage() {
     activeConversationId && displayConversation
       ? displayConversation.settings
       : chatSession.settingsDraft
-  const contextBarWorkflowPresetId =
-    activeConversationId && displayConversation
-      ? displayConversation.workflowPresetId ?? null
-      : chatSession.workflowPresetIdDraft
   const contextBarKnowledgeSpaceIds =
     activeConversationId && displayConversation
       ? displayConversation.knowledgeSpaceIds ?? []
       : chatSession.knowledgeSpaceIdsDraft
-  const executionPanelModel = buildExecutionPanelModel(
-    chatSession.executionEvents,
-    chatSession.pendingConfirmationId,
-  )
   const isHeroState =
     activeConversationId == null &&
     chatSession.messages.length === 0 &&
@@ -110,13 +101,11 @@ export function ChatPage() {
 
   const actions = useChatPageActions({
     activeConversationId,
-    currentConversation,
     contextBarSettings,
     interactionDisabled,
     conversationList,
     chatSession,
     providerSettings,
-    agentWorkspace,
     uiState,
     navigate,
     navigateHome,
@@ -129,12 +118,9 @@ export function ChatPage() {
   const composerToolTrigger = (
     <ChatToolMenuTrigger
       knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
-      workflowPresetId={contextBarWorkflowPresetId}
-      workflowPresets={agentWorkspace.workflowPresets}
       knowledgeSpaces={agentWorkspace.knowledgeSpaces}
       isDisabled={interactionDisabled}
       onOpenKnowledgeSettings={() => actions.handleOpenSettings('knowledge')}
-      onOpenWorkflowSettings={() => actions.handleOpenSettings('workflow')}
     />
   )
 
@@ -146,12 +132,9 @@ export function ChatPage() {
       settings={contextBarSettings}
       providerState={providerSettings.providerState}
       knowledgeSpaceIds={contextBarKnowledgeSpaceIds}
-      workflowPresetId={contextBarWorkflowPresetId}
-      workflowPresets={agentWorkspace.workflowPresets}
       knowledgeSpaces={agentWorkspace.knowledgeSpaces}
       isDisabled={interactionDisabled}
       onOpenKnowledgeSettings={() => actions.handleOpenSettings('knowledge')}
-      onOpenWorkflowSettings={() => actions.handleOpenSettings('workflow')}
       onProviderModelChange={(value) => void actions.handleProviderModelChange(value)}
       onSetAsDefault={() => void actions.handleSetDefaultProviderModel()}
     />
@@ -207,16 +190,13 @@ export function ChatPage() {
     isLoadingOlderMessages: chatSession.isLoadingOlderMessages,
     messages: chatSession.messages,
     latestUserMessage: chatSession.latestUserMessage,
-    latestAssistantMessage: chatSession.latestAssistantMessage,
     isSending: chatSession.isSending,
     editingMessageId: chatSession.editingMessageId,
-    executionPanelModel,
     hasConversationShell: displayConversation != null,
     viewportRef: chatSession.messageViewportRef,
     onShowToast: uiState.showToast,
     onEditMessage: chatSession.startEditingMessage,
     onLoadMore: () => void chatSession.loadOlderMessages(),
-    onConfirmToolCall: chatSession.handleConfirmToolCall,
     onRetryMessage: (message: Parameters<typeof chatSession.handleRetryAssistant>[0]) => void chatSession.handleRetryAssistant(message),
     onRegenerateMessage: (message: Parameters<typeof chatSession.handleRegenerateAssistant>[0]) => void chatSession.handleRegenerateAssistant(message),
   }
@@ -283,7 +263,6 @@ export function ChatPage() {
         availableTags={conversationList.availableTags}
         selectedFolder={conversationList.selectedFolder}
         selectedTags={conversationList.selectedTags}
-        workflowPresetId={chatSession.workflowPresetIdDraft}
         knowledgeSpaceIds={chatSession.knowledgeSpaceIdsDraft}
         pendingKnowledgeSpaceIds={chatSession.pendingKnowledgeSpaceIds}
         editingProviderId={providerSettings.editingProviderId}
@@ -311,9 +290,6 @@ export function ChatPage() {
         onDeleteKnowledgeDocument={agentWorkspace.deleteKnowledgeDocument}
         onUploadKnowledgeDocuments={agentWorkspace.uploadKnowledgeDocuments}
         onReplaceKnowledgeDocumentFile={agentWorkspace.replaceKnowledgeDocumentFile}
-        onCreateWorkflowPreset={agentWorkspace.createWorkflowPreset}
-        onUpdateWorkflowPreset={agentWorkspace.updateWorkflowPreset}
-        onDeleteWorkflowPreset={actions.handleDeleteWorkflowPreset}
         onCloseConfirmation={() => uiState.setConfirmation(null)}
         onClosePrompt={() => uiState.setPromptState(null)}
         onCloseSettings={() => uiState.setIsSettingsOpen(false)}
@@ -339,8 +315,6 @@ export function ChatPage() {
         ragProviderState={agentWorkspace.ragProviders}
         knowledgeSpaces={agentWorkspace.knowledgeSpaces}
         knowledgeDocuments={agentWorkspace.knowledgeDocuments}
-        workflowTemplates={agentWorkspace.workflowTemplates}
-        workflowPresets={agentWorkspace.workflowPresets}
         transferConversation={displayConversation}
         settings={chatSession.settingsDraft}
         setChatSettings={chatSession.setChatSettingsDraft}
@@ -353,7 +327,6 @@ export function ChatPage() {
         onBulkMoveToFolder={actions.handleBulkMoveToFolder}
         onBulkAddTags={actions.handleBulkAddTags}
         onBulkRemoveTags={actions.handleBulkRemoveTags}
-        setWorkflowPresetId={chatSession.setWorkflowPresetIdDraft}
         setSettings={chatSession.setSettingsDraft}
         toasts={uiState.toasts}
       />

@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"backend/internal/agent"
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
+	"backend/internal/rag"
 
 	"gorm.io/gorm"
 )
@@ -44,12 +44,11 @@ func isRequestError(err error) bool {
 }
 
 type Service struct {
-	db              *gorm.DB
-	model           llm.ChatModel
-	providers       providerResolver
-	uploads         attachmentStore
-	agent           agentRunner
-	workflowPresets workflowPresetResolver
+	db        *gorm.DB
+	model     llm.ChatModel
+	providers providerResolver
+	uploads   attachmentStore
+	searcher  knowledgeSearcher
 
 	activeMu      sync.Mutex
 	activeStreams map[uint]*activeRun
@@ -66,12 +65,8 @@ type attachmentStore interface {
 	CleanupUnreferenced(attachments []models.Attachment) error
 }
 
-type agentRunner interface {
-	Execute(context.Context, agent.RunInput, func(agent.Event) error) (*agent.RunResult, error)
-}
-
-type workflowPresetResolver interface {
-	GetPreset(userID uint, presetID uint) (*models.WorkflowPreset, error)
+type knowledgeSearcher interface {
+	Search(ctx context.Context, userID uint, input rag.SearchInput, provider rag.ProviderConfig) (*rag.SearchResult, error)
 }
 
 type StreamEvent struct {
@@ -123,7 +118,6 @@ type ConversationUpdateInput struct {
 	IsArchived        *bool                 `json:"isArchived"`
 	Folder            *string               `json:"folder"`
 	Tags              *[]string             `json:"tags"`
-	WorkflowPresetID  optionalNullableUint  `json:"workflowPresetId"`
 	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
 	Settings          *ConversationSettings `json:"settings"`
 }
@@ -131,7 +125,6 @@ type ConversationUpdateInput struct {
 type CreateConversationInput struct {
 	Folder            *string               `json:"folder"`
 	Tags              *[]string             `json:"tags"`
-	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
 	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
 	Settings          *ConversationSettings `json:"settings"`
 }
@@ -143,7 +136,6 @@ type ImportMessageInput struct {
 
 type ImportConversationInput struct {
 	Title             string                `json:"title"`
-	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
 	KnowledgeSpaceIDs *[]uint               `json:"knowledgeSpaceIds"`
 	Settings          *ConversationSettings `json:"settings"`
 	Messages          []ImportMessageInput  `json:"messages"`
@@ -153,8 +145,6 @@ type SendMessageInput struct {
 	Content           string                `json:"content"`
 	Attachments       []models.Attachment   `json:"attachments"`
 	Options           *ConversationSettings `json:"options"`
-	WorkflowPresetID  *uint                 `json:"workflowPresetId"`
-	WorkflowInputs    map[string]any        `json:"workflowInputs"`
 	KnowledgeSpaceIDs []uint                `json:"knowledgeSpaceIds"`
 }
 
@@ -174,13 +164,8 @@ func NewService(
 	}
 }
 
-func (s *Service) WithAgentRuntime(runtime agentRunner) *Service {
-	s.agent = runtime
-	return s
-}
-
-func (s *Service) WithWorkflowPresets(resolver workflowPresetResolver) *Service {
-	s.workflowPresets = resolver
+func (s *Service) WithKnowledgeSearcher(searcher knowledgeSearcher) *Service {
+	s.searcher = searcher
 	return s
 }
 
@@ -218,8 +203,6 @@ func (s *Service) normalizeSendInput(userID uint, input SendMessageInput) (*Send
 		Content:           content,
 		Attachments:       attachments,
 		Options:           options,
-		WorkflowPresetID:  input.WorkflowPresetID,
-		WorkflowInputs:    input.WorkflowInputs,
 		KnowledgeSpaceIDs: cloneUintSlice(input.KnowledgeSpaceIDs),
 	}, nil
 }

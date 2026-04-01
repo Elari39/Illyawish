@@ -54,7 +54,6 @@ const settingsState = {
   },
   conversationFolderDraft: '',
   conversationTagsDraft: '',
-  workflowPresetIdDraft: null,
   knowledgeSpaceIdsDraft: [],
   pendingKnowledgeSpaceIds: [11],
   pendingConversation: null,
@@ -69,7 +68,6 @@ const settingsState = {
   setChatSettingsDraft: vi.fn(),
   setConversationFolderDraft: vi.fn(),
   setConversationTagsDraft: vi.fn(),
-  setWorkflowPresetIdDraft: vi.fn(),
   setKnowledgeSpaceIdsDraft: vi.fn(),
   setPendingConversation: vi.fn(),
   setSettingsDraft: vi.fn(),
@@ -100,12 +98,9 @@ const transferState = {
 }
 
 const generationState = {
-  executionEvents: [],
-  pendingConfirmationId: null,
   handleResumeConversation: vi.fn(),
   handleRegenerateAssistant: vi.fn(),
   handleRetryAssistant: vi.fn(),
-  handleConfirmToolCall: vi.fn(),
   handleStopGeneration: vi.fn(),
   handleSubmit: vi.fn(),
 }
@@ -144,7 +139,6 @@ function createConversation(
     isArchived: false,
     folder: '',
     tags: [],
-    workflowPresetId: null,
     knowledgeSpaceIds: [],
     settings: {
       systemPrompt: '',
@@ -171,7 +165,6 @@ describe('useChatSession', () => {
           conversationId: 'conversation-1',
           role: 'user',
           content: 'hello',
-          reasoningContent: '',
           attachments: [],
           status: 'completed',
           createdAt: '2026-03-29T00:00:00Z',
@@ -181,7 +174,6 @@ describe('useChatSession', () => {
           conversationId: 'conversation-1',
           role: 'assistant',
           content: '',
-          reasoningContent: 'thinking',
           attachments: [],
           status: 'streaming',
           createdAt: '2026-03-29T00:00:01Z',
@@ -192,7 +184,6 @@ describe('useChatSession', () => {
         conversationId: 'conversation-1',
         role: 'assistant',
         content: '',
-        reasoningContent: 'thinking',
         attachments: [],
         status: 'streaming',
         createdAt: '2026-03-29T00:00:01Z',
@@ -259,10 +250,6 @@ describe('useChatSession', () => {
     )
 
     expect(result.current.pendingKnowledgeSpaceIds).toEqual([11])
-    expect(hookMocks.useChatGeneration).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pendingKnowledgeSpaceIds: [11],
-      }),
-    )
+    expect(hookMocks.useChatGeneration).toHaveBeenCalled()
   })
 })

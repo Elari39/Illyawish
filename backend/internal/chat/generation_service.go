@@ -138,22 +138,20 @@ func (s *Service) StreamAssistantReply(
 	if err != nil {
 		return err
 	}
-
-	if s.shouldUseAgentRuntime(conversation, normalizedInput) {
-		return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
-			return s.streamAgentIntoAssistantMessage(
-				run.ctx,
-				run,
-				conversation,
-				&assistantMessage,
-				resolvedProvider.Config,
-				normalizedInput,
-				func(event StreamEvent) error {
-					run.publish(event)
-					return nil
-				},
-			)
-		}, emit)
+	knowledgePrompt, runSummary, err := s.resolveKnowledgeAugmentation(ctx, conversation, normalizedInput)
+	if err != nil {
+		return err
+	}
+	if knowledgePrompt != "" {
+		history, err = s.historyForModel(
+			conversation.ID,
+			assistantMessage.ID,
+			mergeSystemPromptWithKnowledgeContext(systemPrompt, knowledgePrompt),
+			settings.ContextWindowTurns,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
@@ -165,6 +163,7 @@ func (s *Service) StreamAssistantReply(
 			resolvedProvider.Config,
 			history,
 			settings,
+			&runSummary,
 			func(event StreamEvent) error {
 				run.publish(event)
 				return nil
@@ -220,6 +219,27 @@ func (s *Service) RetryAssistantMessage(
 	if err != nil {
 		return err
 	}
+	previousUser, err := previousUserMessage(s.db, conversation.ID, assistantMessage.ID)
+	if err != nil {
+		return err
+	}
+	knowledgePrompt, runSummary, err := s.resolveKnowledgeAugmentation(ctx, conversation, &SendMessageInput{
+		Content: previousUser.Content,
+	})
+	if err != nil {
+		return err
+	}
+	if knowledgePrompt != "" {
+		history, err = s.historyForModel(
+			conversation.ID,
+			assistantMessage.ID,
+			mergeSystemPromptWithKnowledgeContext(systemPrompt, knowledgePrompt),
+			settings.ContextWindowTurns,
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
 		return s.streamIntoAssistantMessage(
@@ -230,6 +250,7 @@ func (s *Service) RetryAssistantMessage(
 			resolvedProvider.Config,
 			history,
 			settings,
+			&runSummary,
 			func(event StreamEvent) error {
 				run.publish(event)
 				return nil
@@ -284,6 +305,27 @@ func (s *Service) RegenerateAssistantMessage(
 	if err != nil {
 		return err
 	}
+	previousUser, err := previousUserMessage(s.db, conversation.ID, assistantMessage.ID)
+	if err != nil {
+		return err
+	}
+	knowledgePrompt, runSummary, err := s.resolveKnowledgeAugmentation(ctx, conversation, &SendMessageInput{
+		Content: previousUser.Content,
+	})
+	if err != nil {
+		return err
+	}
+	if knowledgePrompt != "" {
+		history, err = s.historyForModel(
+			conversation.ID,
+			assistantMessage.ID,
+			mergeSystemPromptWithKnowledgeContext(systemPrompt, knowledgePrompt),
+			settings.ContextWindowTurns,
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
 		return s.streamIntoAssistantMessage(
@@ -294,6 +336,7 @@ func (s *Service) RegenerateAssistantMessage(
 			resolvedProvider.Config,
 			history,
 			settings,
+			&runSummary,
 			func(event StreamEvent) error {
 				run.publish(event)
 				return nil
@@ -451,6 +494,21 @@ func (s *Service) EditUserMessageAndRegenerate(
 	if err != nil {
 		return err
 	}
+	knowledgePrompt, runSummary, err := s.resolveKnowledgeAugmentation(ctx, conversation, normalizedInput)
+	if err != nil {
+		return err
+	}
+	if knowledgePrompt != "" {
+		history, err = s.historyForModel(
+			conversation.ID,
+			assistantMessage.ID,
+			mergeSystemPromptWithKnowledgeContext(systemPrompt, knowledgePrompt),
+			settings.ContextWindowTurns,
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	return s.launchActiveRun(ctx, conversation.ID, func(run *activeRun) error {
 		return s.streamIntoAssistantMessage(
@@ -461,6 +519,7 @@ func (s *Service) EditUserMessageAndRegenerate(
 			resolvedProvider.Config,
 			history,
 			settings,
+			&runSummary,
 			func(event StreamEvent) error {
 				run.publish(event)
 				return nil

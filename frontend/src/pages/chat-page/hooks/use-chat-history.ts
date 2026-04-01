@@ -7,6 +7,7 @@ import {
   clearLastConversationId,
   dedupeMessages,
   isConversationNotFoundError,
+  mergePreservedMessages,
   writeLastConversationId,
 } from '../utils'
 import {
@@ -117,6 +118,7 @@ export function useChatHistory({
   const applyConversationSnapshot = useCallback((
     response: ConversationMessagesResponse,
     replaceMessages: boolean,
+    preserveMessages: Message[] = [],
   ) => {
     syncConversationIntoListRef.current(
       resolveConversationForList(response.conversation),
@@ -124,7 +126,11 @@ export function useChatHistory({
     )
     setPendingConversation(response.conversation)
     if (replaceMessages) {
-      setMessages(response.messages)
+      setMessages(
+        preserveMessages.length > 0
+          ? mergePreservedMessages(response.messages, preserveMessages)
+          : response.messages,
+      )
       setSettingsDraft(response.conversation.settings)
     }
     setHasMoreMessages(response.pagination?.hasMore ?? false)
@@ -209,13 +215,20 @@ export function useChatHistory({
 
   async function reconcileConversationState(
     conversationId: Conversation['id'],
-    { clearErrorOnSuccess = true }: { clearErrorOnSuccess?: boolean } = {},
+    {
+      clearErrorOnSuccess = true,
+      preserveMessages = [],
+    }: {
+      clearErrorOnSuccess?: boolean
+      preserveMessages?: Message[]
+    } = {},
   ) {
     try {
       const response = await chatApi.getConversationMessages(conversationId)
       applyConversationSnapshot(
         response,
         activeConversationIdRef.current === conversationId,
+        preserveMessages,
       )
       if (clearErrorOnSuccess) {
         setChatError(null)

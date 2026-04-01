@@ -46,7 +46,7 @@ describe('chat page utils', () => {
         placeholderId: 1,
         messageId: null,
       },
-      ' world',
+      { content: ' world' },
     )
 
     expect(result[0]?.content).toBe('Hello world')

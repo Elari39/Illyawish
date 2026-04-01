@@ -26,6 +26,7 @@ type activeRun struct {
 	conversationID uint
 	ctx            context.Context
 	cancel         context.CancelFunc
+	done           chan struct{}
 
 	nextSeq        int
 	events         []StreamEvent
@@ -42,6 +43,7 @@ func newActiveRun(conversationID uint) *activeRun {
 		conversationID: conversationID,
 		ctx:            ctx,
 		cancel:         cancel,
+		done:           make(chan struct{}),
 		subscribers:    make(map[int]chan StreamEvent),
 	}
 }
@@ -131,6 +133,8 @@ func (r *activeRun) finish() {
 		close(subscriber)
 		delete(r.subscribers, subscriberID)
 	}
+
+	close(r.done)
 }
 
 func (r *activeRun) setCancelReason(reason runCancelReason) {
@@ -151,4 +155,13 @@ func (r *activeRun) subscriberCount() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.subscribers)
+}
+
+func (r *activeRun) wait(ctx context.Context) bool {
+	select {
+	case <-r.done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

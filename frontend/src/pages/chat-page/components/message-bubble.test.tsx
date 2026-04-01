@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import { TestProviders } from '../../../test/test-providers'
-import type { ExecutionPanelModel } from './execution-panel-model'
 import { MessageBubble } from './message-bubble'
 
 describe('MessageBubble', () => {
@@ -11,57 +10,6 @@ describe('MessageBubble', () => {
   const editMessage = vi.fn()
   const regenerateMessage = vi.fn()
   const retryMessage = vi.fn()
-  const executionModel: ExecutionPanelModel = {
-    displayState: 'collapsed',
-    run: {
-      status: 'completed',
-      templateKey: 'knowledge_qa',
-      currentStepName: null,
-      completedStepCount: 4,
-      totalStepCount: 4,
-      retrievalCount: 1,
-      toolCount: 0,
-    },
-    activeStage: null,
-    progressPercent: 100,
-    hasWarnings: false,
-    steps: [
-      {
-        name: 'question',
-        status: 'completed',
-        stepIndex: 0,
-      },
-      {
-        name: 'retrieve_knowledge',
-        status: 'completed',
-        stepIndex: 1,
-      },
-      {
-        name: 'compose_answer',
-        status: 'completed',
-        stepIndex: 2,
-      },
-      {
-        name: 'finalize',
-        status: 'completed',
-        stepIndex: 3,
-      },
-    ],
-    retrievals: [],
-    tools: [],
-    latestRetrieval: null,
-    latestTool: null,
-    collapsedSummary: {
-      status: 'completed',
-      templateKey: 'knowledge_qa',
-      completedStepCount: 4,
-      totalStepCount: 4,
-      hasRetrievalActivity: true,
-      hasToolActivity: false,
-    },
-    timeline: [],
-  }
-
   beforeEach(() => {
     writeText.mockReset()
     showToast.mockReset()
@@ -87,14 +35,12 @@ describe('MessageBubble', () => {
           canEdit={false}
           canRegenerate={false}
           canRetry={false}
-          executionPanelModel={null}
           isEditing={false}
           message={{
             id: 1,
             conversationId: '1',
             role: 'user',
             content: 'Please review the file.',
-            reasoningContent: '',
             attachments: [
               {
                 id: 'image-1',
@@ -138,14 +84,12 @@ describe('MessageBubble', () => {
           canEdit
           canRegenerate={false}
           canRetry={false}
-          executionPanelModel={null}
           isEditing={false}
           message={{
             id: 11,
             conversationId: '1',
             role: 'user',
             content: 'Please review the file.',
-            reasoningContent: '',
             attachments: [
               {
                 id: 'image-1',
@@ -193,14 +137,12 @@ describe('MessageBubble', () => {
           canEdit={false}
           canRegenerate
           canRetry={false}
-          executionPanelModel={null}
           isEditing={false}
           message={{
             id: 2,
             conversationId: '1',
             role: 'assistant',
             content: 'Completed answer',
-            reasoningContent: '',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -224,14 +166,12 @@ describe('MessageBubble', () => {
           canEdit={false}
           canRegenerate={false}
           canRetry
-          executionPanelModel={null}
           isEditing={false}
           message={{
             id: 3,
             conversationId: '1',
             role: 'assistant',
             content: 'Stopped answer',
-            reasoningContent: '',
             attachments: [],
             status: 'cancelled',
             createdAt: '2026-03-26T00:00:00Z',
@@ -257,14 +197,12 @@ describe('MessageBubble', () => {
           canEdit={false}
           canRegenerate={false}
           canRetry
-          executionPanelModel={null}
           isEditing={false}
           message={{
             id: 4,
             conversationId: '1',
             role: 'assistant',
             content: '',
-            reasoningContent: '',
             attachments: [],
             status: 'failed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -283,21 +221,19 @@ describe('MessageBubble', () => {
     expect(screen.queryByText('Thinking...')).not.toBeInTheDocument()
   })
 
-  it('renders the execution chain above assistant content and keeps user messages unchanged', () => {
+  it('renders assistant final content without reasoning or execution controls', () => {
     const { rerender } = render(
       <TestProviders>
         <MessageBubble
           canEdit={false}
           canRegenerate={false}
           canRetry={false}
-          executionPanelModel={executionModel}
           isEditing={false}
           message={{
             id: 21,
             conversationId: '1',
             role: 'assistant',
             content: 'This is the final answer.',
-            reasoningContent: 'Reasoning completed',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -310,17 +246,9 @@ describe('MessageBubble', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByText('Knowledge Q&A')).toBeInTheDocument()
-    expect(screen.getByText('4/4 steps')).toBeInTheDocument()
-    const answerText = screen.getByText('This is the final answer.')
-    const summaryButton = screen.getByRole('button', { name: 'Show details' })
-    const reasoningToggle = screen.getByRole('button', { name: 'Expand reasoning' })
-    expect(
-      summaryButton.compareDocumentPosition(answerText) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    expect(
-      reasoningToggle.compareDocumentPosition(answerText) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    expect(screen.getByText('This is the final answer.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Expand reasoning' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Show details' })).not.toBeInTheDocument()
 
     rerender(
       <TestProviders>
@@ -328,14 +256,12 @@ describe('MessageBubble', () => {
           canEdit={false}
           canRegenerate={false}
           canRetry={false}
-          executionPanelModel={executionModel}
           isEditing={false}
           message={{
             id: 22,
             conversationId: '1',
             role: 'user',
             content: 'User message',
-            reasoningContent: '',
             attachments: [],
             status: 'completed',
             createdAt: '2026-03-26T00:00:00Z',
@@ -348,27 +274,71 @@ describe('MessageBubble', () => {
       </TestProviders>,
     )
 
-    expect(screen.queryByText('Knowledge Q&A')).not.toBeInTheDocument()
     expect(screen.getByText('User message')).toBeInTheDocument()
   })
 
-  it('keeps reasoning expanded while streaming and auto-collapses after completion', () => {
+  it('renders assistant reasoning before the final content and copies both sections', async () => {
+    writeText.mockResolvedValue(undefined)
+
+    render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 23,
+            conversationId: '1',
+            role: 'assistant',
+            reasoningContent: 'step 1\nstep 2\nstep 3',
+            content: 'Final answer',
+            attachments: [],
+            status: 'completed',
+            localReasoningStartedAt: 0,
+            localReasoningCompletedAt: 18_000,
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByText('step 1', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('18s')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand reasoning' })).toBeInTheDocument()
+    expect(screen.queryByText('step 3')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith('step 1\nstep 2\nstep 3\n\nFinal answer')
+  })
+
+  it('expands completed reasoning on demand and keeps it expanded across rerenders for the same message', () => {
     const { rerender } = render(
       <TestProviders>
         <MessageBubble
           canEdit={false}
           canRegenerate={false}
           canRetry={false}
-          executionPanelModel={executionModel}
           isEditing={false}
           message={{
-            id: 31,
+            id: 24,
             conversationId: '1',
             role: 'assistant',
-            content: 'Working on it',
-            reasoningContent: 'first thought',
+            reasoningContent: 'step 1\nstep 2\nstep 3',
+            content: 'Final answer',
             attachments: [],
-            status: 'streaming',
+            status: 'completed',
+            localReasoningStartedAt: 0,
+            localReasoningCompletedAt: 18_000,
             createdAt: '2026-03-26T00:00:00Z',
           }}
           onCopySuccessToast={showToast}
@@ -379,25 +349,28 @@ describe('MessageBubble', () => {
       </TestProviders>,
     )
 
-    expect(screen.getByText('first thought')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand reasoning' }))
+
     expect(screen.getByRole('button', { name: 'Collapse reasoning' })).toBeInTheDocument()
+    expect(screen.getByText('step 3', { exact: false })).toBeInTheDocument()
 
     rerender(
       <TestProviders>
         <MessageBubble
           canEdit={false}
-          canRegenerate
+          canRegenerate={false}
           canRetry={false}
-          executionPanelModel={executionModel}
           isEditing={false}
           message={{
-            id: 31,
+            id: 24,
             conversationId: '1',
             role: 'assistant',
-            content: 'Working on it',
-            reasoningContent: 'first thought',
+            reasoningContent: 'step 1\nstep 2\nstep 3\nstep 4',
+            content: 'Updated answer',
             attachments: [],
             status: 'completed',
+            localReasoningStartedAt: 0,
+            localReasoningCompletedAt: 20_000,
             createdAt: '2026-03-26T00:00:00Z',
           }}
           onCopySuccessToast={showToast}
@@ -408,7 +381,100 @@ describe('MessageBubble', () => {
       </TestProviders>,
     )
 
-    expect(screen.queryByText('first thought')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse reasoning' })).toBeInTheDocument()
+    expect(screen.getByText('step 4', { exact: false })).toBeInTheDocument()
+  })
+
+  it('auto-collapses reasoning after a streaming message finishes when the user did not override it', () => {
+    const { rerender } = render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 25,
+            conversationId: '1',
+            role: 'assistant',
+            reasoningContent: 'step 1\nstep 2\nstep 3',
+            content: 'Streaming answer',
+            attachments: [],
+            status: 'streaming',
+            localReasoningStartedAt: 0,
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Collapse reasoning' })).toBeInTheDocument()
+    expect(screen.getByText('step 3', { exact: false })).toBeInTheDocument()
+
+    rerender(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry={false}
+          isEditing={false}
+          message={{
+            id: 25,
+            conversationId: '1',
+            role: 'assistant',
+            reasoningContent: 'step 1\nstep 2\nstep 3',
+            content: 'Final answer',
+            attachments: [],
+            status: 'completed',
+            localReasoningStartedAt: 0,
+            localReasoningCompletedAt: 18_000,
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
     expect(screen.getByRole('button', { name: 'Expand reasoning' })).toBeInTheDocument()
+    expect(screen.queryByText('step 3')).not.toBeInTheDocument()
+  })
+
+  it('keeps failed assistant reasoning expanded so users can inspect where it stopped', () => {
+    render(
+      <TestProviders>
+        <MessageBubble
+          canEdit={false}
+          canRegenerate={false}
+          canRetry
+          isEditing={false}
+          message={{
+            id: 26,
+            conversationId: '1',
+            role: 'assistant',
+            reasoningContent: 'step 1\nstep 2\nstep 3',
+            content: '',
+            attachments: [],
+            status: 'failed',
+            localReasoningStartedAt: 0,
+            localReasoningCompletedAt: 9_000,
+            createdAt: '2026-03-26T00:00:00Z',
+          }}
+          onCopySuccessToast={showToast}
+          onEditMessage={editMessage}
+          onRegenerateMessage={regenerateMessage}
+          onRetryMessage={retryMessage}
+        />
+      </TestProviders>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Collapse reasoning' })).toBeInTheDocument()
+    expect(screen.getByText('step 3', { exact: false })).toBeInTheDocument()
   })
 })

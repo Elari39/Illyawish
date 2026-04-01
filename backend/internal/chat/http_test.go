@@ -12,7 +12,6 @@ import (
 	"backend/internal/llm"
 	"backend/internal/models"
 	"backend/internal/provider"
-	"backend/internal/workflow"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -249,22 +248,15 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 		if err := writeEvent(StreamEvent{
 			Type: "message_start",
 			Message: &MessageDTO{
-				ID:               1,
-				ConversationID:   uuid.NewString(),
-				Role:             models.RoleAssistant,
-				Status:           models.MessageStatusStreaming,
-				ReasoningContent: "saved reasoning",
+				ID:             1,
+				ConversationID: uuid.NewString(),
+				Role:           models.RoleAssistant,
+				Status:         models.MessageStatusStreaming,
 			},
 			Metadata: map[string]any{
 				"templateKey": "knowledge_qa",
 				"stepIndex":   1,
 			},
-		}); err != nil {
-			return err
-		}
-		if err := writeEvent(StreamEvent{
-			Type:    "reasoning_delta",
-			Content: "thinking",
 		}); err != nil {
 			return err
 		}
@@ -291,12 +283,6 @@ func TestStreamActionWritesSSEHeadersAndErrorEvent(t *testing.T) {
 	}
 	if !strings.Contains(body, `"metadata":{"stepIndex":1,"templateKey":"knowledge_qa"}`) {
 		t.Fatalf("expected metadata in SSE event payload, got %s", body)
-	}
-	if !strings.Contains(body, "event: reasoning_delta") {
-		t.Fatalf("expected reasoning_delta event, got %s", body)
-	}
-	if !strings.Contains(body, `"reasoningContent":"saved reasoning"`) {
-		t.Fatalf("expected reasoningContent in SSE payload, got %s", body)
 	}
 	if !strings.Contains(body, "event: error") {
 		t.Fatalf("expected error event, got %s", body)
@@ -419,14 +405,6 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, _ := newChatTestContext(t)
-	workflowPreset := models.WorkflowPreset{
-		UserID:      user.ID,
-		Name:        "Knowledge QA",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&workflowPreset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
 	knowledgeSpaces := []models.KnowledgeSpace{
 		{UserID: user.ID, Name: "Docs"},
 		{UserID: user.ID, Name: "Runbooks"},
@@ -456,7 +434,6 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	payload := bytes.NewReader([]byte(fmt.Sprintf(`{
 		"folder":"Work",
 		"tags":["urgent","backend"],
-		"workflowPresetId":%d,
 		"knowledgeSpaceIds":[%d,%d],
 		"settings":{
 			"providerPresetId":%d,
@@ -466,7 +443,7 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 			"maxTokens":1024,
 			"contextWindowTurns":6
 		}
-	}`, workflowPreset.ID, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID, providerPreset.ID)))
+	}`, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID, providerPreset.ID)))
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -486,9 +463,6 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	if !strings.Contains(body, `"tags":["urgent","backend"]`) {
 		t.Fatalf("expected tags in response, got %s", body)
 	}
-	if !strings.Contains(body, fmt.Sprintf(`"workflowPresetId":%d`, workflowPreset.ID)) {
-		t.Fatalf("expected workflow preset id in response, got %s", body)
-	}
 	if !strings.Contains(body, fmt.Sprintf(`"knowledgeSpaceIds":[%d,%d]`, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID)) {
 		t.Fatalf("expected knowledge space ids in response, got %s", body)
 	}
@@ -503,18 +477,10 @@ func TestCreateConversationAcceptsOptionalPayload(t *testing.T) {
 	}
 }
 
-func TestUpdateConversationAcceptsWorkflowPresetAndKnowledgeSpaceChanges(t *testing.T) {
+func TestUpdateConversationAcceptsKnowledgeSpaceChanges(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	db, user, conversation := newChatTestContext(t)
-	workflowPreset := models.WorkflowPreset{
-		UserID:      user.ID,
-		Name:        "Knowledge QA",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&workflowPreset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
 	knowledgeSpaces := []models.KnowledgeSpace{
 		{UserID: user.ID, Name: "Docs"},
 		{UserID: user.ID, Name: "Runbooks"},
@@ -534,9 +500,8 @@ func TestUpdateConversationAcceptsWorkflowPresetAndKnowledgeSpaceChanges(t *test
 		t.Fatalf("load conversation public id: %v", err)
 	}
 	payload := bytes.NewReader([]byte(fmt.Sprintf(`{
-		"workflowPresetId":%d,
 		"knowledgeSpaceIds":[%d,%d]
-	}`, workflowPreset.ID, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID)))
+	}`, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID)))
 
 	recorder := httptest.NewRecorder()
 	ctx, _ := gin.CreateTestContext(recorder)
@@ -551,61 +516,8 @@ func TestUpdateConversationAcceptsWorkflowPresetAndKnowledgeSpaceChanges(t *test
 		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
 	}
 	body := recorder.Body.String()
-	if !strings.Contains(body, fmt.Sprintf(`"workflowPresetId":%d`, workflowPreset.ID)) {
-		t.Fatalf("expected workflow preset id in response, got %s", body)
-	}
 	if !strings.Contains(body, fmt.Sprintf(`"knowledgeSpaceIds":[%d,%d]`, knowledgeSpaces[0].ID, knowledgeSpaces[1].ID)) {
 		t.Fatalf("expected knowledge space ids in response, got %s", body)
-	}
-}
-
-func TestUpdateConversationClearsWorkflowPresetWhenNullProvided(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	db, user, conversation := newChatTestContext(t)
-	workflowPreset := models.WorkflowPreset{
-		UserID:      user.ID,
-		Name:        "Knowledge QA",
-		TemplateKey: workflow.TemplateKnowledgeQA,
-	}
-	if err := db.Create(&workflowPreset).Error; err != nil {
-		t.Fatalf("create workflow preset: %v", err)
-	}
-	if err := db.Model(&models.Conversation{}).Where("id = ?", conversation.ID).Update("workflow_preset_id", workflowPreset.ID).Error; err != nil {
-		t.Fatalf("seed conversation workflow preset: %v", err)
-	}
-	service := NewService(
-		db,
-		&fakeChatModel{},
-		&fakeProviderResolver{},
-		&fakeAttachmentStore{},
-	)
-
-	var conversationPublicID string
-	if err := db.Raw("SELECT public_id FROM conversations WHERE id = ?", conversation.ID).Scan(&conversationPublicID).Error; err != nil {
-		t.Fatalf("load conversation public id: %v", err)
-	}
-	payload := bytes.NewReader([]byte(`{"workflowPresetId":null}`))
-
-	recorder := httptest.NewRecorder()
-	ctx, _ := gin.CreateTestContext(recorder)
-	ctx.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/conversations/%s", conversationPublicID), payload)
-	ctx.Request.Header.Set("Content-Type", "application/json")
-	ctx.Params = gin.Params{{Key: "id", Value: conversationPublicID}}
-	ctx.Set("current_user", &user)
-
-	NewHandler(service).UpdateConversation(ctx)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
-	}
-
-	reloadedConversation, err := service.GetConversation(user.ID, conversation.ID)
-	if err != nil {
-		t.Fatalf("GetConversation() error = %v", err)
-	}
-	if reloadedConversation.WorkflowPresetID != nil {
-		t.Fatalf("expected workflow preset to be cleared, got %#v", reloadedConversation.WorkflowPresetID)
 	}
 }
 

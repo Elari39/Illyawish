@@ -9,8 +9,6 @@ import type {
   ProviderPreset,
   ProviderState,
   RAGProviderState,
-  WorkflowPreset,
-  WorkflowTemplate,
 } from '../../../types/chat'
 import type { ProviderFormState, SettingsTab } from '../types'
 
@@ -25,7 +23,6 @@ export interface SettingsPanelProps {
   availableTags: string[]
   selectedFolder: string | null
   selectedTags: string[]
-  workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
   pendingKnowledgeSpaceIds?: number[]
   isLoadingProviders: boolean
@@ -45,8 +42,6 @@ export interface SettingsPanelProps {
   ragProviderState?: RAGProviderState | null
   knowledgeSpaces?: KnowledgeSpace[]
   knowledgeDocuments?: Record<number, KnowledgeDocument[]>
-  workflowTemplates?: WorkflowTemplate[]
-  workflowPresets?: WorkflowPreset[]
   setChatSettings: Dispatch<SetStateAction<ChatSettings>>
   setConversationFolder: Dispatch<SetStateAction<string>>
   setConversationTags: Dispatch<SetStateAction<string>>
@@ -57,7 +52,6 @@ export interface SettingsPanelProps {
   onBulkMoveToFolder: () => void
   onBulkAddTags: () => void
   onBulkRemoveTags: () => void
-  setWorkflowPresetId?: Dispatch<SetStateAction<number | null>>
   onToggleKnowledgeSpace?: (space: KnowledgeSpace) => void | Promise<void>
   setSettings: Dispatch<SetStateAction<ConversationSettings>>
   onClose: () => void
@@ -126,23 +120,6 @@ export interface SettingsPanelProps {
     file: File,
     title?: string,
   ) => Promise<KnowledgeDocument | null>
-  onCreateWorkflowPreset?: (payload: {
-    name: string
-    templateKey: string
-    defaultInputs?: Record<string, unknown>
-    knowledgeSpaceIds?: number[]
-    toolEnablements?: Record<string, boolean>
-    outputMode?: string
-  }) => Promise<WorkflowPreset | null>
-  onUpdateWorkflowPreset?: (presetId: number, payload: {
-    name?: string
-    templateKey?: string
-    defaultInputs?: Record<string, unknown>
-    knowledgeSpaceIds?: number[]
-    toolEnablements?: Record<string, boolean>
-    outputMode?: string
-  }) => Promise<WorkflowPreset | null>
-  onDeleteWorkflowPreset?: (presetId: number) => Promise<boolean>
   onReset: () => void
   onResetProvider: () => void
   onSave: () => void

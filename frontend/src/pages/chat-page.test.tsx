@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextValue } from '../components/auth/auth-context'
 import { I18nProvider } from '../i18n/provider'
 import { APP_LOCALE_STORAGE_KEY } from '../i18n/config'
-import { AUTH_UNAUTHORIZED_EVENT, agentApi, chatApi, providerApi, ragApi, workflowApi } from '../lib/api'
+import { AUTH_UNAUTHORIZED_EVENT, chatApi, providerApi, ragApi } from '../lib/api'
 import { LAST_CONVERSATION_STORAGE_KEY } from './chat-page/types'
 import { ChatPage } from './chat-page'
 import type {
@@ -14,7 +14,6 @@ import type {
   ConversationSettings,
   Message,
 } from '../types/chat'
-import { buildExecutionPanelStorageKey } from './chat-page/execution-panel-storage'
 
 const defaultSettings: ConversationSettings = {
   systemPrompt: '',
@@ -97,32 +96,6 @@ function chatPath(id: number | string) {
   return `/chat/s/${id}`
 }
 
-function createWorkflowPreset(overrides: Record<string, unknown> = {}) {
-  return {
-    id: 5,
-    userId: 1,
-    name: 'Knowledge Q&A',
-    templateKey: 'knowledge_qa',
-    defaultInputs: {},
-    knowledgeSpaceIds: [],
-    toolEnablements: {},
-    outputMode: 'markdown',
-    createdAt: '2026-03-26T09:08:00Z',
-    updatedAt: '2026-03-26T09:08:00Z',
-    ...overrides,
-  }
-}
-
-function createWorkflowTemplate(overrides: Record<string, unknown> = {}) {
-  return {
-    key: 'knowledge_qa',
-    name: 'Knowledge Q&A',
-    description: 'Answer questions from knowledge spaces.',
-    nodes: [],
-    ...overrides,
-  }
-}
-
 function LocationProbe() {
   const location = useLocation()
 
@@ -196,8 +169,6 @@ describe('ChatPage conversation navigation', () => {
       },
     })
     vi.spyOn(ragApi, 'listKnowledgeSpaces').mockResolvedValue([])
-    vi.spyOn(workflowApi, 'listTemplates').mockResolvedValue([])
-    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -503,7 +474,6 @@ describe('ChatPage conversation navigation', () => {
 
     expect(createConversationMock).toHaveBeenCalledTimes(1)
     expect(createConversationMock).toHaveBeenCalledWith({
-      workflowPresetId: null,
       knowledgeSpaceIds: [],
       settings: {
         ...defaultSettings,
@@ -1227,7 +1197,6 @@ describe('ChatPage conversation navigation', () => {
     })
     await waitFor(() => {
       expect(createConversationMock).toHaveBeenCalledWith(expect.objectContaining({
-        workflowPresetId: null,
         knowledgeSpaceIds: [],
         settings: {
           ...defaultSettings,
@@ -1371,7 +1340,6 @@ describe('ChatPage conversation navigation', () => {
     })
     await waitFor(() => {
       expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
-        workflowPresetId: null,
         settings: {
           ...defaultSettings,
           systemPrompt: 'Conversation-only prompt',
@@ -1431,7 +1399,6 @@ describe('ChatPage conversation navigation', () => {
       expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
         folder: 'Work',
         tags: ['urgent', 'planning'],
-        workflowPresetId: null,
         settings: {
           ...defaultSettings,
           systemPrompt: '',
@@ -1442,7 +1409,6 @@ describe('ChatPage conversation navigation', () => {
 
   it('shows the top context bar and updates the current conversation provider-model immediately', async () => {
     const conversation = createConversation(9, 'Context bar chat', {
-      workflowPresetId: 5,
       knowledgeSpaceIds: [11, 12],
       settings: {
         ...defaultSettings,
@@ -1523,20 +1489,6 @@ describe('ChatPage conversation navigation', () => {
         updatedAt: '2026-03-26T00:00:00Z',
       },
     ])
-    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([
-      {
-        id: 5,
-        userId: 1,
-        name: 'Knowledge Q&A',
-        templateKey: 'knowledge_qa',
-        defaultInputs: {},
-        knowledgeSpaceIds: [11, 12],
-        toolEnablements: {},
-        outputMode: 'markdown',
-        createdAt: '2026-03-26T00:00:00Z',
-        updatedAt: '2026-03-26T00:00:00Z',
-      },
-    ])
     const updateConversationMock = vi
       .spyOn(chatApi, 'updateConversation')
       .mockImplementation(async (conversationId, payload) => ({
@@ -1577,7 +1529,6 @@ describe('ChatPage conversation navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tools' }))
 
     expect(screen.getByRole('menuitem', { name: 'KnowledgeKnowledge enabled · 2 spaces' })).toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: 'WorkflowWorkflow enabled · Knowledge Q&A' })).toBeInTheDocument()
   })
 
   it('preserves the current conversation provider-model when saving session settings', async () => {
@@ -1630,7 +1581,6 @@ describe('ChatPage conversation navigation', () => {
 
     await waitFor(() => {
       expect(updateConversationMock).toHaveBeenCalledWith('9', expect.objectContaining({
-        workflowPresetId: null,
         settings: {
           ...defaultSettings,
           providerPresetId: 13,
@@ -1641,218 +1591,4 @@ describe('ChatPage conversation navigation', () => {
     })
   })
 
-  it('clears the current conversation workflow preset after deleting that preset', async () => {
-    const workflowPreset = createWorkflowPreset()
-    const conversation = createConversation(9, 'Workflow chat', {
-      workflowPresetId: Number(workflowPreset.id),
-    })
-
-    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
-      conversations: [conversation],
-      total: 1,
-    })
-    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
-      conversation,
-      messages: [createMessage(91, 9, 'assistant', 'Workflow reply')],
-    })
-    vi.spyOn(workflowApi, 'listTemplates').mockResolvedValue([
-      createWorkflowTemplate(),
-    ])
-    vi.spyOn(workflowApi, 'listPresets').mockResolvedValue([
-      workflowPreset,
-    ])
-    const deletePresetMock = vi
-      .spyOn(workflowApi, 'deletePreset')
-      .mockResolvedValue(undefined)
-    const updateConversationMock = vi
-      .spyOn(chatApi, 'updateConversation')
-      .mockResolvedValue(createConversation(9, 'Workflow chat', {
-        workflowPresetId: null,
-      }))
-
-    renderChatPage([chatPath(9)])
-
-    await waitFor(() => {
-      expect(screen.getByText('Workflow reply')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    const settingsDialog = await screen.findByRole('dialog', { name: 'Settings' })
-    fireEvent.click(await within(settingsDialog).findByRole('button', { name: 'Workflow' }))
-    fireEvent.click(await within(settingsDialog).findByRole('button', { name: 'Delete preset Knowledge Q&A' }))
-
-    const confirmationDialogs = await screen.findAllByRole('dialog')
-    const confirmationDialog = confirmationDialogs[confirmationDialogs.length - 1]
-    if (!confirmationDialog) {
-      throw new Error('Confirmation dialog not found')
-    }
-    fireEvent.click(within(confirmationDialog).getByRole('button', { name: 'Delete' }))
-
-    await waitFor(() => {
-      expect(deletePresetMock).toHaveBeenCalledWith(5)
-    })
-    await waitFor(() => {
-      expect(updateConversationMock).toHaveBeenCalledWith('9', {
-        workflowPresetId: null,
-      })
-    })
-  })
-
-  it('renders execution state inside the latest assistant message instead of above the message list', async () => {
-    const conversation = createConversation(9, 'Knowledge run')
-    const messages = [
-      createMessage(91, 9, 'user', 'What is Viper?'),
-      createMessage(92, 9, 'assistant', 'Viper is a Go configuration library.'),
-    ]
-
-    window.sessionStorage.setItem(
-      buildExecutionPanelStorageKey('9'),
-      JSON.stringify({
-        events: [
-          {
-            type: 'run_started',
-            metadata: {
-              templateKey: 'knowledge_qa',
-            },
-          },
-          {
-            type: 'workflow_step_started',
-            stepName: 'question',
-            metadata: {
-              stepIndex: 0,
-            },
-          },
-          {
-            type: 'workflow_step_completed',
-            stepName: 'question',
-            metadata: {
-              stepIndex: 0,
-            },
-          },
-          {
-            type: 'workflow_step_started',
-            stepName: 'retrieve_knowledge',
-            metadata: {
-              stepIndex: 1,
-            },
-          },
-          {
-            type: 'workflow_step_completed',
-            stepName: 'retrieve_knowledge',
-            metadata: {
-              stepIndex: 1,
-            },
-          },
-          {
-            type: 'done',
-          },
-        ],
-        pendingConfirmationId: null,
-      }),
-    )
-
-    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
-      conversations: [conversation],
-      total: 1,
-    })
-    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
-      conversation,
-      messages,
-    })
-
-    renderChatPage([chatPath(9)])
-
-    await waitFor(() => {
-      expect(screen.getByText('Viper is a Go configuration library.')).toBeInTheDocument()
-    })
-
-    expect(screen.queryByText('Execution progress')).not.toBeInTheDocument()
-    expect(screen.getByText('Knowledge Q&A')).toBeInTheDocument()
-    expect(screen.getByText('2/2 steps')).toBeInTheDocument()
-  })
-
-  it('clears persisted tool confirmation state after approving and does not restore it on remount', async () => {
-    const conversation = createConversation(9, 'Knowledge run')
-    const messages = [
-      createMessage(91, 9, 'user', 'Run a tool'),
-      createMessage(92, 9, 'assistant', 'Working on it', {
-        status: 'streaming',
-      }),
-    ]
-
-    window.sessionStorage.setItem(
-      buildExecutionPanelStorageKey('9'),
-      JSON.stringify({
-        events: [
-          {
-            type: 'run_started',
-            metadata: {
-              templateKey: 'knowledge_qa',
-            },
-          },
-          {
-            type: 'workflow_step_started',
-            stepName: 'run_tool',
-            metadata: {
-              stepIndex: 0,
-            },
-          },
-          {
-            type: 'tool_call_started',
-            toolName: 'web_search',
-          },
-          {
-            type: 'tool_call_confirmation_required',
-            toolName: 'web_search',
-            confirmationId: 'confirm-1',
-            metadata: {
-              confirmationLabel: 'Allow this tool call?',
-            },
-          },
-        ],
-        pendingConfirmationId: 'confirm-1',
-      }),
-    )
-
-    vi.spyOn(chatApi, 'listConversationsPage').mockResolvedValue({
-      conversations: [conversation],
-      total: 1,
-    })
-    vi.spyOn(chatApi, 'getConversationMessages').mockResolvedValue({
-      conversation,
-      messages,
-    })
-    const confirmToolCallMock = vi
-      .spyOn(agentApi, 'confirmToolCall')
-      .mockResolvedValue({ ok: true })
-
-    const view = renderChatPage([chatPath(9)])
-
-    const approveButton = await screen.findByRole('button', { name: 'Approve' })
-    fireEvent.click(approveButton)
-
-    await waitFor(() => {
-      expect(confirmToolCallMock).toHaveBeenCalledWith('confirm-1', true)
-    })
-    await waitFor(() => {
-      expect(
-        JSON.parse(
-          window.sessionStorage.getItem(buildExecutionPanelStorageKey('9')) ?? 'null',
-        ),
-      ).toMatchObject({
-        pendingConfirmationId: null,
-      })
-    })
-
-    view.unmount()
-
-    renderChatPage([chatPath(9)])
-
-    await waitFor(() => {
-      expect(screen.getByText('Working on it')).toBeInTheDocument()
-    })
-
-    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Allow this tool call?')).not.toBeInTheDocument()
-  })
 })

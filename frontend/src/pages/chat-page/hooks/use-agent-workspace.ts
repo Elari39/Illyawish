@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useI18n } from '../../../i18n/use-i18n'
-import { ragApi, workflowApi } from '../../../lib/api'
+import { ragApi } from '../../../lib/api'
 import type {
   CreateKnowledgeDocumentPayload,
   CreateKnowledgeSpacePayload,
   CreateRAGProviderPayload,
-  CreateWorkflowPresetPayload,
   KnowledgeDocument,
   KnowledgeSpace,
   RAGProviderState,
-  UpdateWorkflowPresetPayload,
   UpdateKnowledgeDocumentPayload,
   UpdateKnowledgeSpacePayload,
-  WorkflowPreset,
-  WorkflowTemplate,
 } from '../../../types/chat'
 
 interface UseAgentWorkspaceOptions {
@@ -32,8 +28,6 @@ export function useAgentWorkspace({
   const [ragProviders, setRAGProviders] = useState<RAGProviderState | null>(null)
   const [knowledgeSpaces, setKnowledgeSpaces] = useState<KnowledgeSpace[]>([])
   const [knowledgeDocuments, setKnowledgeDocuments] = useState<Record<number, KnowledgeDocument[]>>({})
-  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>([])
-  const [workflowPresets, setWorkflowPresets] = useState<WorkflowPreset[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -60,11 +54,9 @@ export function useAgentWorkspace({
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [providersResult, spacesResult, templatesResult, presetsResult] = await Promise.allSettled([
+      const [providersResult, spacesResult] = await Promise.allSettled([
         ragApi.getProviders(),
         ragApi.listKnowledgeSpaces(),
-        workflowApi.listTemplates(),
-        workflowApi.listPresets(),
       ])
 
       let workspaceError: string | null = null
@@ -83,18 +75,6 @@ export function useAgentWorkspace({
         setKnowledgeSpaces(spacesResult.value)
       } else if (workspaceError == null) {
         workspaceError = resolveWorkspaceError(spacesResult.reason)
-      }
-
-      if (templatesResult.status === 'fulfilled') {
-        setWorkflowTemplates(templatesResult.value)
-      } else if (workspaceError == null) {
-        workspaceError = resolveWorkspaceError(templatesResult.reason)
-      }
-
-      if (presetsResult.status === 'fulfilled') {
-        setWorkflowPresets(presetsResult.value)
-      } else if (workspaceError == null) {
-        workspaceError = resolveWorkspaceError(presetsResult.reason)
       }
 
       setChatErrorRef.current(workspaceError)
@@ -306,62 +286,10 @@ export function useAgentWorkspace({
     }
   }, [mergeDocumentIntoState])
 
-  const createWorkflowPreset = useCallback(async (payload: CreateWorkflowPresetPayload) => {
-    try {
-      const preset = await workflowApi.createPreset(payload)
-      setWorkflowPresets((previous) => [preset, ...previous])
-      setChatErrorRef.current(null)
-      return preset
-    } catch (error) {
-      setChatErrorRef.current(
-        error instanceof Error
-          ? error.message
-          : tRef.current('error.createWorkflowPreset'),
-      )
-      return null
-    }
-  }, [])
-
-  const updateWorkflowPreset = useCallback(async (presetId: number, payload: UpdateWorkflowPresetPayload) => {
-    try {
-      const preset = await workflowApi.updatePreset(presetId, payload)
-      setWorkflowPresets((previous) =>
-        previous.map((entry) => (entry.id === presetId ? preset : entry)),
-      )
-      setChatErrorRef.current(null)
-      return preset
-    } catch (error) {
-      setChatErrorRef.current(
-        error instanceof Error
-          ? error.message
-          : tRef.current('error.updateWorkflowPreset'),
-      )
-      return null
-    }
-  }, [])
-
-  const deleteWorkflowPreset = useCallback(async (presetId: number) => {
-    try {
-      await workflowApi.deletePreset(presetId)
-      setWorkflowPresets((previous) => previous.filter((entry) => entry.id !== presetId))
-      setChatErrorRef.current(null)
-      return true
-    } catch (error) {
-      setChatErrorRef.current(
-        error instanceof Error
-          ? error.message
-          : tRef.current('error.deleteWorkflowPreset'),
-      )
-      return false
-    }
-  }, [])
-
   return {
     ragProviders,
     knowledgeSpaces,
     knowledgeDocuments,
-    workflowTemplates,
-    workflowPresets,
     isLoading,
     loadWorkspace,
     loadKnowledgeDocuments,
@@ -375,8 +303,5 @@ export function useAgentWorkspace({
     deleteKnowledgeDocument,
     uploadKnowledgeDocuments,
     replaceKnowledgeDocumentFile,
-    createWorkflowPreset,
-    updateWorkflowPreset,
-    deleteWorkflowPreset,
   }
 }

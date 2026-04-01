@@ -5,6 +5,7 @@ import {
   shouldNotifyUnauthorized,
   toApiError,
 } from './http'
+import { normalizeMessage } from './api-normalizers'
 import type { StreamEvent } from '../types/chat'
 
 const API_BASE_URL = ''
@@ -62,6 +63,9 @@ export async function streamChatRequest(
     async (event) => {
       const parsed = JSON.parse(event.data) as StreamEvent
       parsed.type = event.event as StreamEvent['type']
+      if (parsed.message) {
+        parsed.message = normalizeMessage(parsed.message)
+      }
       await onEvent(parsed)
     },
   )

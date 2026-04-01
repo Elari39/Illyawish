@@ -40,7 +40,6 @@ export type SettingsTab =
   | 'provider'
   | 'rag'
   | 'knowledge'
-  | 'workflow'
   | 'security'
   | 'language'
   | 'transfer'
@@ -112,8 +111,6 @@ export const defaultConversationSettings: ConversationSettings = {
 }
 
 export const defaultAgentRunSummary: AgentRunSummary = {
-  workflowTemplateKey: '',
-  workflowPresetId: null,
   knowledgeSpaceIds: [],
   toolCalls: [],
   citations: [],

@@ -1,8 +1,6 @@
 import {
   useEffect,
-  useMemo,
   useRef,
-  useState,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -15,18 +13,12 @@ import type {
   StreamEvent,
 } from '../../../types/chat'
 import {
-  appendReasoningToStreamingMessage,
   appendToStreamingMessage,
   isSameMessage,
+  updateStreamingAssistantMessage,
   upsertMessage,
 } from '../utils'
-import {
-  readExecutionPanelState,
-  readLastEventSeq,
-  writeLastEventSeq,
-  writeExecutionPanelState,
-  type StoredExecutionPanelState,
-} from '../execution-panel-storage'
+import { readLastEventSeq, writeLastEventSeq } from '../stream-seq-storage'
 import type { ActiveGenerationState } from './chat-generation-types'
 import { syncGenerationMessageId } from './chat-generation-lifecycle'
 
@@ -53,36 +45,13 @@ export function useChatGenerationStreamState({
   setChatError,
   t,
 }: UseChatGenerationStreamStateOptions) {
-  const [executionStateVersion, setExecutionStateVersion] = useState(0)
   const bufferedDeltaRef = useRef<{
     conversationId: Conversation['id']
     placeholderId: number
     content: string
-  } | null>(null)
-  const bufferedReasoningPriorityDeltaRef = useRef<{
-    conversationId: Conversation['id']
-    placeholderId: number
-    content: string
-  } | null>(null)
-  const reasoningPriorityTargetRef = useRef<{
-    conversationId: Conversation['id']
-    placeholderId: number
+    reasoningContent: string
   } | null>(null)
   const bufferedDeltaFrameRef = useRef<number | null>(null)
-  const activeExecutionState = useMemo(
-    () => {
-      void executionStateVersion
-      return activeConversationId
-        ? readExecutionPanelState(activeConversationId)
-        : {
-            events: [],
-            pendingConfirmationId: null,
-          }
-    },
-    [activeConversationId, executionStateVersion],
-  )
-  const executionEvents = activeExecutionState.events
-  const pendingConfirmationId = activeExecutionState.pendingConfirmationId
 
   function buildMessageTarget(
     conversationId: Conversation['id'],
@@ -99,53 +68,12 @@ export function useChatGenerationStreamState({
     }
   }
 
-  function persistExecutionState(
-    conversationId: Conversation['id'],
-    nextState: StoredExecutionPanelState,
-  ) {
-    writeExecutionPanelState(conversationId, nextState)
-    if (activeConversationIdRef.current === conversationId) {
-      setExecutionStateVersion((previous) => previous + 1)
-    }
-  }
-
-  function readExecutionStateForConversation(conversationId: Conversation['id']) {
-    return readExecutionPanelState(conversationId)
-  }
-
-  function appendExecutionEvent(
-    conversationId: Conversation['id'],
-    event: StreamEvent,
-  ) {
-    const currentState = readExecutionStateForConversation(conversationId)
-    const nextState: StoredExecutionPanelState = {
-      events: [...currentState.events, event],
-      pendingConfirmationId:
-        event.type === 'tool_call_confirmation_required'
-          ? (event.confirmationId ?? null)
-          : event.type === 'tool_call_completed' || event.type === 'done' || event.type === 'cancelled' || event.type === 'error'
-            ? null
-            : currentState.pendingConfirmationId,
-      lastEventSeq:
-        typeof event.seq === 'number' && event.seq > 0
-          ? Math.max(currentState.lastEventSeq, event.seq)
-          : currentState.lastEventSeq,
-    }
-    persistExecutionState(conversationId, nextState)
-  }
-
   function syncEventSequence(conversationId: Conversation['id'], event: StreamEvent) {
     if (typeof event.seq !== 'number' || event.seq <= 0) {
       return
     }
 
-    const currentLastSeq = readLastEventSeq(conversationId)
-    if (event.seq > currentLastSeq) {
-      writeLastEventSeq(conversationId, event.seq)
-      if (activeConversationIdRef.current === conversationId) {
-        setExecutionStateVersion((previous) => previous + 1)
-      }
-    }
+    writeLastEventSeq(conversationId, event.seq)
   }
 
   function flushBufferedMessageDelta() {
@@ -162,69 +90,12 @@ export function useChatGenerationStreamState({
           bufferedDelta.conversationId,
           bufferedDelta.placeholderId,
         ),
-        bufferedDelta.content,
+        {
+          content: bufferedDelta.content,
+          reasoningContent: bufferedDelta.reasoningContent,
+        },
       ),
     )
-  }
-
-  function isReasoningPriorityTarget(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ) {
-    const target = reasoningPriorityTargetRef.current
-    return target?.conversationId === conversationId &&
-      target.placeholderId === placeholderId
-  }
-
-  function clearReasoningPriorityTarget(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ) {
-    if (isReasoningPriorityTarget(conversationId, placeholderId)) {
-      reasoningPriorityTargetRef.current = null
-    }
-  }
-
-  function flushBufferedReasoningPriorityDelta() {
-    const bufferedDelta = bufferedReasoningPriorityDeltaRef.current
-    if (!bufferedDelta) {
-      return
-    }
-
-    bufferedReasoningPriorityDeltaRef.current = null
-    setMessages((previous) =>
-      appendToStreamingMessage(
-        previous,
-        buildMessageTarget(
-          bufferedDelta.conversationId,
-          bufferedDelta.placeholderId,
-        ),
-        bufferedDelta.content,
-      ),
-    )
-  }
-
-  function queueBufferedReasoningPriorityDelta(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-    content: string,
-  ) {
-    const bufferedDelta = bufferedReasoningPriorityDeltaRef.current
-    if (
-      bufferedDelta &&
-      bufferedDelta.conversationId === conversationId &&
-      bufferedDelta.placeholderId === placeholderId
-    ) {
-      bufferedDelta.content += content
-      return
-    }
-
-    flushBufferedReasoningPriorityDelta()
-    bufferedReasoningPriorityDeltaRef.current = {
-      conversationId,
-      placeholderId,
-      content,
-    }
   }
 
   function cancelBufferedMessageDeltaFrame() {
@@ -237,7 +108,6 @@ export function useChatGenerationStreamState({
   function flushActiveMessageDelta() {
     cancelBufferedMessageDeltaFrame()
     flushBufferedMessageDelta()
-    flushBufferedReasoningPriorityDelta()
   }
 
   function scheduleBufferedMessageDeltaFlush() {
@@ -254,7 +124,10 @@ export function useChatGenerationStreamState({
   function queueBufferedMessageDelta(
     conversationId: Conversation['id'],
     placeholderId: number,
-    content: string,
+    delta: {
+      content?: string
+      reasoningContent?: string
+    },
   ) {
     const bufferedDelta = bufferedDeltaRef.current
     if (
@@ -262,36 +135,57 @@ export function useChatGenerationStreamState({
       bufferedDelta.conversationId === conversationId &&
       bufferedDelta.placeholderId === placeholderId
     ) {
-      bufferedDelta.content += content
+      bufferedDelta.content += delta.content ?? ''
+      bufferedDelta.reasoningContent += delta.reasoningContent ?? ''
     } else {
       flushBufferedMessageDelta()
       bufferedDeltaRef.current = {
         conversationId,
         placeholderId,
-        content,
+        content: delta.content ?? '',
+        reasoningContent: delta.reasoningContent ?? '',
       }
     }
 
     scheduleBufferedMessageDeltaFlush()
   }
 
-  function enterReasoningPriorityMode(
-    conversationId: Conversation['id'],
-    placeholderId: number,
-  ) {
-    cancelBufferedMessageDeltaFrame()
-    flushBufferedMessageDelta()
-    reasoningPriorityTargetRef.current = {
-      conversationId,
-      placeholderId,
-    }
+  function resetExecutionState(conversationId: Conversation['id']) {
+    writeLastEventSeq(conversationId, 0)
   }
 
-  function resetExecutionState(conversationId: Conversation['id']) {
-    persistExecutionState(conversationId, {
-      events: [],
-      pendingConfirmationId: null,
-      lastEventSeq: 0,
+  function markReasoningStarted(target: MessageTarget, observedAt = Date.now()) {
+    setMessages((previous) =>
+      updateStreamingAssistantMessage(previous, target, (message) => {
+        if (message.localReasoningStartedAt != null) {
+          return message
+        }
+
+        return {
+          ...message,
+          localReasoningStartedAt: observedAt,
+        }
+      }),
+    )
+  }
+
+  function markReasoningCompleted(
+    previous: Message[],
+    target: MessageTarget,
+    observedAt = Date.now(),
+  ) {
+    return updateStreamingAssistantMessage(previous, target, (message) => {
+      if (
+        message.localReasoningStartedAt == null ||
+        message.localReasoningCompletedAt != null
+      ) {
+        return message
+      }
+
+      return {
+        ...message,
+        localReasoningCompletedAt: observedAt,
+      }
     })
   }
 
@@ -299,16 +193,12 @@ export function useChatGenerationStreamState({
     return () => {
       cancelBufferedMessageDeltaFrame()
       bufferedDeltaRef.current = null
-      bufferedReasoningPriorityDeltaRef.current = null
-      reasoningPriorityTargetRef.current = null
     }
   }, [])
 
   useEffect(() => {
     cancelBufferedMessageDeltaFrame()
     bufferedDeltaRef.current = null
-    bufferedReasoningPriorityDeltaRef.current = null
-    reasoningPriorityTargetRef.current = null
   }, [activeConversationId])
 
   function handleStreamEventForConversation(
@@ -324,22 +214,6 @@ export function useChatGenerationStreamState({
     syncGenerationMessageId(activeGenerationRef, placeholderId, eventMessage)
     syncEventSequence(conversationId, event)
 
-    if (
-      event.type === 'run_started' ||
-      event.type === 'workflow_step_started' ||
-      event.type === 'workflow_step_completed' ||
-      event.type === 'retrieval_started' ||
-      event.type === 'retrieval_completed' ||
-      event.type === 'tool_call_started' ||
-      event.type === 'tool_call_confirmation_required' ||
-      event.type === 'tool_call_completed' ||
-      event.type === 'done' ||
-      event.type === 'cancelled' ||
-      event.type === 'error'
-    ) {
-      appendExecutionEvent(conversationId, event)
-    }
-
     if (activeConversationIdRef.current !== conversationId) {
       return
     }
@@ -347,11 +221,12 @@ export function useChatGenerationStreamState({
     const target = buildMessageTarget(conversationId, placeholderId)
 
     if (event.type === 'message_start' && eventMessage) {
-      clearReasoningPriorityTarget(conversationId, placeholderId)
-      bufferedReasoningPriorityDeltaRef.current = null
-      setMessages((previous) =>
-        upsertMessage(previous, eventMessage, target),
-      )
+      setMessages((previous) => upsertMessage(previous, eventMessage, target))
+      return
+    }
+
+    if (event.type === 'reasoning_start') {
+      markReasoningStarted(target)
       return
     }
 
@@ -359,41 +234,28 @@ export function useChatGenerationStreamState({
       (event.type === 'delta' || event.type === 'message_delta') &&
       typeof event.content === 'string'
     ) {
-      if (isReasoningPriorityTarget(conversationId, placeholderId)) {
-        queueBufferedReasoningPriorityDelta(
-          conversationId,
-          placeholderId,
-          event.content,
-        )
-        return
-      }
-      queueBufferedMessageDelta(conversationId, placeholderId, event.content)
-      return
-    }
-
-    if (event.type === 'reasoning_start') {
-      enterReasoningPriorityMode(conversationId, placeholderId)
+      queueBufferedMessageDelta(conversationId, placeholderId, {
+        content: event.content,
+      })
       return
     }
 
     if (event.type === 'reasoning_delta' && typeof event.content === 'string') {
-      enterReasoningPriorityMode(conversationId, placeholderId)
-      const reasoningContent = event.content
-      setMessages((previous) =>
-        appendReasoningToStreamingMessage(previous, target, reasoningContent),
-      )
+      markReasoningStarted(target)
+      queueBufferedMessageDelta(conversationId, placeholderId, {
+        reasoningContent: event.content,
+      })
       return
     }
 
     if (event.type === 'reasoning_done') {
-      flushBufferedReasoningPriorityDelta()
-      clearReasoningPriorityTarget(conversationId, placeholderId)
+      flushActiveMessageDelta()
+      setMessages((previous) => markReasoningCompleted(previous, target))
       return
     }
 
     if (event.type === 'done' || event.type === 'cancelled') {
       flushActiveMessageDelta()
-      clearReasoningPriorityTarget(conversationId, placeholderId)
       if (
         event.type === 'cancelled' &&
         !activeGenerationRef.current?.stopRequested &&
@@ -401,23 +263,26 @@ export function useChatGenerationStreamState({
       ) {
         setChatError(t('error.generationStopped'))
       }
-      if (eventMessage) {
-        setMessages((previous) =>
-          upsertMessage(previous, eventMessage, target),
-        )
-      }
+      setMessages((previous) => {
+        const messagesWithTiming = markReasoningCompleted(previous, target)
+        if (!eventMessage) {
+          return messagesWithTiming
+        }
+
+        return upsertMessage(messagesWithTiming, eventMessage, target)
+      })
       return
     }
 
     if (event.type === 'error') {
       flushActiveMessageDelta()
-      clearReasoningPriorityTarget(conversationId, placeholderId)
       setChatError(event.error ?? t('error.streamingFailed'))
       setMessages((previous) => {
+        const messagesWithTiming = markReasoningCompleted(previous, target)
         const currentMessage =
-          previous.find((message) => isSameMessage(message, target)) ?? null
+          messagesWithTiming.find((message) => isSameMessage(message, target)) ?? null
         if (!currentMessage && !eventMessage) {
-          return previous
+          return messagesWithTiming
         }
 
         const nextMessage: Message = {
@@ -427,24 +292,17 @@ export function useChatGenerationStreamState({
             eventMessage?.content ||
             currentMessage?.content ||
             t('error.assistantEndedUnexpectedly'),
-          reasoningContent:
-            eventMessage?.reasoningContent ??
-            currentMessage?.reasoningContent ??
-            '',
           status: 'failed',
         }
 
-        return upsertMessage(previous, nextMessage, target)
+        return upsertMessage(messagesWithTiming, nextMessage, target)
       })
     }
   }
 
   return {
-    executionEvents,
-    pendingConfirmationId,
     flushActiveMessageDelta,
     handleStreamEventForConversation,
-    persistExecutionState,
     readLastEventSeq,
     resetExecutionState,
   }

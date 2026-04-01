@@ -8,24 +8,21 @@ import type { Message } from '../../../types/chat'
 import {
   formatAttachmentSize,
   formatMessageTimestamp,
+  getDisplayMessageParts,
   isImageAttachment,
 } from '../utils'
-import type { ExecutionPanelModel } from './execution-panel-model'
-import { ExecutionPanel } from './execution-panel'
-import { MessageReasoning } from './message-reasoning'
+import { ReasoningPanel } from './reasoning-panel'
 
 interface MessageBubbleProps {
   message: Message
   canEdit: boolean
   canRetry: boolean
   canRegenerate: boolean
-  executionPanelModel: ExecutionPanelModel | null
   isEditing: boolean
   onCopySuccessToast: (message: string, variant?: 'success' | 'error' | 'info') => void
   onEditMessage: (message: Message) => void
   onRetryMessage: (message: Message) => void
   onRegenerateMessage: (message: Message) => void
-  onConfirmToolCall?: (approved: boolean) => Promise<void>
 }
 
 function MessageBubbleComponent({
@@ -33,13 +30,11 @@ function MessageBubbleComponent({
   canEdit,
   canRetry,
   canRegenerate,
-  executionPanelModel,
   isEditing,
   onCopySuccessToast,
   onEditMessage,
   onRetryMessage,
   onRegenerateMessage,
-  onConfirmToolCall,
 }: MessageBubbleProps) {
   const { locale, t } = useI18n()
   const [copied, setCopied] = useState(false)
@@ -47,9 +42,14 @@ function MessageBubbleComponent({
   const isUser = message.role === 'user'
   const isFailed = message.status === 'failed'
   const isCancelled = message.status === 'cancelled'
+  const displayParts = useMemo(() => getDisplayMessageParts(message), [message])
   const displayContent = useMemo(() => {
-    if (message.content) {
+    if (isUser && message.content) {
       return message.content
+    }
+
+    if (displayParts.content) {
+      return displayParts.content
     }
 
     if (message.role !== 'assistant') {
@@ -65,7 +65,22 @@ function MessageBubbleComponent({
     }
 
     return message.content
-  }, [message.content, message.role, message.status, t])
+  }, [displayParts.content, isUser, message.content, message.role, message.status, t])
+  const copyContent = useMemo(() => {
+    if (isUser) {
+      return message.content
+    }
+
+    if (!displayParts.reasoningContent) {
+      return displayContent
+    }
+
+    if (!displayContent) {
+      return displayParts.reasoningContent
+    }
+
+    return `${displayParts.reasoningContent}\n\n${displayContent}`
+  }, [displayContent, displayParts.reasoningContent, isUser, message.content])
   const imageAttachments = useMemo(() => (
     message.attachments.filter((attachment) => isImageAttachment(attachment))
   ), [message.attachments])
@@ -83,7 +98,7 @@ function MessageBubbleComponent({
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(displayContent)
+      await navigator.clipboard.writeText(copyContent)
       setCopied(true)
       onCopySuccessToast(t('message.copied'), 'success')
       if (resetCopiedTimerRef.current) {
@@ -172,19 +187,15 @@ function MessageBubbleComponent({
         {isFailed ? <span className="text-[var(--danger)]">{t('message.failed')}</span> : null}
         {isCancelled ? <span className="text-[var(--danger)]">{t('message.stopped')}</span> : null}
       </div>
-      {executionPanelModel ? (
-        <div className="mt-3">
-          <ExecutionPanel
-            model={executionPanelModel}
-            onConfirmToolCall={onConfirmToolCall ?? (async () => {})}
-          />
-        </div>
+      {displayParts.reasoningContent ? (
+        <ReasoningPanel
+          key={`${message.id}:${message.localReasoningStartedAt ?? 'static'}`}
+          reasoningCompletedAt={message.localReasoningCompletedAt}
+          reasoningContent={displayParts.reasoningContent}
+          reasoningStartedAt={message.localReasoningStartedAt}
+          status={message.status}
+        />
       ) : null}
-      <MessageReasoning
-        key={`${message.id}:${message.status === 'streaming' ? 'streaming' : 'settled'}`}
-        isStreaming={message.status === 'streaming'}
-        reasoningContent={message.reasoningContent ?? ''}
-      />
       <MarkdownContent content={displayContent} />
 
       {canRetry || canRegenerate ? (
@@ -239,13 +250,11 @@ function areMessageBubblePropsEqual(
     previous.canEdit === next.canEdit &&
     previous.canRetry === next.canRetry &&
     previous.canRegenerate === next.canRegenerate &&
-    previous.executionPanelModel === next.executionPanelModel &&
     previous.isEditing === next.isEditing &&
     previous.onCopySuccessToast === next.onCopySuccessToast &&
     previous.onEditMessage === next.onEditMessage &&
     previous.onRetryMessage === next.onRetryMessage &&
-    previous.onRegenerateMessage === next.onRegenerateMessage &&
-    previous.onConfirmToolCall === next.onConfirmToolCall
+    previous.onRegenerateMessage === next.onRegenerateMessage
 }
 
 export const MessageBubble = memo(MessageBubbleComponent, areMessageBubblePropsEqual)

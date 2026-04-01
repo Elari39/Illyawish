@@ -83,9 +83,6 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 	if err := s.enforceConversationQuota(userID); err != nil {
 		return nil, err
 	}
-	if err := s.validateWorkflowPresetOwnership(userID, input.WorkflowPresetID); err != nil {
-		return nil, err
-	}
 	if err := s.validateKnowledgeSpaceOwnership(userID, valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)); err != nil {
 		return nil, err
 	}
@@ -123,7 +120,6 @@ func (s *Service) CreateConversation(userID uint, input CreateConversationInput)
 	conversation := &models.Conversation{
 		UserID:             userID,
 		Title:              defaultConversationTitle,
-		WorkflowPresetID:   input.WorkflowPresetID,
 		KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
 		SystemPrompt:       settings.SystemPrompt,
 		ProviderPresetID:   cloneUint(settings.ProviderPresetID),
@@ -145,9 +141,6 @@ func (s *Service) ImportConversation(
 	input ImportConversationInput,
 ) (*models.Conversation, error) {
 	if err := s.enforceConversationQuota(userID); err != nil {
-		return nil, err
-	}
-	if err := s.validateWorkflowPresetOwnership(userID, input.WorkflowPresetID); err != nil {
 		return nil, err
 	}
 	if err := s.validateKnowledgeSpaceOwnership(userID, valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)); err != nil {
@@ -181,7 +174,6 @@ func (s *Service) ImportConversation(
 		conversation = &models.Conversation{
 			UserID:             userID,
 			Title:              title,
-			WorkflowPresetID:   input.WorkflowPresetID,
 			KnowledgeSpaceIDs:  cloneUintSlice(valueOrEmptyUintSlice(input.KnowledgeSpaceIDs)),
 			SystemPrompt:       settings.SystemPrompt,
 			ProviderPresetID:   cloneUint(settings.ProviderPresetID),
@@ -317,13 +309,6 @@ func (s *Service) UpdateConversation(
 			return nil, err
 		}
 		updates["tags"] = serializedTags
-	}
-	if input.WorkflowPresetID.IsSet() {
-		workflowPresetID := input.WorkflowPresetID.Value()
-		if err := s.validateWorkflowPresetOwnership(userID, workflowPresetID); err != nil {
-			return nil, err
-		}
-		updates["workflow_preset_id"] = workflowPresetID
 	}
 	if input.KnowledgeSpaceIDs != nil {
 		knowledgeSpaceIDs := cloneUintSlice(*input.KnowledgeSpaceIDs)

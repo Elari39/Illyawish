@@ -18,25 +18,23 @@ type AgentToolCallSummary struct {
 }
 
 type AgentRunSummary struct {
-	WorkflowTemplateKey string                 `json:"workflowTemplateKey"`
-	WorkflowPresetID    *uint                  `json:"workflowPresetId,omitempty"`
-	KnowledgeSpaceIDs   []uint                 `json:"knowledgeSpaceIds"`
-	ToolCalls           []AgentToolCallSummary `json:"toolCalls"`
-	Citations           []AgentCitation        `json:"citations"`
+	KnowledgeSpaceIDs []uint                 `json:"knowledgeSpaceIds"`
+	ToolCalls         []AgentToolCallSummary `json:"toolCalls"`
+	Citations         []AgentCitation        `json:"citations"`
 }
 
 type RAGProviderPreset struct {
-	ID                   uint   `gorm:"primaryKey"`
-	UserID               uint   `gorm:"not null;index;uniqueIndex:idx_rag_provider_active_per_user,priority:1,where:is_active = 1"`
-	Name                 string `gorm:"size:120;not null"`
-	BaseURL              string `gorm:"size:512;not null"`
-	EncryptedAPIKey      string `gorm:"type:text;not null"`
-	APIKeyHint           string `gorm:"size:64;not null"`
-	EmbeddingModel       string `gorm:"size:160;not null"`
-	RerankerModel        string `gorm:"size:160;not null"`
-	IsActive             bool   `gorm:"not null;default:false;uniqueIndex:idx_rag_provider_active_per_user,priority:2,where:is_active = 1"`
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	ID              uint   `gorm:"primaryKey"`
+	UserID          uint   `gorm:"not null;index;uniqueIndex:idx_rag_provider_active_per_user,priority:1,where:is_active = 1"`
+	Name            string `gorm:"size:120;not null"`
+	BaseURL         string `gorm:"size:512;not null"`
+	EncryptedAPIKey string `gorm:"type:text;not null"`
+	APIKeyHint      string `gorm:"size:64;not null"`
+	EmbeddingModel  string `gorm:"size:160;not null"`
+	RerankerModel   string `gorm:"size:160;not null"`
+	IsActive        bool   `gorm:"not null;default:false;uniqueIndex:idx_rag_provider_active_per_user,priority:2,where:is_active = 1"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type KnowledgeSpace struct {
@@ -76,17 +74,4 @@ type KnowledgeChunk struct {
 	Vector              []float32 `gorm:"serializer:json;type:text"`
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
-}
-
-type WorkflowPreset struct {
-	ID               uint            `gorm:"primaryKey"`
-	UserID           uint            `gorm:"not null;index"`
-	Name             string          `gorm:"size:160;not null"`
-	TemplateKey      string          `gorm:"size:120;not null"`
-	DefaultInputs    map[string]any  `gorm:"serializer:json;type:text"`
-	KnowledgeSpaceIDs []uint         `gorm:"serializer:json;type:text"`
-	ToolEnablements  map[string]bool `gorm:"serializer:json;type:text"`
-	OutputMode       string          `gorm:"size:64;not null;default:'default'"`
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
 }

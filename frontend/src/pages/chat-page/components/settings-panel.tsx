@@ -64,12 +64,10 @@ export function SettingsPanel({
         ? t('settings.historyDescription')
         : activeTab === 'provider'
           ? t('settings.providerDescription')
-          : activeTab === 'rag'
-            ? t('settings.ragDescription')
-            : activeTab === 'knowledge'
-              ? t('settings.knowledgeDescription')
-              : activeTab === 'workflow'
-                ? t('settings.workflowDescription')
+            : activeTab === 'rag'
+              ? t('settings.ragDescription')
+              : activeTab === 'knowledge'
+                ? t('settings.knowledgeDescription')
                 : activeTab === 'security'
                   ? t('settings.securityDescription')
                   : activeTab === 'language'

@@ -33,7 +33,10 @@ interface UseChatTransferOptions {
   resetHistoryState: () => void
   reconcileConversationState: (
     conversationId: Conversation['id'],
-    options?: { clearErrorOnSuccess?: boolean },
+    options?: {
+      clearErrorOnSuccess?: boolean
+      preserveMessages?: Message[]
+    },
   ) => Promise<{ messages: Message[] } | null>
 }
 

@@ -73,6 +73,17 @@ function createMessage(
   }
 }
 
+function applyMessageUpdaters(
+  updates: unknown[],
+  initialMessages: Message[] = [],
+) {
+  return updates.reduce<Message[]>((messages, update) => (
+    typeof update === 'function'
+      ? (update as (messages: Message[]) => Message[])(messages)
+      : (update as Message[])
+  ), initialMessages)
+}
+
 function createOptions(
   overrides: Partial<Parameters<typeof useChatGeneration>[0]> = {},
 ) {
@@ -85,6 +96,7 @@ function createOptions(
   return {
     activeConversationId,
     currentConversation,
+    messages: [],
     composerValue: 'Edited content',
     selectedAttachments: [],
     editingMessageId: null,
@@ -135,12 +147,13 @@ describe('useChatGeneration saved settings behavior', () => {
   })
 
   it('uses saved conversation settings for retry instead of unsaved drafts', async () => {
-    const { result } = renderHook(() => useChatGeneration(createOptions()))
+    const failedAssistant = createMessage(31, 'assistant', 'failed')
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      messages: [createMessage(30, 'user', 'completed'), failedAssistant],
+    })))
 
     await act(async () => {
-      await result.current.handleRetryAssistant(
-        createMessage(31, 'assistant', 'failed'),
-      )
+      await result.current.handleRetryAssistant(failedAssistant)
     })
 
     expect(chatApiMock.retryMessage).toHaveBeenCalledWith(
@@ -153,12 +166,13 @@ describe('useChatGeneration saved settings behavior', () => {
   })
 
   it('uses saved conversation settings for regenerate instead of unsaved drafts', async () => {
-    const { result } = renderHook(() => useChatGeneration(createOptions()))
+    const completedAssistant = createMessage(41, 'assistant', 'completed')
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      messages: [createMessage(40, 'user', 'completed'), completedAssistant],
+    })))
 
     await act(async () => {
-      await result.current.handleRegenerateAssistant(
-        createMessage(41, 'assistant', 'completed'),
-      )
+      await result.current.handleRegenerateAssistant(completedAssistant)
     })
 
     expect(chatApiMock.regenerateMessage).toHaveBeenCalledWith(
@@ -172,6 +186,11 @@ describe('useChatGeneration saved settings behavior', () => {
 
   it('uses saved conversation settings for edit instead of unsaved drafts', async () => {
     const options = createOptions({
+      messages: [
+        createMessage(50, 'user', 'completed'),
+        createMessage(51, 'user', 'completed'),
+        createMessage(52, 'assistant', 'completed'),
+      ],
       editingMessageId: 51,
       composerValue: 'Edited content',
     })
@@ -221,7 +240,6 @@ describe('useChatGeneration saved settings behavior', () => {
     })
 
     expect(chatApiMock.createConversation).toHaveBeenCalledWith({
-      workflowPresetId: null,
       knowledgeSpaceIds: [],
       settings: {
         ...draftSettings,
@@ -232,6 +250,7 @@ describe('useChatGeneration saved settings behavior', () => {
       '21',
       expect.objectContaining({
         content: 'First message',
+        knowledgeSpaceIds: [],
         options: {
           ...draftSettings,
           providerPresetId: null,
@@ -240,6 +259,7 @@ describe('useChatGeneration saved settings behavior', () => {
       expect.any(Function),
       expect.any(AbortSignal),
     )
+    expect(chatApiMock.streamMessage.mock.calls[0]?.[1]).not.toHaveProperty('workflowPresetId')
   })
 
   it('starts generation before navigating when sending the first message in a new conversation', async () => {
@@ -314,8 +334,32 @@ describe('useChatGeneration saved settings behavior', () => {
     expect(setMessages).not.toHaveBeenCalled()
   })
 
-  it('applies reasoning deltas only to the targeted streaming assistant message', async () => {
+  it('replaces the optimistic assistant placeholder when message_start provides the server message id', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
     const setMessages = vi.fn()
+    chatApiMock.streamMessage.mockImplementation(
+      async (
+        _conversationId: string,
+        _payload: unknown,
+        onEvent: (event: MessageStreamEvent) => Promise<void>,
+      ) => {
+        await onEvent({
+          type: 'message_start',
+          message: {
+            ...createMessage(99, 'assistant', 'streaming'),
+            content: '',
+          },
+        })
+        await onEvent({
+          type: 'message_delta',
+          content: 'step 1 -> step 2',
+        })
+      },
+    )
     const { result } = renderHook(() => useChatGeneration(createOptions({
       composerValue: 'First message',
       setMessages,
@@ -325,43 +369,27 @@ describe('useChatGeneration saved settings behavior', () => {
       await result.current.handleSubmit({
         preventDefault: vi.fn(),
       } as unknown as React.FormEvent<HTMLFormElement>)
-    })
-
-    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
-      | ((event: MessageStreamEvent) => Promise<void>)
-      | undefined
-    expect(onEvent).toBeTypeOf('function')
-    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
-
-    setMessages.mockClear()
-
-    await act(async () => {
-      await onEvent?.({
-        type: 'reasoning_start',
-      })
-      await onEvent?.({
-        type: 'reasoning_delta',
-        content: 'step 1',
-      })
-      await onEvent?.({
-        type: 'reasoning_delta',
-        content: ' -> step 2',
-      })
     })
 
     expect(setMessages).toHaveBeenCalled()
     const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
       typeof updater === 'function' ? updater(messages) : updater
-    ), optimisticMessages as Message[])
+    ), [] as Message[])
+    const streamedAssistant = updated.find((message) => message.id === 99)
 
-    expect(updated[1]?.reasoningContent).toBe('step 1 -> step 2')
-    expect(updated[1]?.content).toBe('')
+    expect(streamedAssistant).toMatchObject({
+      id: 99,
+      role: 'assistant',
+      status: 'streaming',
+    })
+    rafSpy.mockRestore()
   })
 
-  it('buffers assistant content after reasoning starts until reasoning completes', async () => {
+  it('buffers assistant content until the animation frame flushes', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0)
-      return 1
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
     })
     const setMessages = vi.fn()
     const { result } = renderHook(() => useChatGeneration(createOptions({
@@ -382,18 +410,6 @@ describe('useChatGeneration saved settings behavior', () => {
     const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
 
     setMessages.mockClear()
-
-    await act(async () => {
-      await onEvent?.({
-        type: 'reasoning_start',
-      })
-      await onEvent?.({
-        type: 'reasoning_delta',
-        content: 'step 1',
-      })
-    })
-
-    const callCountAfterReasoning = setMessages.mock.calls.length
 
     await act(async () => {
       await onEvent?.({
@@ -402,25 +418,87 @@ describe('useChatGeneration saved settings behavior', () => {
       })
     })
 
-    expect(setMessages).toHaveBeenCalledTimes(callCountAfterReasoning)
+    expect(setMessages).not.toHaveBeenCalled()
+    expect(rafCallbacks).toHaveLength(1)
 
     await act(async () => {
-      await onEvent?.({
-        type: 'reasoning_done',
-        content: 'step 1',
-      })
+      rafCallbacks[0]?.(0)
     })
 
     const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
       typeof updater === 'function' ? updater(messages) : updater
     ), optimisticMessages as Message[])
 
-    expect(updated[1]?.reasoningContent).toBe('step 1')
     expect(updated[1]?.content).toBe('buffered answer')
     rafSpy.mockRestore()
   })
 
-  it('preserves assistant content order when reasoning starts after a pending content delta', async () => {
+  it('buffers assistant reasoning separately before the animation frame flushes', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+      await onEvent?.({
+        type: 'delta',
+        content: 'final answer',
+      })
+    })
+
+    const beforeFlush = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(beforeFlush[1]).toMatchObject({
+      reasoningContent: '',
+      localReasoningStartedAt: expect.any(Number),
+    })
+    expect(rafCallbacks).toHaveLength(1)
+
+    await act(async () => {
+      rafCallbacks[0]?.(0)
+    })
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+
+    expect(updated[1]).toMatchObject({
+      reasoningContent: 'step 1',
+      content: 'final answer',
+    })
+    rafSpy.mockRestore()
+  })
+
+  it('preserves assistant content order across multiple buffered deltas', async () => {
     const rafCallbacks: FrameRequestCallback[] = []
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
       rafCallbacks.push(callback)
@@ -452,18 +530,8 @@ describe('useChatGeneration saved settings behavior', () => {
         content: 'A',
       })
       await onEvent?.({
-        type: 'reasoning_start',
-      })
-      await onEvent?.({
-        type: 'reasoning_delta',
-        content: 'step 1',
-      })
-      await onEvent?.({
         type: 'message_delta',
         content: 'B',
-      })
-      await onEvent?.({
-        type: 'reasoning_done',
       })
     })
 
@@ -478,15 +546,15 @@ describe('useChatGeneration saved settings behavior', () => {
       typeof updater === 'function' ? updater(messages) : updater
     ), optimisticMessages as Message[])
 
-    expect(updated[1]?.reasoningContent).toBe('step 1')
     expect(updated[1]?.content).toBe('AB')
     rafSpy.mockRestore()
   })
 
-  it('flushes buffered assistant content on done even without reasoning_done', async () => {
+  it('flushes buffered assistant content on done', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
     const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0)
-      return 1
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
     })
     const setMessages = vi.fn()
     const { result } = renderHook(() => useChatGeneration(createOptions({
@@ -510,19 +578,13 @@ describe('useChatGeneration saved settings behavior', () => {
 
     await act(async () => {
       await onEvent?.({
-        type: 'reasoning_start',
-      })
-      await onEvent?.({
-        type: 'reasoning_delta',
-        content: 'step 1',
-      })
-      await onEvent?.({
         type: 'message_delta',
         content: 'buffered answer',
       })
     })
 
-    const callCountBeforeDone = setMessages.mock.calls.length
+    expect(setMessages).not.toHaveBeenCalled()
+    expect(rafCallbacks).toHaveLength(1)
 
     await act(async () => {
       await onEvent?.({
@@ -530,18 +592,170 @@ describe('useChatGeneration saved settings behavior', () => {
       })
     })
 
-    expect(setMessages.mock.calls.length).toBeGreaterThan(callCountBeforeDone)
+    expect(setMessages).toHaveBeenCalled()
 
     const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
       typeof updater === 'function' ? updater(messages) : updater
     ), optimisticMessages as Message[])
 
-    expect(updated[1]?.reasoningContent).toBe('step 1')
     expect(updated[1]?.content).toBe('buffered answer')
     rafSpy.mockRestore()
   })
 
-  it('persists execution events into sessionStorage as stream events arrive', async () => {
+  it('uses the final server message to replace buffered reasoning and content on done', async () => {
+    const rafCallbacks: FrameRequestCallback[] = []
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      rafCallbacks.push(callback)
+      return rafCallbacks.length
+    })
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'partial reasoning',
+      })
+      await onEvent?.({
+        type: 'delta',
+        content: 'partial answer',
+      })
+      await onEvent?.({
+        type: 'done',
+        message: {
+          ...createMessage(99, 'assistant', 'completed'),
+          content: 'final answer',
+          reasoningContent: 'final reasoning',
+        },
+      })
+    })
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+    const finalAssistant = updated.find((message) => message.id === 99)
+
+    expect(finalAssistant).toMatchObject({
+      id: 99,
+      status: 'completed',
+      reasoningContent: 'final reasoning',
+      content: 'final answer',
+    })
+    rafSpy.mockRestore()
+  })
+
+  it('records observable reasoning timings locally and preserves them when the final server message replaces the placeholder', async () => {
+    vi.useFakeTimers()
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const onEvent = chatApiMock.streamMessage.mock.calls[0]?.[2] as
+      | ((event: MessageStreamEvent) => Promise<void>)
+      | undefined
+    expect(onEvent).toBeTypeOf('function')
+    const optimisticMessages = (setMessages.mock.calls[0]?.[0] as ((messages: Message[]) => Message[]))([])
+
+    setMessages.mockClear()
+
+    vi.setSystemTime(new Date('2026-03-26T09:08:02Z'))
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_start',
+      })
+      await onEvent?.({
+        type: 'reasoning_delta',
+        content: 'step 1',
+      })
+    })
+
+    vi.setSystemTime(new Date('2026-03-26T09:08:20Z'))
+    await act(async () => {
+      await onEvent?.({
+        type: 'reasoning_done',
+      })
+      await onEvent?.({
+        type: 'done',
+        message: {
+          ...createMessage(99, 'assistant', 'completed'),
+          content: 'final answer',
+          reasoningContent: 'final reasoning',
+        },
+      })
+    })
+
+    const updated = setMessages.mock.calls.reduce((messages, [updater]) => (
+      typeof updater === 'function' ? updater(messages) : updater
+    ), optimisticMessages as Message[])
+    const finalAssistant = updated.find((message) => message.id === 99)
+
+    expect(finalAssistant).toMatchObject({
+      id: 99,
+      status: 'completed',
+      localReasoningStartedAt: new Date('2026-03-26T09:08:02Z').getTime(),
+      localReasoningCompletedAt: new Date('2026-03-26T09:08:20Z').getTime(),
+    })
+  })
+
+  it('clears local reasoning timings when regenerating an assistant reply', async () => {
+    const completedAssistant: Message = {
+      ...createMessage(41, 'assistant', 'completed'),
+      localReasoningStartedAt: 1000,
+      localReasoningCompletedAt: 2000,
+      reasoningContent: 'old reasoning',
+      content: 'old answer',
+    }
+    const setMessages = vi.fn()
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      messages: [createMessage(40, 'user', 'completed'), completedAssistant],
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleRegenerateAssistant(completedAssistant)
+    })
+
+    const updated = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+      [createMessage(40, 'user', 'completed'), completedAssistant],
+    )
+
+    expect(updated[1]).toMatchObject({
+      id: 41,
+      status: 'streaming',
+      reasoningContent: '',
+      content: '',
+    })
+    expect(updated[1]?.localReasoningStartedAt).toBeUndefined()
+    expect(updated[1]?.localReasoningCompletedAt).toBeUndefined()
+  })
+
+  it('persists only the last stream sequence into sessionStorage as events arrive', async () => {
     chatApiMock.streamMessage.mockImplementation(
       async (
         _conversationId: string,
@@ -549,30 +763,18 @@ describe('useChatGeneration saved settings behavior', () => {
         onEvent: (event: MessageStreamEvent) => Promise<void>,
       ) => {
         await onEvent({
-          type: 'run_started',
-          metadata: {
-            templateKey: 'knowledge_qa',
-          },
+          type: 'message_start',
+          seq: 1,
+          message: createMessage(91, 'assistant', 'streaming'),
         })
         await onEvent({
-          type: 'retrieval_completed',
-          stepName: 'retrieve_knowledge',
-          citations: [
-            {
-              documentId: 1,
-              documentName: 'OpenAI.md',
-              chunkId: 1,
-              snippet: 'snippet',
-              sourceUri: '',
-            },
-          ],
-          metadata: {
-            resultCount: 1,
-            knowledgeSpaceCount: 1,
-          },
+          type: 'message_delta',
+          seq: 2,
+          content: 'hello',
         })
         await onEvent({
           type: 'done',
+          seq: 3,
         })
       },
     )
@@ -587,97 +789,30 @@ describe('useChatGeneration saved settings behavior', () => {
       } as unknown as React.FormEvent<HTMLFormElement>)
     })
 
-    expect(window.sessionStorage.getItem('aichat:execution-panel:7')).toBeTruthy()
-    expect(JSON.parse(window.sessionStorage.getItem('aichat:execution-panel:7') ?? 'null')).toMatchObject({
-      pendingConfirmationId: null,
-      events: [
-        {
-          type: 'run_started',
-        },
-        {
-          type: 'retrieval_completed',
-          stepName: 'retrieve_knowledge',
-        },
-        {
-          type: 'done',
-        },
-      ],
-    })
+    expect(window.sessionStorage.getItem('aichat:stream-seq:7')).toBe('3')
   })
 
-  it('restores persisted execution state when the same conversation hook remounts', async () => {
+  it('resumes from the persisted last stream sequence for the same conversation', async () => {
     window.sessionStorage.setItem(
-      'aichat:execution-panel:7',
-      JSON.stringify({
-        pendingConfirmationId: 'confirm-1',
-        events: [
-          {
-            type: 'run_started',
-            metadata: {
-              templateKey: 'knowledge_qa',
-            },
-          },
-          {
-            type: 'tool_call_confirmation_required',
-            toolName: 'http_request',
-            confirmationId: 'confirm-1',
-          },
-        ],
-      }),
+      'aichat:stream-seq:7',
+      '3',
     )
 
     const { result } = renderHook(() => useChatGeneration(createOptions()))
 
-    expect(result.current.executionEvents).toMatchObject([
-      {
-        type: 'run_started',
-      },
-      {
-        type: 'tool_call_confirmation_required',
-        confirmationId: 'confirm-1',
-      },
-    ])
-    expect(result.current.pendingConfirmationId).toBe('confirm-1')
-  })
-
-  it('clears restored execution state when switching to a conversation without cache', async () => {
-    window.sessionStorage.setItem(
-      'aichat:execution-panel:7',
-      JSON.stringify({
-        pendingConfirmationId: null,
-        events: [
-          {
-            type: 'run_started',
-            metadata: {
-              templateKey: 'knowledge_qa',
-            },
-          },
-        ],
-      }),
-    )
-
-    const { result, rerender } = renderHook(
-      (options: ReturnType<typeof createOptions>) => useChatGeneration(options),
-      {
-        initialProps: createOptions(),
-      },
-    )
-
-    expect(result.current.executionEvents).toHaveLength(1)
-
     await act(async () => {
-      rerender(createOptions({
-        activeConversationId: '9',
-        currentConversation: createConversation(9),
-        activeConversationIdRef: { current: '9' },
-      }))
+      await result.current.handleResumeConversation('7')
     })
 
-    expect(result.current.executionEvents).toHaveLength(0)
-    expect(result.current.pendingConfirmationId).toBeNull()
+    expect(chatApiMock.resumeStream).toHaveBeenCalledWith(
+      '7',
+      3,
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
   })
 
-  it('keeps persisting execution state for the generating conversation after navigating away', async () => {
+  it('keeps persisting lastEventSeq for the generating conversation after navigating away', async () => {
     const activeConversationIdRef = { current: '7' }
 
     const { result, rerender } = renderHook(
@@ -712,21 +847,13 @@ describe('useChatGeneration saved settings behavior', () => {
 
     await act(async () => {
       await onEvent?.({
-        type: 'tool_call_confirmation_required',
-        toolName: 'http_request',
-        confirmationId: 'confirm-background',
+        type: 'message_delta',
+        seq: 4,
+        content: 'background chunk',
       })
     })
 
-    expect(JSON.parse(window.sessionStorage.getItem('aichat:execution-panel:7') ?? 'null')).toMatchObject({
-      pendingConfirmationId: 'confirm-background',
-      events: [
-        {
-          type: 'tool_call_confirmation_required',
-          confirmationId: 'confirm-background',
-        },
-      ],
-    })
+    expect(window.sessionStorage.getItem('aichat:stream-seq:7')).toBe('4')
   })
 
   it('resumes a streaming conversation without surfacing a stopped error on disconnect', async () => {
@@ -739,7 +866,6 @@ describe('useChatGeneration saved settings behavior', () => {
         {
           ...createMessage(2, 'assistant', 'streaming'),
           content: '',
-          reasoningContent: '',
         },
       ],
     })
@@ -778,35 +904,202 @@ describe('useChatGeneration saved settings behavior', () => {
 
     expect(setChatError).not.toHaveBeenCalledWith('error.generationStopped')
   })
+
+  it('preserves the optimistic user message and failed assistant when send fails', async () => {
+    const setMessages = vi.fn()
+    const reconcileConversationState = vi.fn().mockResolvedValue(null)
+    chatApiMock.streamMessage.mockRejectedValue(new Error('send failed'))
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+      reconcileConversationState,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const preserveMessages = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+    )
+
+    expect(reconcileConversationState).toHaveBeenCalledWith(
+      '7',
+      expect.objectContaining({
+        clearErrorOnSuccess: false,
+        preserveMessages,
+      }),
+    )
+    expect(preserveMessages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: 'First message',
+        status: 'completed',
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        status: 'failed',
+        content: 'error.completeReply',
+      }),
+    ])
+  })
+
+  it('preserves the edited user message and failed assistant when edit fails', async () => {
+    const initialMessages = [
+      createMessage(50, 'user', 'completed'),
+      createMessage(51, 'user', 'completed'),
+      createMessage(52, 'assistant', 'completed'),
+    ]
+    const setMessages = vi.fn()
+    const reconcileConversationState = vi.fn().mockResolvedValue(null)
+    chatApiMock.editMessage.mockRejectedValue(new Error('edit failed'))
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      editingMessageId: 51,
+      composerValue: 'Edited content',
+      messages: initialMessages,
+      setMessages,
+      reconcileConversationState,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const preserveMessages = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+      initialMessages,
+    )
+
+    expect(reconcileConversationState).toHaveBeenCalledWith(
+      '7',
+      expect.objectContaining({
+        clearErrorOnSuccess: false,
+        preserveMessages,
+      }),
+    )
+    expect(preserveMessages).toEqual([
+      expect.objectContaining({
+        id: 50,
+      }),
+      expect.objectContaining({
+        id: 51,
+        content: 'Edited content',
+        status: 'completed',
+      }),
+      expect.objectContaining({
+        role: 'assistant',
+        status: 'failed',
+        content: 'error.completeReply',
+      }),
+    ])
+  })
+
+  it('preserves the failed assistant when retry fails against a stale snapshot', async () => {
+    const initialMessages = [
+      createMessage(30, 'user', 'completed'),
+      createMessage(31, 'assistant', 'failed'),
+      createMessage(32, 'user', 'completed'),
+      createMessage(33, 'assistant', 'completed'),
+    ]
+    const setMessages = vi.fn()
+    const reconcileConversationState = vi.fn().mockResolvedValue(null)
+    chatApiMock.retryMessage.mockRejectedValue(new Error('retry failed'))
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      messages: initialMessages,
+      setMessages,
+      reconcileConversationState,
+    })))
+
+    await act(async () => {
+      await result.current.handleRetryAssistant(initialMessages[1])
+    })
+
+    const preserveMessages = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+      initialMessages,
+    )
+
+    expect(reconcileConversationState).toHaveBeenCalledWith(
+      '7',
+      expect.objectContaining({
+        clearErrorOnSuccess: false,
+        preserveMessages,
+      }),
+    )
+    expect(preserveMessages).toEqual([
+      expect.objectContaining({
+        id: 30,
+      }),
+      expect.objectContaining({
+        id: 31,
+        status: 'failed',
+        content: 'error.completeReply',
+      }),
+    ])
+  })
+
+  it('preserves the failed assistant when regenerate fails against a stale snapshot', async () => {
+    const initialMessages = [
+      createMessage(40, 'user', 'completed'),
+      createMessage(41, 'assistant', 'completed'),
+      createMessage(42, 'user', 'completed'),
+      createMessage(43, 'assistant', 'completed'),
+    ]
+    const setMessages = vi.fn()
+    const reconcileConversationState = vi.fn().mockResolvedValue(null)
+    chatApiMock.regenerateMessage.mockRejectedValue(new Error('regenerate failed'))
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      messages: initialMessages,
+      setMessages,
+      reconcileConversationState,
+    })))
+
+    await act(async () => {
+      await result.current.handleRegenerateAssistant(initialMessages[1])
+    })
+
+    const preserveMessages = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+      initialMessages,
+    )
+
+    expect(reconcileConversationState).toHaveBeenCalledWith(
+      '7',
+      expect.objectContaining({
+        clearErrorOnSuccess: false,
+        preserveMessages,
+      }),
+    )
+    expect(preserveMessages).toEqual([
+      expect.objectContaining({
+        id: 40,
+      }),
+      expect.objectContaining({
+        id: 41,
+        status: 'failed',
+        content: 'error.completeReply',
+      }),
+    ])
+  })
 })
 
 type MessageStreamEvent = {
   type:
     | 'message_start'
-    | 'delta'
-    | 'message_delta'
     | 'reasoning_start'
     | 'reasoning_delta'
     | 'reasoning_done'
+    | 'delta'
+    | 'message_delta'
     | 'done'
     | 'cancelled'
     | 'error'
-    | 'run_started'
-    | 'retrieval_completed'
-    | 'tool_call_confirmation_required'
   content?: string
   message?: Message
   error?: string
-  stepName?: string
-  toolName?: string
-  confirmationId?: string
   seq?: number
-  metadata?: Record<string, unknown>
-  citations?: Array<{
-    documentId: number
-    documentName: string
-    chunkId: number
-    snippet: string
-    sourceUri: string
-  }>
 }

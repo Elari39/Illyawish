@@ -74,9 +74,6 @@ func (s *KnowledgeSpaceService) DeleteSpace(userID uint, spaceID uint) error {
 		if err := s.cleanupConversationReferences(tx, userID, spaceID); err != nil {
 			return err
 		}
-		if err := s.cleanupWorkflowPresetReferences(tx, userID, spaceID); err != nil {
-			return err
-		}
 		if err := tx.Where("user_id = ? AND knowledge_space_id = ?", userID, spaceID).Delete(&models.KnowledgeChunk{}).Error; err != nil {
 			return fmt.Errorf("delete knowledge chunks: %w", err)
 		}
@@ -112,25 +109,6 @@ func (s *KnowledgeSpaceService) cleanupConversationReferences(tx *gorm.DB, userI
 		conversation.KnowledgeSpaceIDs = filtered
 		if err := tx.Save(&conversation).Error; err != nil {
 			return fmt.Errorf("update conversation knowledge spaces: %w", err)
-		}
-	}
-	return nil
-}
-
-func (s *KnowledgeSpaceService) cleanupWorkflowPresetReferences(tx *gorm.DB, userID uint, spaceID uint) error {
-	var presets []models.WorkflowPreset
-	if err := tx.Where("user_id = ?", userID).Find(&presets).Error; err != nil {
-		return fmt.Errorf("load workflow presets for knowledge space cleanup: %w", err)
-	}
-
-	for _, preset := range presets {
-		filtered := filterKnowledgeSpaceIDs(preset.KnowledgeSpaceIDs, spaceID)
-		if len(filtered) == len(preset.KnowledgeSpaceIDs) {
-			continue
-		}
-		preset.KnowledgeSpaceIDs = filtered
-		if err := tx.Save(&preset).Error; err != nil {
-			return fmt.Errorf("update workflow preset knowledge spaces: %w", err)
 		}
 	}
 	return nil

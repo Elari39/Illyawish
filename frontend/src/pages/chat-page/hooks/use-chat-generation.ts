@@ -6,7 +6,7 @@ import {
 } from 'react'
 
 import type { I18nContextValue } from '../../../i18n/context'
-import { agentApi, chatApi } from '../../../lib/api'
+import { chatApi } from '../../../lib/api'
 import { ApiError, isAbortError } from '../../../lib/http'
 import { createLocalISOString } from '../../../lib/utils'
 import type {
@@ -33,14 +33,13 @@ import { useChatGenerationStreamState } from './use-chat-generation-stream-state
 interface UseChatGenerationOptions {
   activeConversationId: Conversation['id'] | null
   currentConversation: Conversation | null
+  messages: Message[]
   composerValue: string
   selectedAttachments: ComposerAttachment[]
   editingMessageId: number | null
   conversationFolderDraft: string
   conversationTagsDraft: string
-  workflowPresetIdDraft?: number | null
   knowledgeSpaceIdsDraft?: number[]
-  pendingKnowledgeSpaceIds?: number[]
   settingsDraft: ConversationSettings
   setChatError: (value: string | null) => void
   t: I18nContextValue['t']
@@ -57,7 +56,10 @@ interface UseChatGenerationOptions {
   nextGenerationIdRef: MutableRefObject<number>
   reconcileConversationState: (
     conversationId: Conversation['id'],
-    options?: { clearErrorOnSuccess?: boolean },
+    options?: {
+      clearErrorOnSuccess?: boolean
+      preserveMessages?: Message[]
+    },
   ) => Promise<unknown>
   waitForConversationToSettle: (
     conversationId: Conversation['id'],
@@ -69,12 +71,12 @@ interface UseChatGenerationOptions {
 export function useChatGeneration({
   activeConversationId,
   currentConversation,
+  messages,
   composerValue,
   selectedAttachments,
   editingMessageId,
   conversationFolderDraft,
   conversationTagsDraft,
-  workflowPresetIdDraft = null,
   knowledgeSpaceIdsDraft = [],
   settingsDraft,
   setChatError,
@@ -95,11 +97,8 @@ export function useChatGeneration({
   cleanupEmptyCreatedConversation,
 }: UseChatGenerationOptions) {
   const {
-    executionEvents,
-    pendingConfirmationId,
     flushActiveMessageDelta,
     handleStreamEventForConversation,
-    persistExecutionState,
     readLastEventSeq,
     resetExecutionState,
   } = useChatGenerationStreamState({
@@ -161,6 +160,20 @@ export function useChatGeneration({
     }
   }
 
+  function markAssistantAsFailed(messagesToUpdate: Message[], assistantId: number) {
+    return messagesToUpdate.map((message) => {
+      if (message.id !== assistantId) {
+        return message
+      }
+
+      return {
+        ...message,
+        status: 'failed' as const,
+        content: message.content || t('error.completeReply'),
+      }
+    })
+  }
+
   async function handleSendSubmit(content: string, attachments: Attachment[]) {
     setChatError(null)
     setIsSending(true)
@@ -170,6 +183,7 @@ export function useChatGeneration({
     let createdConversationId: Conversation['id'] | null = null
     let shouldNavigateToConversation = false
     let generation: ActiveGenerationState | null = null
+    let optimisticMessages: Message[] = []
     const submittedSettings = snapshotSubmittedSettings()
 
     try {
@@ -184,7 +198,6 @@ export function useChatGeneration({
             conversationTagsDraft,
           ),
           settings: submittedSettings,
-          workflowPresetId: workflowPresetIdDraft,
           knowledgeSpaceIds: knowledgeSpaceIdsDraft,
         })
         conversation = createdConversation
@@ -231,6 +244,11 @@ export function useChatGeneration({
         runSummary: defaultAgentRunSummary,
         createdAt: createLocalISOString(),
       }
+      optimisticMessages = [
+        ...messages,
+        optimisticUserMessage,
+        optimisticAssistantMessage,
+      ]
 
       setMessages((previous) => [
         ...previous,
@@ -245,8 +263,6 @@ export function useChatGeneration({
           content,
           attachments,
           options: initialStreamSettings,
-          workflowPresetId:
-            conversation?.workflowPresetId ?? workflowPresetIdDraft,
           knowledgeSpaceIds:
             conversation?.knowledgeSpaceIds ?? knowledgeSpaceIdsDraft,
         },
@@ -271,18 +287,12 @@ export function useChatGeneration({
 
       const errorMessage =
         error instanceof Error ? error.message : t('error.sendMessage')
+      const preserveMessages = markAssistantAsFailed(
+        optimisticMessages,
+        optimisticAssistantId,
+      )
       setMessages((previous) =>
-        previous.map((message) => {
-          if (message.id !== optimisticAssistantId) {
-            return message
-          }
-          return {
-            ...message,
-            status: 'failed',
-            content: message.content || t('error.completeReply'),
-            reasoningContent: message.reasoningContent ?? '',
-          }
-        }),
+        markAssistantAsFailed(previous, optimisticAssistantId),
       )
       if (createdConversationId) {
         skipNextConversationSyncRef.current = createdConversationId
@@ -290,6 +300,7 @@ export function useChatGeneration({
       } else if (conversationId) {
         await reconcileConversationState(conversationId, {
           clearErrorOnSuccess: false,
+          preserveMessages,
         })
       }
       setChatError(errorMessage)
@@ -316,6 +327,17 @@ export function useChatGeneration({
     setChatError(null)
     setIsSending(true)
     const optimisticAssistantId = -(Date.now() + 1)
+    const optimisticAssistantMessage: Message = {
+      id: optimisticAssistantId,
+      conversationId,
+      role: 'assistant',
+      content: '',
+      reasoningContent: '',
+      attachments: [],
+      status: 'streaming',
+      runSummary: defaultAgentRunSummary,
+      createdAt: createLocalISOString(),
+    }
     const generation = beginGeneration({
       conversationId,
       placeholderId: optimisticAssistantId,
@@ -325,6 +347,24 @@ export function useChatGeneration({
       setChatError,
       resetExecutionState,
     })
+    const optimisticMessages = [
+      ...messages
+        .filter((message) => message.id <= messageId)
+        .map((message) =>
+          message.id === messageId
+              ? {
+                  ...message,
+                  content,
+                  attachments,
+                  status: 'completed' as const,
+                  runSummary: defaultAgentRunSummary,
+                }
+            : message,
+        ),
+      {
+        ...optimisticAssistantMessage,
+      },
+    ]
 
     try {
       setMessages((previous) => {
@@ -336,24 +376,13 @@ export function useChatGeneration({
                     ...message,
                     content,
                     attachments,
-                    reasoningContent: '',
                     status: 'completed' as const,
                     runSummary: defaultAgentRunSummary,
                   }
               : message,
           )
 
-        updatedMessages.push({
-          id: optimisticAssistantId,
-          conversationId,
-          role: 'assistant',
-          content: '',
-          reasoningContent: '',
-          attachments: [],
-          status: 'streaming',
-          runSummary: defaultAgentRunSummary,
-          createdAt: createLocalISOString(),
-        })
+        updatedMessages.push(optimisticAssistantMessage)
 
         return updatedMessages
       })
@@ -390,20 +419,16 @@ export function useChatGeneration({
       setChatError(
         error instanceof Error ? error.message : t('error.updateMessage'),
       )
+      const preserveMessages = markAssistantAsFailed(
+        optimisticMessages,
+        optimisticAssistantId,
+      )
       setMessages((previous) =>
-        previous.map((message) =>
-          message.id === optimisticAssistantId
-            ? {
-                ...message,
-                status: 'failed',
-                content: message.content || t('error.completeReply'),
-                reasoningContent: message.reasoningContent ?? '',
-              }
-            : message,
-        ),
+        markAssistantAsFailed(previous, optimisticAssistantId),
       )
       await reconcileConversationState(conversationId, {
         clearErrorOnSuccess: false,
+        preserveMessages,
       })
     } finally {
       await settleGenerationCleanup({
@@ -439,6 +464,21 @@ export function useChatGeneration({
       setChatError,
       resetExecutionState,
     })
+    const optimisticMessages = messages
+      .filter((item) => item.id <= message.id)
+      .map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              content: '',
+              reasoningContent: '',
+              attachments: [],
+              status: 'streaming' as const,
+              localReasoningStartedAt: undefined,
+              localReasoningCompletedAt: undefined,
+            }
+          : item,
+      )
 
     try {
       setMessages((previous) =>
@@ -452,6 +492,8 @@ export function useChatGeneration({
                   reasoningContent: '',
                   attachments: [],
                   status: 'streaming',
+                  localReasoningStartedAt: undefined,
+                  localReasoningCompletedAt: undefined,
                 }
               : item,
           ),
@@ -483,20 +525,16 @@ export function useChatGeneration({
       setChatError(
         error instanceof Error ? error.message : t('error.retryReply'),
       )
+      const preserveMessages = markAssistantAsFailed(
+        optimisticMessages,
+        message.id,
+      )
       setMessages((previous) =>
-        previous.map((item) =>
-          item.id === message.id
-            ? {
-                ...item,
-                status: 'failed',
-                content: item.content || t('error.completeReply'),
-                reasoningContent: item.reasoningContent ?? '',
-              }
-            : item,
-        ),
+        markAssistantAsFailed(previous, message.id),
       )
       await reconcileConversationState(message.conversationId, {
         clearErrorOnSuccess: false,
+        preserveMessages,
       })
     } finally {
       await settleGenerationCleanup({
@@ -532,6 +570,21 @@ export function useChatGeneration({
       setChatError,
       resetExecutionState,
     })
+    const optimisticMessages = messages
+      .filter((item) => item.id <= message.id)
+      .map((item) =>
+        item.id === message.id
+          ? {
+              ...item,
+              content: '',
+              reasoningContent: '',
+              attachments: [],
+              status: 'streaming' as const,
+              localReasoningStartedAt: undefined,
+              localReasoningCompletedAt: undefined,
+            }
+          : item,
+      )
 
     try {
       setMessages((previous) =>
@@ -545,6 +598,8 @@ export function useChatGeneration({
                   reasoningContent: '',
                   attachments: [],
                   status: 'streaming',
+                  localReasoningStartedAt: undefined,
+                  localReasoningCompletedAt: undefined,
                 }
               : item,
           ),
@@ -576,20 +631,16 @@ export function useChatGeneration({
       setChatError(
         error instanceof Error ? error.message : t('error.regenerateReply'),
       )
+      const preserveMessages = markAssistantAsFailed(
+        optimisticMessages,
+        message.id,
+      )
       setMessages((previous) =>
-        previous.map((item) =>
-          item.id === message.id
-            ? {
-                ...item,
-                status: 'failed',
-                content: item.content || t('error.completeReply'),
-                reasoningContent: item.reasoningContent ?? '',
-              }
-            : item,
-        ),
+        markAssistantAsFailed(previous, message.id),
       )
       await reconcileConversationState(message.conversationId, {
         clearErrorOnSuccess: false,
+        preserveMessages,
       })
     } finally {
       await settleGenerationCleanup({
@@ -619,25 +670,6 @@ export function useChatGeneration({
     activeGeneration.stopRequested = true
     activeGeneration.stopPromise = settleStoppedGeneration(activeGeneration)
     await activeGeneration.stopPromise
-  }
-
-  async function handleConfirmToolCall(approved: boolean) {
-    if (!pendingConfirmationId || !activeConversationId) {
-      return
-    }
-
-    try {
-      await agentApi.confirmToolCall(pendingConfirmationId, approved)
-      persistExecutionState(activeConversationId, {
-        events: executionEvents,
-        pendingConfirmationId: null,
-        lastEventSeq: readLastEventSeq(activeConversationId),
-      })
-    } catch (error) {
-      setChatError(
-        error instanceof Error ? error.message : t('error.streamingFailed'),
-      )
-    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -740,8 +772,5 @@ export function useChatGeneration({
     handleRegenerateAssistant,
     handleStopGeneration,
     handleSubmit,
-    executionEvents,
-    pendingConfirmationId,
-    handleConfirmToolCall,
   }
 }

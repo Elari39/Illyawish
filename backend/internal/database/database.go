@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"backend/internal/config"
 	"backend/internal/models"
@@ -13,13 +14,14 @@ import (
 )
 
 const sharedSQLiteFileMode = 0o666
+const sqliteBusyTimeoutMilliseconds = 5000
 
 func Open(cfg *config.Config) (*gorm.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(cfg.SQLitePath), 0o755); err != nil {
 		return nil, fmt.Errorf("create sqlite directory: %w", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(cfg.SQLitePath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(buildSQLiteDSN(cfg.SQLitePath)), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite database: %w", err)
 	}
@@ -40,12 +42,14 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		&models.KnowledgeDocument{},
 		&models.KnowledgeChunk{},
 		&models.AuditLog{},
-		&models.WorkflowPreset{},
 		&models.WorkspacePolicy{},
 	); err != nil {
 		return nil, fmt.Errorf("auto migrate database: %w", err)
 	}
 
+	if err := cleanupObsoleteWorkflowSchema(db); err != nil {
+		return nil, err
+	}
 	if err := migrateLegacyMessageAttachments(db); err != nil {
 		return nil, err
 	}
@@ -57,6 +61,29 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	}
 
 	return db, nil
+}
+
+func buildSQLiteDSN(path string) string {
+	params := []string{
+		fmt.Sprintf("_busy_timeout=%d", sqliteBusyTimeoutMilliseconds),
+	}
+	if shouldUseSQLiteWAL(path) {
+		params = append(params, "_journal_mode=WAL")
+	}
+
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+
+	return path + separator + strings.Join(params, "&")
+}
+
+func shouldUseSQLiteWAL(path string) bool {
+	normalizedPath := strings.ToLower(strings.TrimSpace(path))
+	return normalizedPath != "" &&
+		normalizedPath != ":memory:" &&
+		!strings.Contains(normalizedPath, "mode=memory")
 }
 
 func ensureSharedWritableSQLiteArtifacts(sqlitePath string) error {
@@ -101,6 +128,20 @@ func rejectLegacyConversationSchema(db *gorm.DB, sqlitePath string) error {
 		"legacy conversations schema detected in %s: conversations.public_id is missing; delete this SQLite file and restart the backend to recreate the database with UUID conversation URLs",
 		absolutePath,
 	)
+}
+
+func cleanupObsoleteWorkflowSchema(db *gorm.DB) error {
+	if db.Migrator().HasColumn("conversations", "workflow_preset_id") {
+		if err := db.Exec("ALTER TABLE conversations DROP COLUMN workflow_preset_id").Error; err != nil {
+			return fmt.Errorf("drop conversations.workflow_preset_id: %w", err)
+		}
+	}
+	if db.Migrator().HasTable("workflow_presets") {
+		if err := db.Migrator().DropTable("workflow_presets"); err != nil {
+			return fmt.Errorf("drop workflow_presets table: %w", err)
+		}
+	}
+	return nil
 }
 
 func migrateUsersAndWorkspacePolicy(db *gorm.DB) error {

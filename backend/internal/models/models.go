@@ -67,7 +67,6 @@ type User struct {
 	LLMProviderPresets        []LLMProviderPreset
 	RAGProviderPresets        []RAGProviderPreset
 	KnowledgeSpaces           []KnowledgeSpace
-	WorkflowPresets           []WorkflowPreset
 	Attachments               []StoredAttachment
 	AuditLogs                 []AuditLog `gorm:"foreignKey:ActorID"`
 }
@@ -87,7 +86,6 @@ type Conversation struct {
 	Temperature        *float32
 	MaxTokens          *int
 	ContextWindowTurns *int
-	WorkflowPresetID   *uint
 	KnowledgeSpaceIDs  []uint `gorm:"serializer:json;type:text"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time `gorm:"index:idx_conversations_user_view,priority:4"`

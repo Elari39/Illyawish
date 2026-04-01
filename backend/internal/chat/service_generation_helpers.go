@@ -93,6 +93,7 @@ func (s *Service) streamIntoAssistantMessage(
 	providerConfig llm.ProviderConfig,
 	history []llm.ChatMessage,
 	settings ConversationSettings,
+	runSummary *models.AgentRunSummary,
 	emit func(StreamEvent) error,
 ) error {
 	if err := emit(StreamEvent{
@@ -111,9 +112,7 @@ func (s *Service) streamIntoAssistantMessage(
 		MaxTokens:   cloneInt(settings.MaxTokens),
 	}
 
-	accumulatedContent := ""
-	accumulatedReasoning := ""
-	reasoningStarted := false
+	buffer := &assistantResponseBuffer{}
 	var emitErr error
 	emitStreamEvent := func(event StreamEvent) bool {
 		if emitErr != nil {
@@ -126,57 +125,19 @@ func (s *Service) streamIntoAssistantMessage(
 		}
 		return true
 	}
-	emitReasoningDelta := func(reasoning string) {
-		if strings.TrimSpace(reasoning) == "" {
-			return
-		}
-		if !reasoningStarted {
-			reasoningStarted = true
-			if !emitStreamEvent(StreamEvent{Type: "reasoning_start"}) {
-				return
-			}
-		}
-		accumulatedReasoning += reasoning
-		emitStreamEvent(StreamEvent{
-			Type:    "reasoning_delta",
-			Content: reasoning,
-		})
-	}
-	emitReasoningDone := func() {
-		if !reasoningStarted || emitErr != nil {
-			return
-		}
-		emitStreamEvent(StreamEvent{
-			Type:    "reasoning_done",
-			Content: accumulatedReasoning,
-		})
-	}
 
 	streamResult, streamErr := s.model.Stream(ctx, providerConfig, history, streamOptions, func(delta llm.StreamDelta) {
 		if emitErr != nil {
 			return
 		}
-		if delta.Reasoning != "" {
-			emitReasoningDelta(delta.Reasoning)
-		}
-		if delta.Content == "" || emitErr != nil {
+		if (delta.Content == "" && delta.Reasoning == "") || emitErr != nil {
 			return
 		}
-		accumulatedContent += delta.Content
-		emitStreamEvent(StreamEvent{
-			Type:    "delta",
-			Content: delta.Content,
-		})
+		buffer.applyDelta(delta.Content, delta.Reasoning, emitStreamEvent)
 	})
 
-	finalContent := streamResult.Content
-	if finalContent == "" {
-		finalContent = accumulatedContent
-	}
-	finalReasoning := streamResult.ReasoningContent
-	if finalReasoning == "" {
-		finalReasoning = accumulatedReasoning
-	}
+	finalContent := buffer.content
+	finalReasoning := buffer.reasoningContent
 
 	if emitErr != nil && streamErr == nil {
 		streamErr = emitErr
@@ -195,32 +156,24 @@ func (s *Service) streamIntoAssistantMessage(
 			if emitErr != nil {
 				return
 			}
-			if delta.Reasoning != "" {
-				emitReasoningDelta(delta.Reasoning)
-			}
-			if delta.Content == "" || emitErr != nil {
+			if (delta.Content == "" && delta.Reasoning == "") || emitErr != nil {
 				return
 			}
-			finalContent += delta.Content
-			emitStreamEvent(StreamEvent{
-				Type:    "delta",
-				Content: delta.Content,
-			})
+			buffer.applyDelta(delta.Content, delta.Reasoning, emitStreamEvent)
 		})
-		if continueResult.Content != "" && !strings.HasSuffix(finalContent, continueResult.Content) {
-			finalContent += continueResult.Content
-		}
-		if continueResult.ReasoningContent != "" && !strings.HasSuffix(accumulatedReasoning, continueResult.ReasoningContent) {
-			accumulatedReasoning += continueResult.ReasoningContent
-		}
+		finalContent = buffer.content
+		finalReasoning = buffer.reasoningContent
 		streamResult = continueResult
 		streamErr = continueErr
-		finalReasoning = accumulatedReasoning
 	}
 
 	if emitErr != nil && streamErr == nil {
 		streamErr = emitErr
 	}
+
+	buffer.finishReasoning(emitStreamEvent)
+	finalContent = buffer.content
+	finalReasoning = buffer.reasoningContent
 
 	if streamErr != nil {
 		status := models.MessageStatusFailed
@@ -231,21 +184,22 @@ func (s *Service) streamIntoAssistantMessage(
 			eventType = "cancelled"
 		}
 
-		if err := s.db.Model(assistantMessage).Updates(map[string]any{
-			"content":           finalContent,
-			"reasoning_content": finalReasoning,
-			"status":            status,
-		}).Error; err != nil {
-			return fmt.Errorf("finalize assistant message: %w", err)
-		}
-
 		assistantMessage.Content = finalContent
 		assistantMessage.ReasoningContent = finalReasoning
 		assistantMessage.Status = status
+		assistantMessage.RunSummary = models.AgentRunSummary{}
+		if runSummary != nil {
+			assistantMessage.RunSummary = *runSummary
+		}
+		if err := s.db.Model(assistantMessage).
+			Select("content", "reasoning_content", "status", "run_summary").
+			Updates(assistantMessage).Error; err != nil {
+			return fmt.Errorf("finalize assistant message: %w", err)
+		}
+
 		if emitErr != nil {
 			return emitErr
 		}
-		emitReasoningDone()
 		emitStreamEvent(StreamEvent{
 			Type:    eventType,
 			Error:   streamErr.Error(),
@@ -254,25 +208,30 @@ func (s *Service) streamIntoAssistantMessage(
 		return nil
 	}
 
-	if err := s.db.Model(assistantMessage).Updates(map[string]any{
-		"content":           finalContent,
-		"reasoning_content": finalReasoning,
-		"status":            models.MessageStatusCompleted,
-	}).Error; err != nil {
-		return fmt.Errorf("complete assistant message: %w", err)
-	}
-
 	assistantMessage.Content = finalContent
 	assistantMessage.ReasoningContent = finalReasoning
 	assistantMessage.Status = models.MessageStatusCompleted
-	emitReasoningDone()
+	assistantMessage.RunSummary = models.AgentRunSummary{}
+	if runSummary != nil {
+		assistantMessage.RunSummary = *runSummary
+	}
+	if err := s.db.Model(assistantMessage).
+		Select("content", "reasoning_content", "status", "run_summary").
+		Updates(assistantMessage).Error; err != nil {
+		return fmt.Errorf("complete assistant message: %w", err)
+	}
+
 	if emitErr != nil {
 		return emitErr
 	}
-	return emit(StreamEvent{
+	doneEvent := StreamEvent{
 		Type:    "done",
 		Message: ToMessageDTO(assistantMessage, conversationPublicID),
-	})
+	}
+	if runSummary != nil {
+		doneEvent.Citations = append([]models.AgentCitation(nil), runSummary.Citations...)
+	}
+	return emit(doneEvent)
 }
 
 func (s *Service) historyForModel(
@@ -404,6 +363,20 @@ func (s *Service) streamActiveRun(
 	})
 }
 
+func (s *Service) waitForActiveRunCompletion(
+	ctx context.Context,
+	conversationID uint,
+) bool {
+	s.activeMu.Lock()
+	run, exists := s.activeStreams[conversationID]
+	s.activeMu.Unlock()
+	if !exists {
+		return true
+	}
+
+	return run.wait(ctx)
+}
+
 func (s *Service) scheduleDetachCancellation(conversationID uint, run *activeRun) {
 	run.mu.Lock()
 	defer run.mu.Unlock()
@@ -412,9 +385,11 @@ func (s *Service) scheduleDetachCancellation(conversationID uint, run *activeRun
 		return
 	}
 
+	done := run.done
 	run.detachTimer = time.AfterFunc(s.detachTimeout, func() {
 		run.setCancelReason(runCancelReasonDetached)
 		run.cancel()
+		<-done
 	})
 }
 

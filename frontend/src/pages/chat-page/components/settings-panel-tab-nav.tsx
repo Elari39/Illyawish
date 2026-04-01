@@ -14,7 +14,6 @@ const SETTINGS_TABS: Array<{ key: SettingsTab; labelKey: TranslationKey }> = [
   { key: 'provider', labelKey: 'settings.providerTab' },
   { key: 'rag', labelKey: 'settings.ragTab' },
   { key: 'knowledge', labelKey: 'settings.knowledgeTab' },
-  { key: 'workflow', labelKey: 'settings.workflowTab' },
   { key: 'security', labelKey: 'settings.securityTab' },
   { key: 'language', labelKey: 'settings.languageTab' },
   { key: 'transfer', labelKey: 'settings.transferTab' },

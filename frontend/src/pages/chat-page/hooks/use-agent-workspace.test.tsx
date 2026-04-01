@@ -17,11 +17,6 @@ const updateKnowledgeDocumentMock = vi.fn()
 const replaceKnowledgeDocumentFileMock = vi.fn()
 const deleteKnowledgeDocumentMock = vi.fn()
 const uploadKnowledgeDocumentsMock = vi.fn()
-const listTemplatesMock = vi.fn()
-const listPresetsMock = vi.fn()
-const createPresetMock = vi.fn()
-const updatePresetMock = vi.fn()
-const deletePresetMock = vi.fn()
 
 vi.mock('../../../lib/api', () => ({
   ragApi: {
@@ -38,13 +33,6 @@ vi.mock('../../../lib/api', () => ({
     uploadKnowledgeDocuments: (...args: unknown[]) => uploadKnowledgeDocumentsMock(...args),
     createProvider: vi.fn(),
     activateProvider: vi.fn(),
-  },
-  workflowApi: {
-    listTemplates: (...args: unknown[]) => listTemplatesMock(...args),
-    listPresets: (...args: unknown[]) => listPresetsMock(...args),
-    createPreset: (...args: unknown[]) => createPresetMock(...args),
-    updatePreset: (...args: unknown[]) => updatePresetMock(...args),
-    deletePreset: (...args: unknown[]) => deletePresetMock(...args),
   },
 }))
 
@@ -88,16 +76,9 @@ describe('useAgentWorkspace', () => {
     replaceKnowledgeDocumentFileMock.mockReset()
     deleteKnowledgeDocumentMock.mockReset()
     uploadKnowledgeDocumentsMock.mockReset()
-    listTemplatesMock.mockReset()
-    listPresetsMock.mockReset()
-    createPresetMock.mockReset()
-    updatePresetMock.mockReset()
-    deletePresetMock.mockReset()
 
     getProvidersMock.mockResolvedValue(null)
     listKnowledgeSpacesMock.mockResolvedValue([])
-    listTemplatesMock.mockResolvedValue([])
-    listPresetsMock.mockResolvedValue([])
   })
 
   it('removes deleted spaces from workspace state and clears cached documents', async () => {
@@ -187,98 +168,10 @@ describe('useAgentWorkspace', () => {
     expect(result.current.knowledgeDocuments[space.id]).toEqual([])
   })
 
-  it('updates and deletes workflow presets in local state', async () => {
-    listPresetsMock.mockResolvedValue([
-      {
-        id: 5,
-        userId: 3,
-        name: 'Knowledge Q&A',
-        templateKey: 'knowledge_qa',
-        defaultInputs: {},
-        knowledgeSpaceIds: [],
-        toolEnablements: {},
-        outputMode: 'markdown',
-        createdAt: '2026-03-26T09:08:00Z',
-        updatedAt: '2026-03-26T09:08:00Z',
-      },
-    ])
-    updatePresetMock.mockResolvedValue({
-      id: 5,
-      userId: 3,
-      name: 'Web Digest',
-      templateKey: 'webpage_digest',
-      defaultInputs: { url: 'https://example.com' },
-      knowledgeSpaceIds: [11],
-      toolEnablements: { fetch_url: true },
-      outputMode: 'markdown',
-      createdAt: '2026-03-26T09:08:00Z',
-      updatedAt: '2026-03-27T09:08:00Z',
-    })
-    deletePresetMock.mockResolvedValue(undefined)
-
-    const { result } = renderHook(
-      () =>
-        useAgentWorkspace({
-          isSettingsOpen: false,
-          setChatError: vi.fn(),
-        }),
-      { wrapper },
-    )
-
-    await act(async () => {
-      await result.current.loadWorkspace()
-    })
-
-    await act(async () => {
-      await result.current.updateWorkflowPreset(5, {
-        name: 'Web Digest',
-        templateKey: 'webpage_digest',
-        knowledgeSpaceIds: [11],
-        outputMode: 'markdown',
-      })
-    })
-
-    expect(result.current.workflowPresets).toHaveLength(1)
-    expect(result.current.workflowPresets[0]).toMatchObject({
-      id: 5,
-      name: 'Web Digest',
-      templateKey: 'webpage_digest',
-      knowledgeSpaceIds: [11],
-    })
-
-    await act(async () => {
-      await result.current.deleteWorkflowPreset(5)
-    })
-
-    expect(result.current.workflowPresets).toEqual([])
-  })
-
-  it('keeps knowledge and workflow data when provider loading fails', async () => {
+  it('keeps knowledge data when provider loading fails', async () => {
     const setChatError = vi.fn()
     getProvidersMock.mockRejectedValue(new Error('provider unavailable'))
     listKnowledgeSpacesMock.mockResolvedValue([space])
-    listTemplatesMock.mockResolvedValue([
-      {
-        key: 'knowledge_qa',
-        name: 'Knowledge Q&A',
-        description: 'Answer questions from knowledge spaces.',
-        nodes: [],
-      },
-    ])
-    listPresetsMock.mockResolvedValue([
-      {
-        id: 5,
-        userId: 3,
-        name: 'Knowledge Q&A',
-        templateKey: 'knowledge_qa',
-        defaultInputs: {},
-        knowledgeSpaceIds: [space.id],
-        toolEnablements: {},
-        outputMode: 'markdown',
-        createdAt: '2026-03-26T09:08:00Z',
-        updatedAt: '2026-03-26T09:08:00Z',
-      },
-    ])
 
     const { result } = renderHook(
       () =>
@@ -295,48 +188,12 @@ describe('useAgentWorkspace', () => {
 
     expect(result.current.ragProviders).toBeNull()
     expect(result.current.knowledgeSpaces).toEqual([space])
-    expect(result.current.workflowTemplates).toEqual([
-      {
-        key: 'knowledge_qa',
-        name: 'Knowledge Q&A',
-        description: 'Answer questions from knowledge spaces.',
-        nodes: [],
-      },
-    ])
-    expect(result.current.workflowPresets).toEqual([
-      expect.objectContaining({
-        id: 5,
-        knowledgeSpaceIds: [space.id],
-      }),
-    ])
     expect(setChatError).toHaveBeenLastCalledWith('provider unavailable')
   })
 
-  it('keeps workflow data and reports an error when knowledge spaces fail to load', async () => {
+  it('reports an error when knowledge spaces fail to load', async () => {
     const setChatError = vi.fn()
     listKnowledgeSpacesMock.mockRejectedValue(new Error('spaces unavailable'))
-    listTemplatesMock.mockResolvedValue([
-      {
-        key: 'webpage_digest',
-        name: 'Webpage Digest',
-        description: 'Summarize a webpage.',
-        nodes: [],
-      },
-    ])
-    listPresetsMock.mockResolvedValue([
-      {
-        id: 9,
-        userId: 3,
-        name: 'Web Digest',
-        templateKey: 'webpage_digest',
-        defaultInputs: { url: 'https://example.com' },
-        knowledgeSpaceIds: [],
-        toolEnablements: { fetch_url: true },
-        outputMode: 'markdown',
-        createdAt: '2026-03-26T09:08:00Z',
-        updatedAt: '2026-03-26T09:08:00Z',
-      },
-    ])
 
     const { result } = renderHook(
       () =>
@@ -352,20 +209,6 @@ describe('useAgentWorkspace', () => {
     })
 
     expect(result.current.knowledgeSpaces).toEqual([])
-    expect(result.current.workflowTemplates).toEqual([
-      {
-        key: 'webpage_digest',
-        name: 'Webpage Digest',
-        description: 'Summarize a webpage.',
-        nodes: [],
-      },
-    ])
-    expect(result.current.workflowPresets).toEqual([
-      expect.objectContaining({
-        id: 9,
-        templateKey: 'webpage_digest',
-      }),
-    ])
     expect(setChatError).toHaveBeenLastCalledWith('spaces unavailable')
   })
 })

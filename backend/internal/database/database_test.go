@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -73,8 +74,8 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasColumn(&models.Conversation{}, "context_window_turns") {
 		t.Fatal("expected conversations.context_window_turns column to exist")
 	}
-	if !db.Migrator().HasColumn(&models.Conversation{}, "workflow_preset_id") {
-		t.Fatal("expected conversations.workflow_preset_id column to exist")
+	if db.Migrator().HasColumn("conversations", "workflow_preset_id") {
+		t.Fatal("expected conversations.workflow_preset_id column to be removed")
 	}
 	if !db.Migrator().HasColumn(&models.Conversation{}, "knowledge_space_ids") {
 		t.Fatal("expected conversations.knowledge_space_ids column to exist")
@@ -100,8 +101,8 @@ func TestSchemaCreatesConversationAndProviderIndexes(t *testing.T) {
 	if !db.Migrator().HasTable(&models.KnowledgeChunk{}) {
 		t.Fatal("expected knowledge_chunks table to exist")
 	}
-	if !db.Migrator().HasTable(&models.WorkflowPreset{}) {
-		t.Fatal("expected workflow_presets table to exist")
+	if db.Migrator().HasTable("workflow_presets") {
+		t.Fatal("expected workflow_presets table to be removed")
 	}
 }
 
@@ -218,6 +219,105 @@ func TestOpenCreatesSharedWritableSQLiteFile(t *testing.T) {
 	}
 }
 
+func TestOpenConfiguresSQLiteConcurrencyPragmas(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "pragmas.db")
+
+	db, err := Open(&config.Config{
+		SQLitePath: dbPath,
+		UploadDir:  filepath.Join(t.TempDir(), "uploads"),
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+	})
+
+	var busyTimeout string
+	if err := db.Raw("PRAGMA busy_timeout").Scan(&busyTimeout).Error; err != nil {
+		t.Fatalf("read busy_timeout pragma: %v", err)
+	}
+
+	busyTimeoutMs, err := strconv.Atoi(busyTimeout)
+	if err != nil {
+		t.Fatalf("parse busy_timeout pragma %q: %v", busyTimeout, err)
+	}
+	if busyTimeoutMs <= 0 {
+		t.Fatalf("expected busy_timeout > 0, got %d", busyTimeoutMs)
+	}
+
+	var journalMode string
+	if err := db.Raw("PRAGMA journal_mode").Scan(&journalMode).Error; err != nil {
+		t.Fatalf("read journal_mode pragma: %v", err)
+	}
+	if strings.ToLower(strings.TrimSpace(journalMode)) != "wal" {
+		t.Fatalf("expected journal_mode wal, got %q", journalMode)
+	}
+}
+
+func TestOpenDropsObsoleteWorkflowSchema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "workflow-cleanup.db")
+
+	legacyDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+
+	if err := legacyDB.Exec(`
+		CREATE TABLE conversations (
+			id INTEGER PRIMARY KEY,
+			public_id TEXT NOT NULL,
+			user_id INTEGER NOT NULL,
+			title TEXT NOT NULL DEFAULT 'New chat',
+			is_pinned numeric NOT NULL DEFAULT false,
+			is_archived numeric NOT NULL DEFAULT false,
+			folder TEXT NOT NULL DEFAULT '',
+			tags TEXT,
+			system_prompt TEXT NOT NULL DEFAULT '',
+			model TEXT NOT NULL DEFAULT '',
+			temperature REAL,
+			max_tokens INTEGER,
+			context_window_turns INTEGER,
+			workflow_preset_id INTEGER,
+			knowledge_space_ids TEXT,
+			created_at datetime,
+			updated_at datetime
+		)
+	`).Error; err != nil {
+		t.Fatalf("create conversations table: %v", err)
+	}
+	if err := legacyDB.Exec(`
+		CREATE TABLE workflow_presets (
+			id INTEGER PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			template_key TEXT NOT NULL
+		)
+	`).Error; err != nil {
+		t.Fatalf("create workflow_presets table: %v", err)
+	}
+
+	db, err := Open(&config.Config{
+		SQLitePath: dbPath,
+		UploadDir:  filepath.Join(t.TempDir(), "uploads"),
+	})
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+
+	if db.Migrator().HasColumn("conversations", "workflow_preset_id") {
+		t.Fatal("expected workflow_preset_id column to be dropped")
+	}
+	if db.Migrator().HasTable("workflow_presets") {
+		t.Fatal("expected workflow_presets table to be dropped")
+	}
+}
+
 func openDatabaseTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -238,7 +338,6 @@ func openDatabaseTestDB(t *testing.T) *gorm.DB {
 		&models.KnowledgeSpace{},
 		&models.KnowledgeDocument{},
 		&models.KnowledgeChunk{},
-		&models.WorkflowPreset{},
 	); err != nil {
 		t.Fatalf("migrate db: %v", err)
 	}

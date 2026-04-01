@@ -36,7 +36,6 @@ function createConversation(
     isArchived: false,
     folder: 'Existing folder',
     tags: ['existing'],
-    workflowPresetId: 19,
     knowledgeSpaceIds: [7, 8],
     settings: {
       systemPrompt: 'Saved conversation prompt',
@@ -75,9 +74,8 @@ describe('useChatSettingsState', () => {
     chatApiMock.getChatSettings.mockResolvedValue(persistedChatSettings)
   })
 
-  it('submits workflow changes with the full conversation settings payload', async () => {
+  it('submits knowledge changes with the full conversation settings payload', async () => {
     const updatedConversation = createConversation({
-      workflowPresetId: null,
       knowledgeSpaceIds: [],
       settings: {
         systemPrompt: 'New prompt',
@@ -100,7 +98,6 @@ describe('useChatSettingsState', () => {
     act(() => {
       result.current.setConversationFolderDraft(createConversation().folder)
       result.current.setConversationTagsDraft(createConversation().tags.join(', '))
-      result.current.setWorkflowPresetIdDraft(null)
       result.current.setKnowledgeSpaceIdsDraft([])
       result.current.setSettingsDraft({
         systemPrompt: 'New prompt',
@@ -119,7 +116,6 @@ describe('useChatSettingsState', () => {
     expect(chatApiMock.updateConversation).toHaveBeenCalledWith(
       'conversation-1',
       {
-        workflowPresetId: null,
         settings: {
           systemPrompt: 'New prompt',
           providerPresetId: null,
@@ -235,7 +231,6 @@ describe('useChatSettingsState', () => {
 
   it('does not resend already-applied knowledge changes during settings save', async () => {
     const updatedConversation = createConversation({
-      workflowPresetId: null,
       knowledgeSpaceIds: [7, 8],
       settings: {
         systemPrompt: 'New prompt',
@@ -257,7 +252,6 @@ describe('useChatSettingsState', () => {
 
     act(() => {
       result.current.syncSettingsDraft()
-      result.current.setWorkflowPresetIdDraft(null)
       result.current.setSettingsDraft({
         systemPrompt: 'New prompt',
         providerPresetId: null,
@@ -273,7 +267,6 @@ describe('useChatSettingsState', () => {
     })
 
     expect(chatApiMock.updateConversation).toHaveBeenCalledWith('conversation-1', {
-      workflowPresetId: null,
       settings: {
         systemPrompt: 'New prompt',
         providerPresetId: null,
@@ -317,7 +310,6 @@ describe('useChatSettingsState', () => {
         maxTokens: 1500,
         contextWindowTurns: 9,
       })
-      result.current.setWorkflowPresetIdDraft(33)
       result.current.setKnowledgeSpaceIdsDraft([99])
       result.current.setConversationFolderDraft('Edited folder')
       result.current.setConversationTagsDraft('edited, tags')
@@ -332,7 +324,6 @@ describe('useChatSettingsState', () => {
     expect(setChatError).toHaveBeenCalledWith('conversation update failed')
     expect(result.current.chatSettingsDraft).toEqual(persistedChatSettings)
     expect(result.current.settingsDraft).toEqual(createConversation().settings)
-    expect(result.current.workflowPresetIdDraft).toBe(createConversation().workflowPresetId)
     expect(result.current.knowledgeSpaceIdsDraft).toEqual(createConversation().knowledgeSpaceIds)
     expect(result.current.conversationFolderDraft).toBe(createConversation().folder)
     expect(result.current.conversationTagsDraft).toBe(createConversation().tags.join(', '))

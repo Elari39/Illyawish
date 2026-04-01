@@ -74,7 +74,6 @@ export interface Conversation {
   isArchived: boolean
   folder: string
   tags: string[]
-  workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
   settings: ConversationSettings
   createdAt: string
@@ -97,8 +96,6 @@ export interface AgentToolCallSummary {
 }
 
 export interface AgentRunSummary {
-  workflowTemplateKey: string
-  workflowPresetId: number | null
   knowledgeSpaceIds: number[]
   toolCalls: AgentToolCallSummary[]
   citations: AgentCitation[]
@@ -110,6 +107,8 @@ export interface Message {
   role: MessageRole
   content: string
   reasoningContent?: string
+  localReasoningStartedAt?: number
+  localReasoningCompletedAt?: number
   attachments: Attachment[]
   status: MessageStatus
   runSummary?: AgentRunSummary
@@ -145,8 +144,6 @@ export interface SendMessagePayload {
   content: string
   attachments?: Attachment[]
   options?: ConversationSettings
-  workflowPresetId?: number | null
-  workflowInputs?: Record<string, unknown>
   knowledgeSpaceIds?: number[]
 }
 
@@ -156,7 +153,6 @@ export interface UpdateConversationPayload {
   isArchived?: boolean
   folder?: string
   tags?: string[]
-  workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
   settings?: ConversationSettings
 }
@@ -164,7 +160,6 @@ export interface UpdateConversationPayload {
 export interface CreateConversationPayload {
   folder?: string
   tags?: string[]
-  workflowPresetId?: number | null
   knowledgeSpaceIds?: number[]
   settings?: ConversationSettings
 }
@@ -234,14 +229,14 @@ export interface MessageStartStreamEvent extends BaseStreamEvent {
   message: Message
 }
 
-export interface MessageDeltaStreamEvent extends BaseStreamEvent {
-  type: 'delta' | 'message_delta'
-  content: string
-}
-
 export interface ReasoningStreamEvent extends BaseStreamEvent {
   type: 'reasoning_start' | 'reasoning_delta' | 'reasoning_done'
   content?: string
+}
+
+export interface MessageDeltaStreamEvent extends BaseStreamEvent {
+  type: 'delta' | 'message_delta'
+  content: string
 }
 
 export interface CompletedStreamEvent extends BaseStreamEvent {
@@ -259,15 +254,6 @@ export interface RunStartedStreamEvent extends BaseStreamEvent {
   type: 'run_started'
 }
 
-export interface WorkflowStepStreamEvent extends BaseStreamEvent {
-  type: 'workflow_step_started' | 'workflow_step_completed'
-  stepName?: string
-}
-
-export interface RetrievalStreamEvent extends BaseStreamEvent {
-  type: 'retrieval_started' | 'retrieval_completed'
-}
-
 export interface ToolCallStreamEvent extends BaseStreamEvent {
   type: 'tool_call_started' | 'tool_call_completed'
 }
@@ -278,13 +264,11 @@ export interface ToolCallConfirmationStreamEvent extends BaseStreamEvent {
 
 export type StreamEvent =
   | MessageStartStreamEvent
-  | MessageDeltaStreamEvent
   | ReasoningStreamEvent
+  | MessageDeltaStreamEvent
   | CompletedStreamEvent
   | ErrorStreamEvent
   | RunStartedStreamEvent
-  | WorkflowStepStreamEvent
-  | RetrievalStreamEvent
   | ToolCallStreamEvent
   | ToolCallConfirmationStreamEvent
 
@@ -466,49 +450,4 @@ export interface UpdateKnowledgeDocumentPayload {
   title?: string
   sourceUri?: string
   content?: string
-}
-
-export interface WorkflowNode {
-  type: 'input' | 'retrieve' | 'tool' | 'prompt' | 'finalize'
-  name: string
-  toolName?: string
-  promptHint?: string
-}
-
-export interface WorkflowTemplate {
-  key: string
-  name: string
-  description: string
-  nodes: WorkflowNode[]
-}
-
-export interface WorkflowPreset {
-  id: number
-  userId: number
-  name: string
-  templateKey: string
-  defaultInputs: Record<string, unknown>
-  knowledgeSpaceIds: number[]
-  toolEnablements: Record<string, boolean>
-  outputMode: string
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CreateWorkflowPresetPayload {
-  name: string
-  templateKey: string
-  defaultInputs?: Record<string, unknown>
-  knowledgeSpaceIds?: number[]
-  toolEnablements?: Record<string, boolean>
-  outputMode?: string
-}
-
-export interface UpdateWorkflowPresetPayload {
-  name?: string
-  templateKey?: string
-  defaultInputs?: Record<string, unknown>
-  knowledgeSpaceIds?: number[]
-  toolEnablements?: Record<string, boolean>
-  outputMode?: string
 }

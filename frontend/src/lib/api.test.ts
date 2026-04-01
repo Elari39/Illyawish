@@ -94,7 +94,6 @@ describe('chatApi response normalization', () => {
         isArchived: false,
         folder: '',
         tags: [],
-        workflowPresetId: null,
         knowledgeSpaceIds: [],
         settings: {
           systemPrompt: '',
@@ -150,7 +149,6 @@ describe('chatApi response normalization', () => {
       isArchived: false,
       folder: '',
       tags: [],
-      workflowPresetId: null,
       knowledgeSpaceIds: [],
       settings: {
         systemPrompt: '',

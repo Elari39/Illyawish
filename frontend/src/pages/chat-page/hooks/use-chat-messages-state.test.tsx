@@ -10,7 +10,6 @@ function createMessage(id: number, role: Message['role'], content: string): Mess
     conversationId: 'conversation-1',
     role,
     content,
-    reasoningContent: '',
     attachments: [],
     status: role === 'assistant' ? 'streaming' : 'completed',
     createdAt: '2026-03-30T00:00:00Z',

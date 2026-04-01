@@ -12,7 +12,6 @@ import {
   resolveEffectiveProviderModel,
 } from '../provider-model-utils'
 import { clearLastConversationId } from '../utils'
-import type { useAgentWorkspace } from './use-agent-workspace'
 import type { useChatSession } from './use-chat-session'
 import type { useChatUIState } from './use-chat-ui-state'
 import type { useConversationList } from './use-conversation-list'
@@ -21,18 +20,15 @@ import type { useProviderSettings } from './use-provider-settings'
 type ConversationListController = ReturnType<typeof useConversationList>
 type ChatSessionController = ReturnType<typeof useChatSession>
 type ProviderSettingsController = ReturnType<typeof useProviderSettings>
-type AgentWorkspaceController = ReturnType<typeof useAgentWorkspace>
 type ChatUIStateController = ReturnType<typeof useChatUIState>
 
 interface UseChatPageActionsOptions {
   activeConversationId: Conversation['id'] | null
-  currentConversation: Conversation | null
   contextBarSettings: ConversationSettings
   interactionDisabled: boolean
   conversationList: ConversationListController
   chatSession: ChatSessionController
   providerSettings: ProviderSettingsController
-  agentWorkspace: AgentWorkspaceController
   uiState: ChatUIStateController
   navigate: (to: string, options?: { replace?: boolean }) => void
   navigateHome: (replace?: boolean) => void
@@ -44,13 +40,11 @@ interface UseChatPageActionsOptions {
 
 export function useChatPageActions({
   activeConversationId,
-  currentConversation,
   contextBarSettings,
   interactionDisabled,
   conversationList,
   chatSession,
   providerSettings,
-  agentWorkspace,
   uiState,
   navigate,
   navigateHome,
@@ -284,47 +278,6 @@ export function useChatPageActions({
     })
   }
 
-  async function handleDeleteWorkflowPreset(presetId: number) {
-    const preset = agentWorkspace.workflowPresets.find((entry) => entry.id === presetId)
-    if (!preset) {
-      return false
-    }
-
-    uiState.setConfirmation({
-      title: t('common.delete'),
-      description: t('confirm.deleteWorkflowPreset', { name: preset.name }),
-      confirmLabel: t('common.delete'),
-      variant: 'danger',
-      onConfirm: async () => {
-        const deleted = await agentWorkspace.deleteWorkflowPreset(presetId)
-        if (!deleted) {
-          return
-        }
-
-        if (chatSession.workflowPresetIdDraft === presetId) {
-          chatSession.setWorkflowPresetIdDraft(null)
-        }
-
-        if (currentConversation?.workflowPresetId === presetId) {
-          try {
-            const updatedConversation = await chatApi.updateConversation(currentConversation.id, {
-              workflowPresetId: null,
-            })
-            conversationList.syncConversationIntoList(updatedConversation)
-          } catch (error) {
-            setChatError(
-              error instanceof Error
-                ? error.message
-                : t('error.updateWorkflowPresetSelection'),
-            )
-          }
-        }
-      },
-    })
-
-    return false
-  }
-
   function handleMoveConversationToFolder(conversation: Conversation) {
     if (interactionDisabled) {
       return
@@ -527,7 +480,6 @@ export function useChatPageActions({
     handleProviderModelChange,
     handleSetDefaultProviderModel,
     handleDeleteProvider,
-    handleDeleteWorkflowPreset,
     handleMoveConversationToFolder,
     handleAddConversationTags,
     handleRemoveConversationTags,
