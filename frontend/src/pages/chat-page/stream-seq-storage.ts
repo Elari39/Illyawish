@@ -1,3 +1,5 @@
+import { readSessionStorage, writeSessionStorage } from '../../lib/storage'
+
 const STREAM_SEQ_STORAGE_PREFIX = 'aichat:stream-seq:'
 
 function buildStreamSeqStorageKey(conversationId: string) {
@@ -5,11 +7,7 @@ function buildStreamSeqStorageKey(conversationId: string) {
 }
 
 export function readLastEventSeq(conversationId: string) {
-  if (typeof window === 'undefined') {
-    return 0
-  }
-
-  const rawValue = window.sessionStorage.getItem(buildStreamSeqStorageKey(conversationId))
+  const rawValue = readSessionStorage(buildStreamSeqStorageKey(conversationId))
   if (!rawValue) {
     return 0
   }
@@ -19,14 +17,9 @@ export function readLastEventSeq(conversationId: string) {
 }
 
 export function writeLastEventSeq(conversationId: string, lastEventSeq: number) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
   const value =
     Number.isFinite(lastEventSeq) && lastEventSeq > 0
       ? String(lastEventSeq)
       : '0'
-  window.sessionStorage.setItem(buildStreamSeqStorageKey(conversationId), value)
+  writeSessionStorage(buildStreamSeqStorageKey(conversationId), value)
 }
-

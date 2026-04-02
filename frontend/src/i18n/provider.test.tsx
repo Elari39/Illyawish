@@ -21,6 +21,7 @@ function I18nProbe() {
 
 describe('I18nProvider', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     window.localStorage.clear()
     document.documentElement.lang = ''
   })
@@ -80,5 +81,47 @@ describe('I18nProvider', () => {
 
     expect(document.documentElement.lang).toBe('ja-JP')
     expect(window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)).toBe('ja-JP')
+  })
+
+  it('falls back to browser locale when reading localStorage throws on mount', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+    Object.defineProperty(window.navigator, 'languages', {
+      configurable: true,
+      value: ['ja-JP'],
+    })
+
+    render(
+      <I18nProvider>
+        <I18nProbe />
+      </I18nProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
+      expect(document.documentElement.lang).toBe('ja-JP')
+    })
+  })
+
+  it('still switches locale when writing localStorage throws', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+
+    render(
+      <I18nProvider>
+        <LanguageSwitcher />
+        <I18nProbe />
+      </I18nProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '日本語' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('locale')).toHaveTextContent('ja-JP')
+      expect(screen.getByTestId('message')).toHaveTextContent('読み込み中...')
+      expect(document.documentElement.lang).toBe('ja-JP')
+    }, { timeout: 3000 })
   })
 })

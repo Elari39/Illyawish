@@ -1,4 +1,9 @@
 import { ApiError } from '../../../lib/http'
+import {
+  readLocalStorage,
+  removeLocalStorage,
+  writeLocalStorage,
+} from '../../../lib/storage'
 import type { Conversation } from '../../../types/chat'
 import {
   DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -63,12 +68,8 @@ export function getAvailableConversationTags(
 }
 
 export function readDesktopSidebarCollapsedPreference() {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
   try {
-    const rawValue = window.localStorage.getItem(
+    const rawValue = readLocalStorage(
       DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
     )
     return rawValue ? JSON.parse(rawValue) === true : false
@@ -78,30 +79,18 @@ export function readDesktopSidebarCollapsedPreference() {
 }
 
 export function readLastConversationId() {
-  if (typeof window === 'undefined') {
-    return null
-  }
-
-  const rawValue = window.localStorage.getItem(LAST_CONVERSATION_STORAGE_KEY)
+  const rawValue = readLocalStorage(LAST_CONVERSATION_STORAGE_KEY)
   return rawValue && rawValue.trim() !== '' ? rawValue : null
 }
 
 export function writeLastConversationId(conversationId: Conversation['id']) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(
+  writeLocalStorage(
     LAST_CONVERSATION_STORAGE_KEY,
     String(conversationId),
   )
 }
 
 export function clearLastConversationId(conversationId?: Conversation['id']) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
   const storedConversationId = readLastConversationId()
   if (
     typeof conversationId === 'string' &&
@@ -111,7 +100,7 @@ export function clearLastConversationId(conversationId?: Conversation['id']) {
     return
   }
 
-  window.localStorage.removeItem(LAST_CONVERSATION_STORAGE_KEY)
+  removeLocalStorage(LAST_CONVERSATION_STORAGE_KEY)
 }
 
 export function resolveRestorableConversationId(

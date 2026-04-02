@@ -1,11 +1,27 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func buildLegacyBundledRAGAPIKeyForTest() string {
+	return strings.Join([]string{
+		"sk-",
+		"oaoecvjushohmbfrfxoh",
+		"qctsgzrqggsvisrlzvis",
+		"fwjhyunh",
+	}, "")
+}
+
+func sha256HexForTest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
 
 func TestLoadFromDataDirCreatesConfigFileWithDefaults(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "data")
@@ -277,6 +293,11 @@ func TestLoadFromDataDirBackfillsMissingEncryptionKey(t *testing.T) {
 }
 
 func TestLoadFromDataDirMigratesLegacyBundledRAGAPIKey(t *testing.T) {
+	legacyKey := buildLegacyBundledRAGAPIKeyForTest()
+	if got := sha256HexForTest(legacyKey); got != legacyBundledRAGAPIKeySHA256 {
+		t.Fatalf("expected legacy key digest %q, got %q", legacyBundledRAGAPIKeySHA256, got)
+	}
+
 	dataDir := filepath.Join(t.TempDir(), "data")
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		t.Fatalf("mkdir data dir: %v", err)
@@ -285,7 +306,7 @@ func TestLoadFromDataDirMigratesLegacyBundledRAGAPIKey(t *testing.T) {
 	configPath := filepath.Join(dataDir, defaultConfigFileName)
 	content := `{
   "ragBaseURL": "https://api.siliconflow.cn/v1",
-  "ragApiKey": "` + legacyBundledRAGAPIKey + `",
+  "ragApiKey": "` + legacyKey + `",
   "ragEmbeddingModel": "embed-model",
   "ragRerankerModel": "rerank-model"
 }

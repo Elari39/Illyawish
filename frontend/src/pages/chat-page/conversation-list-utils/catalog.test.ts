@@ -1,11 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Conversation } from '../../../types/chat'
 import {
+  clearLastConversationId,
   getAvailableConversationFolders,
   getAvailableConversationTags,
+  readDesktopSidebarCollapsedPreference,
+  readLastConversationId,
   sortConversations,
+  writeLastConversationId,
 } from './catalog'
+import {
+  DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
+  LAST_CONVERSATION_STORAGE_KEY,
+} from '../types'
 
 function createConversation(
   id: string,
@@ -31,6 +39,61 @@ function createConversation(
     ...overrides,
   }
 }
+
+describe('conversation list storage utilities', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('returns safe defaults when localStorage reads fail', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+
+    expect(readDesktopSidebarCollapsedPreference()).toBe(false)
+    expect(readLastConversationId()).toBeNull()
+  })
+
+  it('does not throw when writing or clearing the last conversation fails', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+
+    expect(() => writeLastConversationId('42')).not.toThrow()
+    expect(() => clearLastConversationId()).not.toThrow()
+  })
+
+  it('reads and writes last conversation ids when storage is available', () => {
+    writeLastConversationId('42')
+
+    expect(readLastConversationId()).toBe('42')
+
+    clearLastConversationId('42')
+
+    expect(readLastConversationId()).toBeNull()
+  })
+
+  it('parses the desktop sidebar preference from storage', () => {
+    window.localStorage.setItem(
+      DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
+      JSON.stringify(true),
+    )
+
+    expect(readDesktopSidebarCollapsedPreference()).toBe(true)
+  })
+
+  it('leaves an unrelated last conversation id untouched when clearing a different conversation', () => {
+    window.localStorage.setItem(LAST_CONVERSATION_STORAGE_KEY, '42')
+
+    clearLastConversationId('7')
+
+    expect(readLastConversationId()).toBe('42')
+  })
+})
 
 describe('conversation list catalog helpers', () => {
   it('collects unique non-empty folders in alphabetical order', () => {

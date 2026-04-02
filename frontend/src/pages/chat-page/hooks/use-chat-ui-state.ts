@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { writeLocalStorage } from '../../../lib/storage'
 import {
   DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
   type ConfirmationState,
@@ -23,7 +24,7 @@ export function useChatUIState() {
   const [promptState, setPromptState] = useState<PromptState | null>(null)
 
   useEffect(() => {
-    window.localStorage.setItem(
+    writeLocalStorage(
       DESKTOP_SIDEBAR_COLLAPSED_STORAGE_KEY,
       JSON.stringify(isDesktopSidebarCollapsed),
     )

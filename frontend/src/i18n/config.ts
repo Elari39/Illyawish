@@ -1,3 +1,5 @@
+import { readLocalStorage } from '../lib/storage'
+
 export type AppLocale = 'zh-CN' | 'en-US' | 'ja-JP'
 
 export const APP_LOCALE_STORAGE_KEY = 'aichat:locale'
@@ -34,9 +36,7 @@ export function getInitialLocale() {
     return DEFAULT_APP_LOCALE
   }
 
-  const storedLocale = matchAppLocale(
-    window.localStorage.getItem(APP_LOCALE_STORAGE_KEY),
-  )
+  const storedLocale = matchAppLocale(readLocalStorage(APP_LOCALE_STORAGE_KEY))
   if (storedLocale) {
     return storedLocale
   }

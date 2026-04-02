@@ -4,6 +4,7 @@ import {
   type ReactNode,
 } from 'react'
 
+import { readLocalStorage, writeLocalStorage } from '../lib/storage'
 import { ThemeContext, type Theme } from './theme-context'
 
 const STORAGE_KEY = 'aichat:theme'
@@ -13,25 +14,16 @@ function getSystemTheme(): 'light' | 'dark' {
 }
 
 function readStoredTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === 'light' || stored === 'dark' || stored === 'system') {
-      return stored
-    }
-  } catch {
-    return 'system'
+  const stored = readLocalStorage(STORAGE_KEY)
+  if (stored === 'light' || stored === 'dark' || stored === 'system') {
+    return stored
   }
 
   return 'system'
 }
 
 function persistTheme(theme: Theme): boolean {
-  try {
-    localStorage.setItem(STORAGE_KEY, theme)
-    return true
-  } catch {
-    return false
-  }
+  return writeLocalStorage(STORAGE_KEY, theme)
 }
 
 function applyTheme(resolved: 'light' | 'dark') {

@@ -125,6 +125,7 @@ function createOptions(
 
 describe('useChatGeneration saved settings behavior', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     window.sessionStorage.clear()
     for (const mockFn of Object.values(chatApiMock)) {
       mockFn.mockReset()
@@ -903,6 +904,83 @@ describe('useChatGeneration saved settings behavior', () => {
     )
 
     expect(setChatError).not.toHaveBeenCalledWith('error.generationStopped')
+  })
+
+  it('continues streaming when persisting sessionStorage sequence throws', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+
+    const setMessages = vi.fn()
+    chatApiMock.streamMessage.mockImplementation(
+      async (
+        _conversationId: string,
+        _payload: unknown,
+        onEvent: (event: MessageStreamEvent) => Promise<void>,
+      ) => {
+        await onEvent({
+          type: 'message_start',
+          seq: 1,
+          message: {
+            ...createMessage(61, 'assistant', 'streaming'),
+            conversationId: '7',
+            content: '',
+          },
+        })
+        await onEvent({
+          type: 'message_delta',
+          seq: 2,
+          content: 'partial answer',
+        })
+        await onEvent({
+          type: 'done',
+          seq: 3,
+          message: createMessage(61, 'assistant', 'completed'),
+        })
+      },
+    )
+    const { result } = renderHook(() => useChatGeneration(createOptions({
+      composerValue: 'First message',
+      setMessages,
+    })))
+
+    await act(async () => {
+      await result.current.handleSubmit({
+        preventDefault: vi.fn(),
+      } as unknown as React.FormEvent<HTMLFormElement>)
+    })
+
+    const appliedMessages = applyMessageUpdaters(
+      setMessages.mock.calls.map(([updater]) => updater),
+    )
+
+    expect(appliedMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 61,
+          status: 'completed',
+        }),
+      ]),
+    )
+  })
+
+  it('resumes streaming from sequence zero when reading sessionStorage throws', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('unavailable')
+    })
+
+    const { result } = renderHook(() => useChatGeneration(createOptions()))
+
+    await act(async () => {
+      await result.current.handleResumeConversation('7')
+    })
+
+    expect(chatApiMock.resumeStream).toHaveBeenCalledWith(
+      '7',
+      0,
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
   })
 
   it('preserves the optimistic user message and failed assistant when send fails', async () => {

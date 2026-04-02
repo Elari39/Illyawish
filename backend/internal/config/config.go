@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -12,15 +13,15 @@ import (
 )
 
 const (
-	defaultAppEnv            = "production"
-	defaultServerPort        = "5721"
-	defaultConfigFileName    = "app.json"
-	defaultSQLiteFileName    = "aichat.db"
-	defaultUploadDirName     = "uploads"
-	defaultRAGBaseURL        = "https://api.siliconflow.cn/v1"
-	defaultRAGEmbeddingModel = "Qwen/Qwen3-Embedding-8B"
-	defaultRAGRerankerModel  = "Qwen/Qwen3-Reranker-8B"
-	legacyBundledRAGAPIKey   = "sk-oaoecvjushohmbfrfxohqctsgzrqggsvisrlzvisfwjhyunh"
+	defaultAppEnv                = "production"
+	defaultServerPort            = "5721"
+	defaultConfigFileName        = "app.json"
+	defaultSQLiteFileName        = "aichat.db"
+	defaultUploadDirName         = "uploads"
+	defaultRAGBaseURL            = "https://api.siliconflow.cn/v1"
+	defaultRAGEmbeddingModel     = "Qwen/Qwen3-Embedding-8B"
+	defaultRAGRerankerModel      = "Qwen/Qwen3-Reranker-8B"
+	legacyBundledRAGAPIKeySHA256 = "48a1b73001077e6a3b25babb67a19580bb4784c39051c277985b9c626f717c69"
 )
 
 type Config struct {
@@ -165,7 +166,7 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		BootstrapPassword:                 strings.TrimSpace(raw.BootstrapPassword),
 	}
 
-	if normalized.RAGAPIKey == legacyBundledRAGAPIKey {
+	if isLegacyBundledRAGAPIKey(normalized.RAGAPIKey) {
 		normalized.RAGAPIKey = ""
 	}
 
@@ -354,6 +355,15 @@ func generateSecret() (string, error) {
 	}
 
 	return hex.EncodeToString(buf), nil
+}
+
+func isLegacyBundledRAGAPIKey(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:]) == legacyBundledRAGAPIKeySHA256
 }
 
 func cloneTrimmedStrings(values []string) []string {

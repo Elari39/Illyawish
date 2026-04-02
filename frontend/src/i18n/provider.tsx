@@ -22,6 +22,7 @@ import {
   type TranslationTable,
   type TranslationValues,
 } from './messages'
+import { writeLocalStorage } from '../lib/storage'
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const fallbackMessages = getFallbackMessages()
@@ -37,7 +38,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const isLocaleLoading = pendingLocale !== null
 
   useEffect(() => {
-    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, pendingLocale ?? locale)
+    writeLocalStorage(APP_LOCALE_STORAGE_KEY, pendingLocale ?? locale)
   }, [locale, pendingLocale])
 
   useEffect(() => {
