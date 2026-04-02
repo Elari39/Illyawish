@@ -1184,6 +1184,41 @@ func TestUpdateConversationPersistsConversationLevelSettings(t *testing.T) {
 	}
 }
 
+func TestUpdateConversationPersistsZeroConversationLevelSettings(t *testing.T) {
+	db, user, conversation := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	maxTokens := 0
+	contextWindowTurns := 0
+	updatedConversation, err := service.UpdateConversation(user.ID, conversation.ID, ConversationUpdateInput{
+		Settings: &ConversationSettings{
+			MaxTokens:          &maxTokens,
+			ContextWindowTurns: &contextWindowTurns,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateConversation() error = %v", err)
+	}
+
+	if updatedConversation.MaxTokens == nil || *updatedConversation.MaxTokens != 0 {
+		t.Fatalf("expected zero max tokens to update, got %#v", updatedConversation.MaxTokens)
+	}
+	if updatedConversation.ContextWindowTurns == nil || *updatedConversation.ContextWindowTurns != 0 {
+		t.Fatalf("expected zero context window turns to update, got %#v", updatedConversation.ContextWindowTurns)
+	}
+
+	var stored models.Conversation
+	if err := db.First(&stored, conversation.ID).Error; err != nil {
+		t.Fatalf("load conversation: %v", err)
+	}
+	if stored.MaxTokens == nil || *stored.MaxTokens != 0 {
+		t.Fatalf("expected zero max tokens to persist, got %#v", stored.MaxTokens)
+	}
+	if stored.ContextWindowTurns == nil || *stored.ContextWindowTurns != 0 {
+		t.Fatalf("expected zero context window turns to persist, got %#v", stored.ContextWindowTurns)
+	}
+}
+
 func TestUpdateConversationPersistsFolderAndTags(t *testing.T) {
 	db, user, conversation := newChatTestContext(t)
 	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})

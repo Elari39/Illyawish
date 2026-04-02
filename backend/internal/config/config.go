@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -37,32 +38,34 @@ type Config struct {
 	ServerPort                        string
 	SessionSecret                     string
 	SettingsEncryptionKey             string
+	TrustedProxies                    []string
 	TrustProxyHeadersForSecureCookies bool
 	BootstrapUsername                 string
 	BootstrapPassword                 string
 }
 
 type fileConfig struct {
-	AppEnv                            string `json:"appEnv,omitempty"`
-	ProviderFormat                    string `json:"providerFormat,omitempty"`
-	ProviderBaseURL                   string `json:"providerBaseURL,omitempty"`
-	ProviderAPIKey                    string `json:"providerApiKey,omitempty"`
-	ProviderModel                     string `json:"providerModel,omitempty"`
-	OpenAIBaseURL                     string `json:"openAIBaseURL,omitempty"`
-	OpenAIAPIKey                      string `json:"openAIApiKey,omitempty"`
-	Model                             string `json:"model,omitempty"`
-	RAGBaseURL                        string `json:"ragBaseURL,omitempty"`
-	RAGAPIKey                         string `json:"ragApiKey,omitempty"`
-	RAGEmbeddingModel                 string `json:"ragEmbeddingModel,omitempty"`
-	RAGRerankerModel                  string `json:"ragRerankerModel,omitempty"`
-	SQLitePath                        string `json:"sqlitePath,omitempty"`
-	UploadDir                         string `json:"uploadDir,omitempty"`
-	ServerPort                        string `json:"serverPort,omitempty"`
-	SessionSecret                     string `json:"sessionSecret,omitempty"`
-	SettingsEncryptionKey             string `json:"settingsEncryptionKey,omitempty"`
-	TrustProxyHeadersForSecureCookies bool   `json:"trustProxyHeadersForSecureCookies"`
-	BootstrapUsername                 string `json:"bootstrapUsername,omitempty"`
-	BootstrapPassword                 string `json:"bootstrapPassword,omitempty"`
+	AppEnv                            string   `json:"appEnv,omitempty"`
+	ProviderFormat                    string   `json:"providerFormat,omitempty"`
+	ProviderBaseURL                   string   `json:"providerBaseURL,omitempty"`
+	ProviderAPIKey                    string   `json:"providerApiKey,omitempty"`
+	ProviderModel                     string   `json:"providerModel,omitempty"`
+	OpenAIBaseURL                     string   `json:"openAIBaseURL,omitempty"`
+	OpenAIAPIKey                      string   `json:"openAIApiKey,omitempty"`
+	Model                             string   `json:"model,omitempty"`
+	RAGBaseURL                        string   `json:"ragBaseURL,omitempty"`
+	RAGAPIKey                         string   `json:"ragApiKey,omitempty"`
+	RAGEmbeddingModel                 string   `json:"ragEmbeddingModel,omitempty"`
+	RAGRerankerModel                  string   `json:"ragRerankerModel,omitempty"`
+	SQLitePath                        string   `json:"sqlitePath,omitempty"`
+	UploadDir                         string   `json:"uploadDir,omitempty"`
+	ServerPort                        string   `json:"serverPort,omitempty"`
+	SessionSecret                     string   `json:"sessionSecret,omitempty"`
+	SettingsEncryptionKey             string   `json:"settingsEncryptionKey,omitempty"`
+	TrustedProxies                    []string `json:"trustedProxies,omitempty"`
+	TrustProxyHeadersForSecureCookies bool     `json:"trustProxyHeadersForSecureCookies"`
+	BootstrapUsername                 string   `json:"bootstrapUsername,omitempty"`
+	BootstrapPassword                 string   `json:"bootstrapPassword,omitempty"`
 }
 
 func Load() (*Config, error) {
@@ -116,6 +119,7 @@ func loadFromDataDir(dataDir string) (*Config, error) {
 		ServerPort:                        normalized.ServerPort,
 		SessionSecret:                     normalized.SessionSecret,
 		SettingsEncryptionKey:             normalized.SettingsEncryptionKey,
+		TrustedProxies:                    cloneTrimmedStrings(normalized.TrustedProxies),
 		TrustProxyHeadersForSecureCookies: normalized.TrustProxyHeadersForSecureCookies,
 		BootstrapUsername:                 normalized.BootstrapUsername,
 		BootstrapPassword:                 normalized.BootstrapPassword,
@@ -155,6 +159,7 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		ServerPort:                        strings.TrimSpace(raw.ServerPort),
 		SessionSecret:                     strings.TrimSpace(raw.SessionSecret),
 		SettingsEncryptionKey:             strings.TrimSpace(raw.SettingsEncryptionKey),
+		TrustedProxies:                    cloneTrimmedStrings(raw.TrustedProxies),
 		TrustProxyHeadersForSecureCookies: raw.TrustProxyHeadersForSecureCookies,
 		BootstrapUsername:                 strings.TrimSpace(raw.BootstrapUsername),
 		BootstrapPassword:                 strings.TrimSpace(raw.BootstrapPassword),
@@ -214,7 +219,7 @@ func normalizeFileConfig(raw fileConfig, dataDir string) (fileConfig, bool, erro
 		normalized.SettingsEncryptionKey = secret
 	}
 
-	return normalized, normalized != raw, nil
+	return normalized, !fileConfigsEqual(normalized, raw), nil
 }
 
 func normalizePath(value string, fallback string, dataDir string) string {
@@ -349,4 +354,47 @@ func generateSecret() (string, error) {
 	}
 
 	return hex.EncodeToString(buf), nil
+}
+
+func cloneTrimmedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func fileConfigsEqual(left fileConfig, right fileConfig) bool {
+	return left.AppEnv == right.AppEnv &&
+		left.ProviderFormat == right.ProviderFormat &&
+		left.ProviderBaseURL == right.ProviderBaseURL &&
+		left.ProviderAPIKey == right.ProviderAPIKey &&
+		left.ProviderModel == right.ProviderModel &&
+		left.OpenAIBaseURL == right.OpenAIBaseURL &&
+		left.OpenAIAPIKey == right.OpenAIAPIKey &&
+		left.Model == right.Model &&
+		left.RAGBaseURL == right.RAGBaseURL &&
+		left.RAGAPIKey == right.RAGAPIKey &&
+		left.RAGEmbeddingModel == right.RAGEmbeddingModel &&
+		left.RAGRerankerModel == right.RAGRerankerModel &&
+		left.SQLitePath == right.SQLitePath &&
+		left.UploadDir == right.UploadDir &&
+		left.ServerPort == right.ServerPort &&
+		left.SessionSecret == right.SessionSecret &&
+		left.SettingsEncryptionKey == right.SettingsEncryptionKey &&
+		slices.Equal(left.TrustedProxies, right.TrustedProxies) &&
+		left.TrustProxyHeadersForSecureCookies == right.TrustProxyHeadersForSecureCookies &&
+		left.BootstrapUsername == right.BootstrapUsername &&
+		left.BootstrapPassword == right.BootstrapPassword
 }

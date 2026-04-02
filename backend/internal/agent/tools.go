@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"strings"
@@ -43,7 +45,7 @@ func (e *ToolExecutor) TransformText(_ context.Context, content string) (string,
 }
 
 func (e *ToolExecutor) doRequest(ctx context.Context, method string, url string, headers map[string]string, body string) (string, error) {
-	currentURL, err := network.ValidatePublicHTTPURL(ctx, url)
+	currentTarget, err := network.ResolvePublicHTTPURL(ctx, url)
 	if err != nil {
 		return "", err
 	}
@@ -57,7 +59,7 @@ func (e *ToolExecutor) doRequest(ctx context.Context, method string, url string,
 	currentBody := body
 
 	for redirectCount := 0; redirectCount <= maxRedirectHops; redirectCount++ {
-		request, err := http.NewRequestWithContext(ctx, currentMethod, currentURL.String(), strings.NewReader(currentBody))
+		request, err := http.NewRequestWithContext(ctx, currentMethod, currentTarget.URL.String(), strings.NewReader(currentBody))
 		if err != nil {
 			return "", fmt.Errorf("build request: %w", err)
 		}
@@ -68,7 +70,7 @@ func (e *ToolExecutor) doRequest(ctx context.Context, method string, url string,
 			request.Header.Set("User-Agent", "Illyawish-Agent/1.0")
 		}
 
-		response, err := client.Do(request)
+		response, err := doLockedRequest(&client, request, currentTarget)
 		if err != nil {
 			return "", fmt.Errorf("send request: %w", err)
 		}
@@ -84,12 +86,12 @@ func (e *ToolExecutor) doRequest(ctx context.Context, method string, url string,
 				return "", fmt.Errorf("request failed: stopped after %d redirects", maxRedirectHops)
 			}
 
-			nextURL, err := resolveRedirectTarget(ctx, currentURL, location)
+			nextTarget, err := resolveRedirectTarget(ctx, currentTarget.URL, location)
 			if err != nil {
 				return "", err
 			}
 
-			currentURL = nextURL
+			currentTarget = nextTarget
 			currentMethod, currentBody = redirectedRequest(method, currentMethod, currentBody, response.StatusCode)
 			continue
 		}
@@ -122,13 +124,147 @@ func isRedirectStatus(statusCode int) bool {
 	}
 }
 
-func resolveRedirectTarget(ctx context.Context, currentURL *url.URL, location string) (*url.URL, error) {
+func doLockedRequest(
+	baseClient *http.Client,
+	request *http.Request,
+	target *network.ResolvedPublicHTTPURL,
+) (*http.Response, error) {
+	client, err := lockedClientForTarget(baseClient, request.URL, target.IPs)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.Do(request)
+}
+
+func lockedClientForTarget(
+	baseClient *http.Client,
+	requestURL *url.URL,
+	allowedIPs []netip.Addr,
+) (*http.Client, error) {
+	lockedTransport, err := lockedTransportForTarget(baseClient.Transport, requestURL, allowedIPs)
+	if err != nil {
+		return nil, err
+	}
+
+	client := *baseClient
+	client.Transport = lockedTransport
+	return &client, nil
+}
+
+func lockedTransportForTarget(
+	baseTransport http.RoundTripper,
+	requestURL *url.URL,
+	allowedIPs []netip.Addr,
+) (http.RoundTripper, error) {
+	if requestURL == nil {
+		return nil, fmt.Errorf("missing request URL")
+	}
+	if len(allowedIPs) == 0 {
+		return nil, fmt.Errorf("no allowed public IPs resolved for host")
+	}
+
+	if baseTransport == nil {
+		baseTransport = http.DefaultTransport
+	}
+
+	transport, ok := baseTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("unsupported transport type %T", baseTransport)
+	}
+
+	clone := transport.Clone()
+	clone.Proxy = nil
+
+	port := requestURL.Port()
+	if port == "" {
+		port = defaultPortForScheme(requestURL.Scheme)
+	}
+
+	clone.DialContext = lockedDialContext(
+		transport.DialContext,
+		transport.Dial,
+		port,
+		allowedIPs,
+	)
+	if transport.DialTLSContext != nil {
+		clone.DialTLSContext = lockedTLSDialContext(transport.DialTLSContext, port, allowedIPs)
+	}
+
+	return clone, nil
+}
+
+func lockedDialContext(
+	baseDialContext func(context.Context, string, string) (net.Conn, error),
+	baseDial func(string, string) (net.Conn, error),
+	port string,
+	allowedIPs []netip.Addr,
+) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, networkName string, _ string) (net.Conn, error) {
+		var lastErr error
+		for _, allowedIP := range allowedIPs {
+			dialAddress := net.JoinHostPort(allowedIP.String(), port)
+			var (
+				conn net.Conn
+				err  error
+			)
+			switch {
+			case baseDialContext != nil:
+				conn, err = baseDialContext(ctx, networkName, dialAddress)
+			case baseDial != nil:
+				conn, err = baseDial(networkName, dialAddress)
+			default:
+				var dialer net.Dialer
+				conn, err = dialer.DialContext(ctx, networkName, dialAddress)
+			}
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("no allowed public IPs resolved for host")
+	}
+}
+
+func lockedTLSDialContext(
+	baseDialTLSContext func(context.Context, string, string) (net.Conn, error),
+	port string,
+	allowedIPs []netip.Addr,
+) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, networkName string, _ string) (net.Conn, error) {
+		var lastErr error
+		for _, allowedIP := range allowedIPs {
+			dialAddress := net.JoinHostPort(allowedIP.String(), port)
+			conn, err := baseDialTLSContext(ctx, networkName, dialAddress)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("no allowed public IPs resolved for host")
+	}
+}
+
+func defaultPortForScheme(scheme string) string {
+	if strings.EqualFold(scheme, "https") {
+		return "443"
+	}
+	return "80"
+}
+
+func resolveRedirectTarget(ctx context.Context, currentURL *url.URL, location string) (*network.ResolvedPublicHTTPURL, error) {
 	parsedLocation, err := url.Parse(location)
 	if err != nil {
 		return nil, fmt.Errorf("unsafe URL: invalid redirect target")
 	}
 	resolvedURL := currentURL.ResolveReference(parsedLocation)
-	return network.ValidatePublicHTTPURL(ctx, resolvedURL.String())
+	return network.ResolvePublicHTTPURL(ctx, resolvedURL.String())
 }
 
 func redirectedRequest(originalMethod string, currentMethod string, currentBody string, statusCode int) (string, string) {

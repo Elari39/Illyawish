@@ -102,7 +102,7 @@ func New() (*App, error) {
 	attachmentWorker := attachment.NewRetentionWorker(db, attachmentService, log.Default())
 
 	router := gin.New()
-	if err := router.SetTrustedProxies(nil); err != nil {
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 	router.Use(gin.Logger(), gin.Recovery())

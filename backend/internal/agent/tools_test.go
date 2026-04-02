@@ -2,12 +2,16 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
+
+	"backend/internal/network"
 )
 
 func TestFetchURLRejectsRedirectToLocalAddress(t *testing.T) {
@@ -84,6 +88,77 @@ func TestFetchURLAllowsRedirectAcrossPublicHosts(t *testing.T) {
 	}
 }
 
+func TestFetchURLRejectsRebindingStyleDialMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/private":
+			_, _ = io.WriteString(w, "private content")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	serverAddress := strings.TrimPrefix(server.URL, "http://")
+	transport := &http.Transport{
+		Proxy: nil,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == "example.com:80" {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, network, serverAddress)
+			}
+			return nil, fmt.Errorf("unexpected dial target: %s", addr)
+		},
+	}
+	t.Cleanup(transport.CloseIdleConnections)
+
+	executor := NewToolExecutor(&http.Client{Transport: transport})
+
+	_, err := executor.FetchURL(context.Background(), "http://example.com/private")
+	if err == nil {
+		t.Fatal("expected rebinding-style dial target to be rejected")
+	}
+}
+
+func TestFetchURLRejectsRedirectRebindingStyleDialMismatch(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "http://example.org/final", http.StatusFound)
+		case "/final":
+			_, _ = io.WriteString(w, "private content")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	initialTarget, err := network.ResolvePublicHTTPURL(context.Background(), "http://example.com/start")
+	if err != nil {
+		t.Fatalf("ResolvePublicHTTPURL() error = %v", err)
+	}
+
+	serverAddress := strings.TrimPrefix(server.URL, "http://")
+	transport := &http.Transport{
+		Proxy: nil,
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if addr == "example.com:80" || matchesResolvedAddress(addr, "80", initialTarget.IPs) || addr == "example.org:80" {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, network, serverAddress)
+			}
+			return nil, fmt.Errorf("unexpected dial target: %s", addr)
+		},
+	}
+	t.Cleanup(transport.CloseIdleConnections)
+
+	executor := NewToolExecutor(&http.Client{Transport: transport})
+
+	_, err = executor.FetchURL(context.Background(), "http://example.com/start")
+	if err == nil {
+		t.Fatal("expected redirect rebinding-style dial target to be rejected")
+	}
+}
+
 func newRedirectTestClient(t *testing.T, server *httptest.Server) *http.Client {
 	t.Helper()
 
@@ -101,4 +176,13 @@ func newRedirectTestClient(t *testing.T, server *httptest.Server) *http.Client {
 	return &http.Client{
 		Transport: transport,
 	}
+}
+
+func matchesResolvedAddress(addr string, port string, allowedIPs []netip.Addr) bool {
+	for _, allowedIP := range allowedIPs {
+		if addr == net.JoinHostPort(allowedIP.String(), port) {
+			return true
+		}
+	}
+	return false
 }

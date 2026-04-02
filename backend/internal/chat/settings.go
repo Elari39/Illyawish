@@ -23,18 +23,14 @@ func sanitizeConversationSettings(settings *ConversationSettings) (ConversationS
 		if *settings.MaxTokens < 0 {
 			return ConversationSettings{}, requestError{message: "max tokens must be greater than or equal to 0"}
 		}
-		if *settings.MaxTokens > 0 {
-			normalized.MaxTokens = ptrInt(*settings.MaxTokens)
-		}
+		normalized.MaxTokens = ptrInt(*settings.MaxTokens)
 	}
 
 	if settings.ContextWindowTurns != nil {
 		if *settings.ContextWindowTurns < 0 {
 			return ConversationSettings{}, requestError{message: "context window turns must be greater than or equal to 0"}
 		}
-		if *settings.ContextWindowTurns > 0 {
-			normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
-		}
+		normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
 	}
 
 	return normalized, nil
@@ -58,18 +54,14 @@ func sanitizeChatSettings(settings ChatSettings) (ChatSettings, error) {
 		if *settings.MaxTokens < 0 {
 			return ChatSettings{}, requestError{message: "max tokens must be greater than or equal to 0"}
 		}
-		if *settings.MaxTokens > 0 {
-			normalized.MaxTokens = ptrInt(*settings.MaxTokens)
-		}
+		normalized.MaxTokens = ptrInt(*settings.MaxTokens)
 	}
 
 	if settings.ContextWindowTurns != nil {
 		if *settings.ContextWindowTurns < 0 {
 			return ChatSettings{}, requestError{message: "context window turns must be greater than or equal to 0"}
 		}
-		if *settings.ContextWindowTurns > 0 {
-			normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
-		}
+		normalized.ContextWindowTurns = ptrInt(*settings.ContextWindowTurns)
 	}
 
 	return normalized, nil

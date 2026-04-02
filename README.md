@@ -35,6 +35,17 @@ Then open `http://localhost:10170`.
 
 Do not manage the same stack through both 1Panel orchestration and shell `docker compose` at the same time.
 
+When you deploy behind a reverse proxy and want login rate limits or secure-cookie forwarding to use the real client address, set trusted proxies in `data/app.json`:
+
+```json
+{
+  "trustedProxies": ["127.0.0.1/32"],
+  "trustProxyHeadersForSecureCookies": true
+}
+```
+
+Keep `trustedProxies` limited to the proxy hops you actually control. Leave it empty for direct, non-proxied deployments.
+
 ## Documentation
 
 - Chinese guide: [`docs/README.zh-CN.md`](docs/README.zh-CN.md)

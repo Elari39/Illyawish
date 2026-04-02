@@ -665,3 +665,34 @@ func TestUpdateChatSettingsPersistsGlobalPrompt(t *testing.T) {
 		t.Fatalf("expected context window to be persisted, got %#v", settings.ContextWindowTurns)
 	}
 }
+
+func TestUpdateChatSettingsPersistsZeroValues(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	db, user, _ := newChatTestContext(t)
+	service := NewService(db, &fakeChatModel{}, &fakeProviderResolver{}, &fakeAttachmentStore{})
+
+	payload := bytes.NewReader([]byte(`{"globalPrompt":"Use global prompt","model":"gpt-4.1-mini","temperature":0.6,"maxTokens":0,"contextWindowTurns":0}`))
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPatch, "/api/chat/settings", payload)
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	ctx.Set("current_user", &user)
+
+	NewHandler(service).UpdateChatSettings(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d body=%s", http.StatusOK, recorder.Code, recorder.Body.String())
+	}
+
+	settings, err := service.GetChatSettings(user.ID)
+	if err != nil {
+		t.Fatalf("GetChatSettings() error = %v", err)
+	}
+	if settings.MaxTokens == nil || *settings.MaxTokens != 0 {
+		t.Fatalf("expected zero max tokens to be persisted, got %#v", settings.MaxTokens)
+	}
+	if settings.ContextWindowTurns == nil || *settings.ContextWindowTurns != 0 {
+		t.Fatalf("expected zero context window turns to be persisted, got %#v", settings.ContextWindowTurns)
+	}
+}

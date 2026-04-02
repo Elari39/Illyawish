@@ -21,7 +21,21 @@ var blockedPublicPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("2001:db8::/32"),
 }
 
+type ResolvedPublicHTTPURL struct {
+	URL *url.URL
+	IPs []netip.Addr
+}
+
 func ValidatePublicHTTPURL(ctx context.Context, rawURL string) (*url.URL, error) {
+	resolved, err := ResolvePublicHTTPURL(ctx, rawURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return resolved.URL, nil
+}
+
+func ResolvePublicHTTPURL(ctx context.Context, rawURL string) (*ResolvedPublicHTTPURL, error) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" {
 		return nil, fmt.Errorf("unsafe URL: URL is required")
@@ -47,7 +61,10 @@ func ValidatePublicHTTPURL(ctx context.Context, rawURL string) (*url.URL, error)
 		if !isPublicAddress(address.Unmap()) {
 			return nil, fmt.Errorf("unsafe URL: local or reserved addresses are not allowed")
 		}
-		return parsed, nil
+		return &ResolvedPublicHTTPURL{
+			URL: parsed,
+			IPs: []netip.Addr{address.Unmap()},
+		}, nil
 	}
 
 	if ctx == nil {
@@ -57,12 +74,18 @@ func ValidatePublicHTTPURL(ctx context.Context, rawURL string) (*url.URL, error)
 	if err != nil || len(addresses) == 0 {
 		return nil, fmt.Errorf("unsafe URL: host could not be resolved")
 	}
+	allowedIPs := make([]netip.Addr, 0, len(addresses))
 	for _, address := range addresses {
-		if !isPublicAddress(address.Unmap()) {
+		unmapped := address.Unmap()
+		if !isPublicAddress(unmapped) {
 			return nil, fmt.Errorf("unsafe URL: local or reserved addresses are not allowed")
 		}
+		allowedIPs = append(allowedIPs, unmapped)
 	}
-	return parsed, nil
+	return &ResolvedPublicHTTPURL{
+		URL: parsed,
+		IPs: allowedIPs,
+	}, nil
 }
 
 func isPublicAddress(address netip.Addr) bool {

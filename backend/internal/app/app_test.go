@@ -3,8 +3,10 @@ package app
 import (
 	"crypto/tls"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -115,5 +117,71 @@ func TestNewRegistersKnowledgeSpaceRoutesWithoutConflict(t *testing.T) {
 		if !found {
 			t.Fatalf("expected route %s to be registered", route)
 		}
+	}
+}
+
+func TestNewUsesTrustedProxiesForLoginRateLimitBuckets(t *testing.T) {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+
+	tempBackendDir := filepath.Join(t.TempDir(), "backend")
+	if err := os.MkdirAll(tempBackendDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	dataDir := filepath.Join(filepath.Dir(tempBackendDir), "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	configPath := filepath.Join(dataDir, "app.json")
+	configBody := `{
+  "sessionSecret": "existing-session-secret",
+  "settingsEncryptionKey": "existing-settings-secret",
+  "trustedProxies": ["127.0.0.1/32"]
+}
+`
+	if err := os.WriteFile(configPath, []byte(configBody), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	if err := os.Chdir(tempBackendDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(workingDir); err != nil {
+			t.Fatalf("restore working directory: %v", err)
+		}
+	})
+
+	application, err := New()
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	for range 5 {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"wrong-pass"}`))
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("X-Forwarded-For", "203.0.113.1")
+		request.RemoteAddr = "127.0.0.1:12345"
+
+		application.router.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("expected failed login status %d, got %d body=%s", http.StatusUnauthorized, recorder.Code, recorder.Body.String())
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", strings.NewReader(`{"username":"admin","password":"wrong-pass"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Forwarded-For", "203.0.113.2")
+	request.RemoteAddr = "127.0.0.1:12345"
+
+	application.router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected different forwarded client IP to avoid shared rate limit bucket, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
